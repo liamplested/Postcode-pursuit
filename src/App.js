@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { MapPin, Target, Trophy, Eye, EyeOff } from 'lucide-react';
+import { MapPin, Trophy, Eye, EyeOff } from 'lucide-react';
 import { postcodeAreas } from './postcodeAreas';
 
 const VIEWBOX = { x: 0, y: 0, width: 15000, height: 17500 };
@@ -14,7 +14,6 @@ const PostcodePursuit = () => {
   const [currentPath, setCurrentPath] = useState([]);
   const [guesses, setGuesses] = useState([]);
   const [gameWon, setGameWon] = useState(false);
-  const [attempts, setAttempts] = useState(0);
   const [optimalPath, setOptimalPath] = useState([]);
   const [suggestion, setSuggestion] = useState('');
   const [showOutlines, setShowOutlines] = useState(true);
@@ -204,7 +203,6 @@ const renderControls = () => (
                 setCurrentPath([startArea]);
                 setGuesses([]);
                 setGameWon(false);
-                setAttempts(0);
                 setSuggestion('');
                 setOptimalPath(findShortestPath(startArea, targetArea));
               }}
@@ -401,7 +399,6 @@ const renderControls = () => (
     const alreadyVisited = currentPath.includes(area);
 
     setGuesses((prev) => [...prev, { area, valid: isValidMove, alreadyVisited }]);
-    setAttempts((a) => a + 1);
 
     if (isValidMove && !alreadyVisited) {
       const newPath = [...currentPath, area];
