@@ -220,7 +220,9 @@ const renderControls = () => (
             Travel from <span className="text-indigo-700">{startArea || '—'}</span> to{' '}
             <span className="text-indigo-700">{targetArea || '—'}</span>
           </h2>
-
+<div className="text-sm text-slate-600">
+  Guesses: <strong>{attempts}</strong>
+</div>
           {!gameWon && currentPath.length > 0 && (
             <div className="text-sm text-slate-600">
               Current: <strong className="text-slate-900">{currentPath[currentPath.length - 1]}</strong>
