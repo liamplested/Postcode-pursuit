@@ -94,29 +94,6 @@ const fitToContent = useCallback((padding = 0.92) => {
 
   hasFitRef.current = true;
 }, []);
-  const BadgeList = ({ items, getColor = () => 'gray' }) => (
-  <div className="flex flex-wrap gap-2">
-    {items.map((code, i) => {
-      const color = getColor(code, i);
-      const palette =
-        color === 'green'
-          ? 'border-green-600 bg-green-50 text-green-800'
-          : color === 'blue'
-          ? 'border-blue-600 bg-blue-50 text-blue-800'
-          : 'border-gray-300 bg-gray-50 text-gray-800';
-
-      return (
-        <span
-          key={`${code}-${i}`}
-          className={`inline-flex items-center rounded-md border px-3 py-1 ${palette}`}
-        >
-          <span className="font-semibold mr-1">{i}:</span>
-          {code}
-        </span>
-      );
-    })}
-  </div>
-);
 
 
 const [showAbout, setShowAbout] = useState(false);
@@ -187,7 +164,7 @@ useEffect(() => {
   });
 
   return () => cancelAnimationFrame(id);
-}, [postcodeAreas]); // runs after paths are in the DOM
+}, ); 
 
 const renderControls = () => (
   <div ref={controlsRef} className="fixed top-0 left-0 right-0 z-20">
@@ -218,9 +195,6 @@ const renderControls = () => (
             Travel from <span className="text-indigo-700">{startArea || '—'}</span> to{' '}
             <span className="text-indigo-700">{targetArea || '—'}</span>
           </h2>
-<div className="text-sm text-slate-600">
-  Guesses: <strong>{attempts}</strong>
-</div>
           {!gameWon && currentPath.length > 0 && (
             <div className="text-sm text-slate-600">
               Current: <strong className="text-slate-900">{currentPath[currentPath.length - 1]}</strong>
@@ -380,7 +354,6 @@ const renderControls = () => (
     setCurrentPath([start]);
     setGuesses([]);
     setGameWon(false);
-    setAttempts(0);
     setSuggestion('');
     setOptimalPath(findShortestPath(start, target));
     setGameState('playing');
