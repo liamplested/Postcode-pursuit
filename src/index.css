@@ -42,13 +42,23 @@
 --------------------------------------- */
 @layer components {
   /* Card-like container for panels if needed */
+.glass {
+  /* fallback when blur unsupported */
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 6px 30px rgba(0,0,0,0.08);
+  border-radius: 16px;
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass {
-    background-color: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(8px);
-    border-radius: 0.5rem;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
+}
+
+.no-backdrop .glass { background: rgba(255,255,255,0.8); } /* stronger fallback */
 
   /* Base button styling */
   .btn {

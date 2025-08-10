@@ -1,9 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MapPin, Trophy, Eye, EyeOff } from 'lucide-react';
-import { createPortal } from "react-dom";
 import { postcodeAreas } from './postcodeAreas';
 import useSvgPan from "./hooks/useSvgPan";
-
 
 const VIEWBOX = { x: 0, y: 0, width: 15000, height: 17500 };
 const MIN_SCALE = 0.4;
@@ -29,10 +27,13 @@ const PostcodePursuit = () => {
   // Pan/zoom state
   const svgRef = useRef(null);
   const gRef = useRef(null);
-  const [setScale] = useState(1);
-  const [setTx] = useState(0);
-  const [setTy] = useState(0);
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ x: 0, y: 0 });
   const panStartedRef = useRef(false);
+  const DRAG_THRESHOLD_PX = 5;
   const controlsRef = useRef(null);
   // state
 const [masterMode, setMasterMode] = useState(false);
@@ -59,112 +60,13 @@ const isRevealed = (code) =>
   masterMode
     ? code === startArea || code === targetArea || currentPath.includes(code)
     : true;
-	
-const [victoryOpen, setVictoryOpen] = useState(false);
-const [elapsedMs, setElapsedMs] = useState(0);
-const [streak, setStreak] = useState(() => Number(localStorage.getItem('pp_streak') || 0));
-const gameStartRef = useRef(null);
-
-const formatTime = (ms) => {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return m ? `${m}m ${r}s` : `${r}s`;
-};
-
-const buildShareText = () => {
-  const guesses = Math.max(0, currentPath.length - 1);
-  const optimal = Math.max(0, optimalPath.length - 1);
-  const time = elapsedMs ? formatTime(elapsedMs) : null;
-
-  let text = `Postcode Pursuit — ${startArea} → ${targetArea}\n`;
-  text += `Guesses: ${guesses}`;
-  if (optimal) text += ` (optimal ${optimal})`;
-  if (time) text += ` · Time: ${time}`;
-  if (streak) text += ` · Streak: ${streak}`;
-  text += `\nhttps://yourgame.example`; // optional
-  return text;
-};
-
-const shareResult = async () => {
-  const text = buildShareText();
-  try {
-    if (navigator.share) {
-      await navigator.share({ text });
-    } else {
-      await navigator.clipboard.writeText(text);
-      alert('Result copied to clipboard!');
-    }
-  } catch {
-    // user cancelled — ignore
-  }
-};
-	
-	
-/* function VictoryModal({ open, stats, onClose, onPlayAgain, onShare }) {
-  const justOpenedRef = React.useRef(true);
-  React.useEffect(() => {
-    if (!open) return;
-    justOpenedRef.current = true;
-    const t = setTimeout(() => (justOpenedRef.current = false), 250);
-    return () => clearTimeout(t);
-  }, [open]);
-
-  if (!open) return null;
-
-  return (
-<div
-  className="fixed inset-0 z-[2147483647]"
-  style={{
-    position: 'fixed',
-    inset: 0,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    padding: '10vh 16px 16px', // <-- side padding prevents edge-to-edge
-    background: 'rgba(0,0,0,0.28)', // lighter so blur is visible
-    backdropFilter: 'blur(10px)',    // <-- the blur
-    WebkitBackdropFilter: 'blur(10px)',
-  }}
-  role="dialog"
-  aria-modal="true"
-  onClick={(e) => {
-    if (!justOpenedRef.current && e.target === e.currentTarget) onClose();
-  }}
->
-  <div
-    className="max-w-[520px] w-full p-5 rounded-2xl shadow-xl bg-white max-h-[80vh] overflow-y-auto"
-    onClick={(e) => e.stopPropagation()}
-  >
-        <h2 className="text-xl font-semibold mb-2">You did it! 🎉</h2>
-        <p className="opacity-80 mb-4">
-          From <b>{stats.start}</b> to <b>{stats.target}</b><br/>
-          Guesses: <b>{stats.guesses}</b>
-          {typeof stats.optimal === 'number' && <> · Optimal: <b>{stats.optimal}</b></>}
-          {stats.time && <> · Time: <b>{stats.time}</b></>}
-          {typeof stats.streak === 'number' && <> · Streak: <b>{stats.streak}</b></>}
-        </p>
-        <div className="flex gap-2 justify-end">
-          <button onClick={onShare} className="px-3 py-2 rounded-lg border">Share</button>
-          <button onClick={onPlayAgain} className="px-3 py-2 rounded-lg bg-black text-white">Play again</button>
-          <button onClick={onClose} className="px-3 py-2 rounded-lg border">Close</button>
-        </div>
-      </div>
-    </div>
-  );
-} */
-
+  
   
   // refs (top of component)
 const contentRef = useRef(null);
 const didAutoFitRef = useRef(false);
 const hasFitRef = useRef(false);
-const { reset, zoomIn, zoomOut} = useSvgPan(svgRef, gRef, {
-  enabled: gameState === 'playing',
-  min: MIN_SCALE,
-  max: MAX_SCALE,
-  onChange: ({ scale }) => setScaleForLabels(scale), // so labels resize live
-});
+
 const fitToContent = useCallback((padding = 0.92) => {
   const g = contentRef.current;
   if (!g) return;
@@ -189,42 +91,16 @@ const fitToContent = useCallback((padding = 0.92) => {
   const newTx = viewCx - fitScale * contentCx;
   const newTy = viewCy - fitScale * contentCy;
 
-reset({ scale: fitScale, x: newTx, y: newTy });
+  setScale(fitScale);
+  setTx(newTx);
+  setTy(newTy);
 
   hasFitRef.current = true;
-},[reset]);
-
-
-const [showAbout, setShowAbout] = useState(false);
-
-const [scaleForLabels, setScaleForLabels] = useState(1);
-
-const finishGame = React.useCallback(() => {
-	console.log('[finishGame] firing');
-  setGameWon(true);
-
-  const end = performance.now();
-  const ms = gameStartRef.current ? Math.max(0, end - gameStartRef.current) : 0;
-  setElapsedMs(ms);
-
-  setStreak(prev => {
-    const next = prev + 1;
-    localStorage.setItem('pp_streak', String(next));
-    return next;
-  });
-
-  setVictoryOpen(true);
 }, []);
 
-useEffect(() => {
-  console.log('[victoryOpen]', victoryOpen);
-}, [victoryOpen]);
+const { reset, getState } = useSvgPan(svgRef, gRef, { enabled: gameState === 'playing' });
 
-useEffect(() => {
-  if (gameState !== 'menu' && !hasFitRef.current) {
-    requestAnimationFrame(() => fitToContent());
-  }
-}, [gameState, fitToContent]);
+const [showAbout, setShowAbout] = useState(false);
 
  useEffect(() => {
   // Lock the page scroll while this screen is shown
@@ -249,11 +125,7 @@ useEffect(() => {
   return () => ro.disconnect();
 }, []);
 
-useEffect(() => {
-  const ok = CSS.supports('backdrop-filter: blur(1px)') || CSS.supports('-webkit-backdrop-filter: blur(1px)');
-  console.log('[backdrop-filter supported?]', ok);
-  document.documentElement.classList.toggle('no-backdrop', !ok);
-}, []);
+
 
   useEffect(() => {
     console.log('Loaded postcode areas:', Object.keys(postcodeAreas).length);
@@ -286,7 +158,9 @@ useEffect(() => {
       const tx0 = (VIEWBOX.width  - s * bbox.width)  / 2 - s * bbox.x;
       const ty0 = (VIEWBOX.height - s * bbox.height) / 2 - s * bbox.y;
 
-	reset({ scale: s, x: tx0, y: ty0 });
+      setScale(s);
+      setTx(tx0);
+      setTy(ty0);
       didAutoFitRef.current = true;
     } catch {}
   });
@@ -434,9 +308,9 @@ const renderControls = () => (
           </button>
 
           <div className="ml-auto flex gap-2">
-            <button onClick={() => zoomOut(ZOOM_STEP)} className="btn btn-neutral" title="Zoom out">Zoom Out</button>
-            <button onClick={() => zoomIn(ZOOM_STEP)}  className="btn btn-neutral" title="Zoom in">Zoom In</button>
-            <button onClick={resetView} className="btn btn-neutral" title="Reset view">Reset View</button>
+            <button onClick={() => zoomByButtons(1 / ZOOM_STEP)} className="btn btn-neutral" title="Zoom out">−</button>
+            <button onClick={() => zoomByButtons(ZOOM_STEP)} className="btn btn-neutral" title="Zoom in">+</button>
+            <button onClick={resetView} className="btn btn-neutral" title="Reset view">Reset</button>
           </div>
         </div>
       </div>
@@ -490,43 +364,30 @@ const renderControls = () => (
     setScale(1);
     setTx(0);
     setTy(0);
-	
-	gameStartRef.current = performance.now();
-setElapsedMs(0);
-setVictoryOpen(false);
   };
 
   const makeGuess = (area) => {
-  if (gameWon) return;
+    if (gameWon) return;
 
-  const currentLocation = currentPath[currentPath.length - 1];
-  const isValidMove = postcodeAreas[currentLocation]?.neighbors.includes(area);
-  const alreadyVisited = currentPath.includes(area);
-	  console.log('[guess]', { area, targetArea, isValidMove, alreadyVisited });
-  // record attempt
-  setGuesses((prev) => [...prev, { area, valid: isValidMove, alreadyVisited }]);
+    const currentLocation = currentPath[currentPath.length - 1];
+    const isValidMove = postcodeAreas[currentLocation]?.neighbors.includes(area);
+    const alreadyVisited = currentPath.includes(area);
 
-  // invalid/visited -> flash + bail
-  if (!isValidMove || alreadyVisited) {
-    setFlashAreas((prev) => [...prev, area]);
-    setTimeout(() => {
-      setFlashAreas((prev) => prev.filter((a) => a !== area));
-    }, 400);
+    setGuesses((prev) => [...prev, { area, valid: isValidMove, alreadyVisited }]);
+
+    if (isValidMove && !alreadyVisited) {
+      const newPath = [...currentPath, area];
+      setCurrentPath(newPath);
+      if (area === targetArea) setGameWon(true);
+    }
+	if (!isValidMove || alreadyVisited) {
+  setFlashAreas((prev) => [...prev, area]);
+  setTimeout(() => {
+    setFlashAreas((prev) => prev.filter((a) => a !== area));
+  }, 400); // match animation duration
+}
     setSuggestion('');
-    return;
-  }
-
-  // valid new step
-  const newPath = [...currentPath, area];
-  setCurrentPath(newPath);
-
-  // win?
-  if (area === targetArea) {
-    finishGame();
-  } else {
-    setSuggestion('');
-  }
-};
+  };
 
 const getAreaColor = (code) => {
   if (code === startArea) return '#00ff59'; // start
@@ -567,6 +428,86 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const labelPxForScale = (s) => clamp(30 + 200 * s, 30, 300);
 const svgFontSizeForScale = (s) => labelPxForScale(s) / s;
 
+/*   const wheelZoom = useCallback(
+    (e) => {
+      e.preventDefault();
+      const svg = svgRef.current;
+      if (!svg) return;
+
+      const rect = svg.getBoundingClientRect();
+      // Mouse position in viewBox coordinates
+      const px = ((e.clientX - rect.left) / rect.width) * VIEWBOX.width;
+      const py = ((e.clientY - rect.top) / rect.height) * VIEWBOX.height;
+
+      // Zoom factor: deltaY>0 -> zoom out
+      const zoomFactor = Math.exp(-e.deltaY * 0.0015);
+      const newScale = clamp(scale * zoomFactor, MIN_SCALE, MAX_SCALE);
+      const k = newScale / scale;
+
+      // Keep the point under cursor stationary: adjust translate
+      const newTx = px - k * (px - tx);
+      const newTy = py - k * (py - ty);
+
+      setScale(newScale);
+      setTx(newTx);
+      setTy(newTy);
+    },
+    [scale, tx, ty]
+  ); */
+
+/*   const startPan = useCallback((e) => {
+    if (!(e.buttons & 1)) return; // primary button only
+    isPanningRef.current = false; // not panning yet; wait for drag threshold
+    panStartedRef.current = false;
+    panStartRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
+
+  const movePan = useCallback((e) => {
+    if (!(e.buttons & 1)) return;
+
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const dxPx = e.clientX - panStartRef.current.x;
+    const dyPx = e.clientY - panStartRef.current.y;
+
+    if (!panStartedRef.current) {
+      if (Math.hypot(dxPx, dyPx) < DRAG_THRESHOLD_PX) return;
+      panStartedRef.current = true;
+      isPanningRef.current = true;
+    }
+
+    const dx = (dxPx / rect.width) * VIEWBOX.width;
+    const dy = (dyPx / rect.height) * VIEWBOX.height;
+
+    setTx((prev) => prev + dx);
+    setTy((prev) => prev + dy);
+    panStartRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
+
+const endPan = useCallback(() => {
+  if (panStartedRef.current) {
+    // Ignore clicks for the next 150ms
+    suppressClickUntilRef.current = Date.now() + 150;
+  }
+  isPanningRef.current = false;
+  panStartedRef.current = false;
+}, []); */
+
+  const zoomByButtons = (factor) => {
+    const newScale = clamp(scale * factor, MIN_SCALE, MAX_SCALE);
+    const k = newScale / scale;
+
+    // Zoom around center of the viewBox
+    const cx = VIEWBOX.width / 2;
+    const cy = VIEWBOX.height / 2;
+    const newTx = cx - k * (cx - tx);
+    const newTy = cy - k * (cy - ty);
+
+    setScale(newScale);
+    setTx(newTx);
+    setTy(newTy);
+  };
 
 const resetView = useCallback(() => {
   hasFitRef.current = false;
@@ -661,10 +602,10 @@ const renderMap = () => (
                 tabIndex={isRevealed(code) ? 0 : -1}
                 aria-label={`Area ${code}`}
                 onClick={() => {
-  if (!isRevealed(code)) return;
-  if (Date.now() < suppressClickUntilRef.current || panStartedRef.current) return;
-  if (!gameWon) makeGuess(code);
-}}
+                  if (!isRevealed(code)) return;
+                  if (Date.now() < suppressClickUntilRef.current || panStartedRef.current) return;
+                  if (!gameWon) makeGuess(code);
+                }}
                 onKeyDown={(e) => {
                   if (!isRevealed(code)) return;
                   if (!gameWon && (e.key === 'Enter' || e.key === ' ')) makeGuess(code);
@@ -679,8 +620,8 @@ const renderMap = () => (
                     y={area.center?.y}
                     textAnchor="middle"
                     dominantBaseline="middle"
-                    fontSize={svgFontSizeForScale(scaleForLabels)}
-                    fontWeight="normal"
+                    fontSize={svgFontSizeForScale(scale)}
+                    fontWeight="bold"
                     className="select-none"
                     style={{ cursor: 'default', userSelect: 'none', WebkitUserSelect: 'none' }}
                     fill={currentPath.includes(code) || code === startArea || code === targetArea ? 'white' : 'black'}
@@ -724,18 +665,16 @@ const renderGameBoard = () => (
     {renderControls()}
     <div
       className="fixed left-0 right-0 bottom-0 overflow-hidden z-10"
-style={{
-  top: 'var(--controls-h, 0px)',
-  backgroundColor: 'rgba(255, 255, 255, 0.12)', // very light
-  backdropFilter: 'blur(10px)',
-  WebkitBackdropFilter: 'blur(10px)',
-}}
+      style={{
+        top: 'var(--controls-h, 0px)',
+        backgroundColor: 'rgba(55, 55, 255, 0.7)', // white @ 70% opacity
+        backdropFilter: 'blur(4px)', // optional glassy effect
+      }}
     >
       <div className="max-w-6xl mx-auto h-full p-4">
         <div className="h-full">{renderMap()}</div>
       </div>
     </div>
-
   </>
 );
 
@@ -808,30 +747,9 @@ const renderMenu = () => (
 );
 
 return (
-  <>
-    <div className="h-screen w-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
-      {gameState === 'menu' ? renderMenu() : renderGameBoard()}
-    </div>
-{victoryOpen && createPortal(
-  <div style={{
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.6)',
-    zIndex: 2147483647
-  }}>
-<div className="glass p-5 rounded-2xl shadow-xl" style={{ maxWidth: 520, width: '92vw' }}>
-      Victory! 🎉 From <b>{startArea}</b> to <b>{targetArea}</b><br />
-      Guesses: {Math.max(0, currentPath.length - 1)}
-      <div style={{marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end'}}>
-        <button onClick={shareResult}>Share</button>
-        <button onClick={startNewGame}>Play again</button>
-        <button onClick={() => setVictoryOpen(false)}>Close</button>
-      </div>
-    </div>
-  </div>,
-  document.body
-)}
-  </>
+  <div className="h-screen w-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
+    {gameState === 'menu' ? renderMenu() : renderGameBoard()}
+  </div>
 );
 };
 
