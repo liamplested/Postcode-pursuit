@@ -29,9 +29,6 @@ const PostcodePursuit = () => {
   // Pan/zoom state
   const svgRef = useRef(null);
   const gRef = useRef(null);
-  const [setScale] = useState(1);
-  const [setTx] = useState(0);
-  const [setTy] = useState(0);
   const panStartedRef = useRef(false);
   const controlsRef = useRef(null);
   // state
@@ -43,8 +40,12 @@ const startWithDifficulty = (mode) => {
     setShowOutlines(true);
     setShowLabels(true);
     setMasterMode(false);
-  } else if (mode === 'hard') {
+  } else if (mode === 'normal') {
     setShowOutlines(true);
+    setShowLabels(false);
+    setMasterMode(false);
+  } else if (mode === 'hard') {
+    setShowOutlines(false);
     setShowLabels(false);
     setMasterMode(false);
   } else if (mode === 'master') {
@@ -86,6 +87,16 @@ const buildShareText = () => {
   return text;
 };
 
+const handleInputSubmit = (inputElement) => {
+  const val = inputElement.value.toUpperCase().trim();
+  if (postcodeAreas[val]) {
+    makeGuess(val);
+    inputElement.value = '';
+  }
+};
+
+const inputRef = useRef(null);
+
 const shareResult = async () => {
   const text = buildShareText();
   try {
@@ -99,7 +110,20 @@ const shareResult = async () => {
     // user cancelled — ignore
   }
 };
-	
+
+// ---- color + helpers ----
+const BASE_FILL = '#f3f4f6';
+const SEAM_PX  = 2; // keep your bleed width
+const currentArea = currentPath[currentPath.length - 1] || null;
+const visitedSet  = React.useMemo(() => new Set(currentPath), [currentPath]);
+
+const getAreaColor = (code) => {
+  if (code === startArea)  return '#00ff59'; // start
+  if (code === targetArea) return '#ff9800'; // target
+  if (currentArea && code === currentArea && code !== startArea) return '#089a26'; // latest step
+  if (visitedSet.has(code)) return '#dcdcec'; // earlier visited
+  return BASE_FILL; // default
+};
 	
 /* function VictoryModal({ open, stats, onClose, onPlayAgain, onShare }) {
   const justOpenedRef = React.useRef(true);
@@ -346,54 +370,54 @@ const renderControls = () => (
         </div>
 
         {/* Input row (only while playing) */}
-        {!gameWon && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              className="p-2 border rounded flex-1 min-w-[220px] border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              placeholder="Try any postcode (e.g. M, B, AB)"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = e.currentTarget.value.toUpperCase().trim();
-                  if (postcodeAreas[val]) {
-                    makeGuess(val);
-                    e.currentTarget.value = '';
-                  }
-                }
-              }}
-            />
-            <button className="btn btn-warn" onClick={getHint}>Hint</button>
+{!gameWon && (
+  <div className="mt-3 flex flex-wrap items-center gap-2">
+    <input
+      ref={inputRef}
+      type="text"
+      className="p-2 border rounded flex-1 min-w-[220px] border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+      placeholder="Try any postcode (e.g. M, B, AB)"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          handleInputSubmit(e.currentTarget);
+        }
+      }}
+    />
+    <button 
+      className="btn btn-hollowgreen" 
+      onClick={() => handleInputSubmit(inputRef.current)}
+    >
+      Enter
+    </button>
 
-            {suggestion && <div className="text-sm text-indigo-700">{suggestion}</div>}
-
-            {guesses.length > 0 && (
-              <div className="flex flex-wrap gap-1 text-xs ml-auto">
-                Last entry: {guesses.slice(-1).map((g, i) => (
-                  <span
-                    key={i}
-                    className={`px-2 py-1 rounded ${
-                      g.valid && !g.alreadyVisited
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : g.alreadyVisited
-                        ? 'bg-amber-100 text-amber-800'
-                        : 'bg-rose-100 text-rose-800'
-                    }`}
-                  >
-                    {g.area}
-                    {g.alreadyVisited ? ' (visited)' : ''}
-                    {!g.valid ? ' (invalid)' : ''}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+    {guesses.length > 0 && (
+      <div className="flex flex-wrap gap-1 text-xs ml-auto">
+        Last entry: {guesses.slice(-1).map((g, i) => (
+          <span
+            key={i}
+            className={`px-2 py-1 rounded ${
+              g.valid && !g.alreadyVisited
+                ? 'bg-emerald-100 text-emerald-800'
+                : g.alreadyVisited
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-rose-100 text-rose-800'
+            }`}
+          >
+            {g.area}
+            {g.alreadyVisited ? ' (visited)' : ''}
+            {!g.valid ? ' (invalid)' : ''}
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+)}
 
 {/* Journey */}
 <div className="mt-3">
-  <div className="text-sm font-semibold mb-1">Journey:</div>
+  <div className="text-sm font-semibold mb-1"></div>
   <div className="badges">
-    {currentPath.map((a, i) => (
+    Journey: {currentPath.map((a, i) => (
       <span
         key={i}
         className={`badge ${
@@ -409,7 +433,6 @@ const renderControls = () => (
     ))}
   </div>
 </div>
-
         {/* Optimal route badges */}
 {gameWon && showOptimal && (
   <div className="mt-3">
@@ -424,7 +447,7 @@ const renderControls = () => (
   </div>
 )}
 
-        {/* Toggles + zoom */}
+        {/* Toggle buttons*/}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button onClick={() => setShowOutlines(v => !v)} className="btn btn-success" title="Toggle outlines">
             {showOutlines ? <Eye className="w-4 h-4 inline" /> : <EyeOff className="w-4 h-4 inline" />} Outlines
@@ -433,10 +456,15 @@ const renderControls = () => (
             {showLabels ? <Eye className="w-4 h-4 inline" /> : <EyeOff className="w-4 h-4 inline" />} Labels
           </button>
 
+		{/* Zoom buttons*/}
+		
           <div className="ml-auto flex gap-2">
             <button onClick={() => zoomOut(ZOOM_STEP)} className="btn btn-neutral" title="Zoom out">Zoom Out</button>
             <button onClick={() => zoomIn(ZOOM_STEP)}  className="btn btn-neutral" title="Zoom in">Zoom In</button>
             <button onClick={resetView} className="btn btn-neutral" title="Reset view">Reset View</button>
+			            <button className="btn btn-success" onClick={getHint}>Hint</button>
+
+            {suggestion}
           </div>
         </div>
       </div>
@@ -486,10 +514,6 @@ const renderControls = () => (
     setOptimalPath(findShortestPath(start, target));
     setGameState('playing');
 
-    // reset view
-    setScale(1);
-    setTx(0);
-    setTy(0);
 	
 	gameStartRef.current = performance.now();
 setElapsedMs(0);
@@ -528,22 +552,6 @@ setVictoryOpen(false);
   }
 };
 
-const getAreaColor = (code) => {
-  if (code === startArea) return '#00ff59'; // start
-  if (code === targetArea) return '#ff9800'; // target
-
-  // Find the *latest* guess for this code
-  const guess = [...guesses].reverse().find((g) => g.area === code);
-
-  if (guess) {
-    if (guess.valid && !guess.alreadyVisited) return '#089a26'; // green for valid new move
-    return '#f3f4f6'; // default grey for invalid/visited
-  }
-
-  if (currentPath.includes(code)) return '#3b82f6'; // blue visited
-  return '#f3f4f6'; // default grey
-};
-
   const getAreaStroke = (code) => {
     if (code === startArea || code === targetArea) return '#000';
     if (currentPath.includes(code)) return '#ff9800';
@@ -559,6 +567,8 @@ const getAreaColor = (code) => {
       setSuggestion(`Try ${n}`);
     }
   };
+
+
 
   // ----- Zoom/Pan helpers -----
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -623,100 +633,142 @@ const renderOptimalOverlay = () => {
   );
 };
 
-const renderMap = () => (
-  <div className="w-full h-full glass">
-    <svg
-	  ref={svgRef}
-      viewBox={`${VIEWBOX.x} ${VIEWBOX.y} ${VIEWBOX.width} ${VIEWBOX.height}`}
-      className="w-full h-full"
-      preserveAspectRatio="xMidYMid meet"
-      style={{ touchAction: 'none' }}
-    >
-      <rect
-        x={VIEWBOX.x}
-        y={VIEWBOX.y}
-        width={VIEWBOX.width}
-        height={VIEWBOX.height}
-        fill="none"
-        stroke="black"
-        strokeWidth="50"
-        pointerEvents="none"
-      />
+const renderMap = () => {
+  const showUnderlay = !masterMode; // Easy/Normal/Hard only
 
-      {/* pan/zoom group */}
-      <g ref={gRef}>
-        {/* MAP CONTENT */}
-        <g ref={contentRef}>
-          {Object.entries(postcodeAreas).map(([code, area]) => (
-            <g key={code}>
-              <title>{code}</title>
-              <path
-                d={area.path}
-                fill={isRevealed(code) ? getAreaColor(code) : 'none'}
-                stroke={isRevealed(code) ? getAreaStroke(code) : 'none'}
-                strokeWidth={isRevealed(code) && showOutlines ? 2 : 0}
-                fillRule="evenodd"
-                vectorEffect="non-scaling-stroke"
-                className={`transition-opacity ${isRevealed(code) ? 'hover:opacity-80 cursor-pointer' : ''}`}
-                tabIndex={isRevealed(code) ? 0 : -1}
-                aria-label={`Area ${code}`}
-                onClick={() => {
-  if (!isRevealed(code)) return;
-  if (Date.now() < suppressClickUntilRef.current || panStartedRef.current) return;
-  if (!gameWon) makeGuess(code);
-}}
-                onKeyDown={(e) => {
-                  if (!isRevealed(code)) return;
-                  if (!gameWon && (e.key === 'Enter' || e.key === ' ')) makeGuess(code);
-                }}
-              />
+  return (
+    <div className="w-full h-full glass">
+      <svg
+        ref={svgRef}
+        viewBox={`${VIEWBOX.x} ${VIEWBOX.y} ${VIEWBOX.width} ${VIEWBOX.height}`}
+        className="w-full h-full"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ touchAction: 'none' }}
+        shapeRendering={(gameState === 'playing') ? 'crispEdges' : 'geometricPrecision'}
+      >
+        <rect
+          x={VIEWBOX.x} y={VIEWBOX.y}
+          width={VIEWBOX.width} height={VIEWBOX.height}
+          fill="none" stroke="black" strokeWidth="50"
+          pointerEvents="none"
+        />
 
-              {/* labels (non-interactive) */}
-              {isRevealed(code) && showLabels && (
-                <g pointerEvents="none">
-                  <text
-                    x={area.center?.x}
-                    y={area.center?.y}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={svgFontSizeForScale(scaleForLabels)}
-                    fontWeight="normal"
-                    className="select-none"
-                    style={{ cursor: 'default', userSelect: 'none', WebkitUserSelect: 'none' }}
-                    fill={currentPath.includes(code) || code === startArea || code === targetArea ? 'white' : 'black'}
-                    aria-hidden="true"
-                  >
-                    {code}
-                  </text>
+        {/* pan/zoom group */}
+        <g ref={gRef}>
+          {/* MAP CONTENT */}
+          <g ref={contentRef}>
+            {/* ------- BLEED LAYER (behind everything) ------- */}
+            {showUnderlay && (
+              <g pointerEvents="none" style={{ paintOrder: 'stroke fill' }}>
+                {Object.entries(postcodeAreas).map(([code, area]) => (
+                  <path
+                    key={`bleed-${code}`}
+                    d={area.path}
+                    fill={BASE_FILL}
+                    stroke={BASE_FILL}
+                    strokeWidth={SEAM_PX}
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    fillRule="evenodd"
+                  />
+                ))}
+              </g>
+            )}
+
+            {/* ------- VISIBLE AREAS ------- */}
+            {Object.entries(postcodeAreas).map(([code, area]) => {
+              const revealed = isRevealed(code);
+              const color = revealed ? getAreaColor(code) : 'none';
+              return (
+                <g key={code}>
+                  <path
+                    d={area.path}
+                    data-code={code}                      // (debug-friendly)
+                    style={{ fill: color }}               // <- inline to beat any CSS
+                    stroke={revealed ? getAreaStroke(code) : 'none'}
+                    strokeWidth={revealed && showOutlines ? 2 : 0}
+                    vectorEffect="non-scaling-stroke"
+                    fillRule="evenodd"
+                    className={`transition-opacity ${revealed ? 'hover:opacity-80 cursor-pointer' : ''}`}
+                    tabIndex={revealed ? 0 : -1}
+                    aria-label={`Area ${code}`}
+                    onClick={() => {
+                      if (!revealed) return;
+                      if (Date.now() < suppressClickUntilRef.current || panStartedRef.current) return;
+                      if (!gameWon) makeGuess(code);
+                    }}
+                    onKeyDown={(e) => {
+                      if (!revealed) return;
+                      if (!gameWon && (e.key === 'Enter' || e.key === ' ')) makeGuess(code);
+                    }}
+                  />
+
+                  {/* labels */}
+                  {revealed && showLabels && (
+                    <g pointerEvents="none">
+                      <text
+                        x={area.center?.x}
+                        y={area.center?.y}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize={svgFontSizeForScale(scaleForLabels)}
+                        fontWeight="normal"
+                        className="select-none"
+                        style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+                        fill={
+                          visitedSet.has(code) || code === startArea || code === targetArea
+                            ? 'white' : 'black'
+                        }
+                        aria-hidden="true"
+                      >
+                        {code}
+                      </text>
+                    </g>
+                  )}
                 </g>
-              )}
-            </g>
-          ))}
+              );
+            })}
+
+            {/* ------- TOP OVERLAY: current area (guaranteed on top) ------- */}
+            {currentArea && postcodeAreas[currentArea] && (
+              <path
+                key="current-overlay"
+                d={postcodeAreas[currentArea].path}
+                fill="#089a26"
+                stroke={getAreaStroke(currentArea)}
+                strokeWidth={showOutlines ? 2 : 0}
+                vectorEffect="non-scaling-stroke"
+                fillRule="evenodd"
+                pointerEvents="none"
+              />
+            )}
+          </g>
+
+          {/* optimal route overlay */}
+          {gameWon && showOptimal && renderOptimalOverlay()}
+
+          {/* flash overlays */}
+          {flashAreas.map((code) => {
+            const area = postcodeAreas[code];
+            if (!area) return null;
+            return (
+              <path
+                key={`flash-${code}`}
+                d={area.path}
+                className="flash-red-overlay"
+                fill="#ff2d2d"
+                fillOpacity="0.45"
+                stroke="none"
+                pointerEvents="none"
+              />
+            );
+          })}
         </g>
-
-        {/* optimal route overlay (pans/zooms with map) */}
-        {gameWon && showOptimal && renderOptimalOverlay()}
-
-        {/* flash overlays (also pan/zoom) */}
-        {flashAreas.map((code) => {
-          const area = postcodeAreas[code];
-          if (!area) return null;
-          return (
-            <path
-              key={`flash-${code}`}
-              d={area.path}
-              className="flash-red-overlay"
-              fill="#ff2d2d"
-              fillOpacity="0.45"
-              stroke="none"
-              pointerEvents="none"
-            />
-          );
-        })}
-      </g>
-    </svg>
-  </div>
-);
+      </svg>
+    </div>
+  );
+};
 
 
 const renderGameBoard = () => (
@@ -750,9 +802,15 @@ const renderMenu = () => (
     <div className="grid gap-3">
       <button
         onClick={() => startWithDifficulty('easy')}
-        className="btn btn-success w-full"
+        className="btn btn-hollowgreen w-full"
       >
         Easy
+      </button>
+      <button
+        onClick={() => startWithDifficulty('normal')}
+        className="btn btn-success w-full"
+      >
+        Normal
       </button>
       <button
         onClick={() => startWithDifficulty('hard')}
@@ -817,15 +875,32 @@ return (
     position: 'fixed',
     inset: 0,
     background: 'rgba(0,0,0,0.6)',
-    zIndex: 2147483647
+    zIndex: 2147483647,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    paddingTop: '10vh', // offset from top
+    padding: '10vh 16px 16px' // top offset + side padding
+
   }}>
-<div className="glass p-5 rounded-2xl shadow-xl" style={{ maxWidth: 520, width: '92vw' }}>
-      Victory! 🎉 From <b>{startArea}</b> to <b>{targetArea}</b><br />
-      Guesses: {Math.max(0, currentPath.length - 1)}
-      <div style={{marginTop: 12, display: 'flex', gap: 8, justifyContent: 'flex-end'}}>
-        <button onClick={shareResult}>Share</button>
-        <button onClick={startNewGame}>Play again</button>
-        <button onClick={() => setVictoryOpen(false)}>Close</button>
+    <div className="glass p-5 rounded-2xl shadow-xl text-center" style={{ 
+      maxWidth: 520, 
+      width: '92vw',
+      maxHeight: '80vh',
+      overflowY: 'auto'
+    }}>
+      <h2 className="text-xl font-semibold mb-2">Victory! 🎉</h2>
+      <p className="mb-4">
+        From <b>{startArea}</b> to <b>{targetArea}</b><br />
+        Guesses: <b>{Math.max(0, currentPath.length - 1)}</b>
+        {optimalPath.length > 0 && <> · Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
+        {elapsedMs > 0 && <> · Time: <b>{formatTime(elapsedMs)}</b></>}
+        {streak > 0 && <> · Streak: <b>{streak}</b></>}
+      </p>
+      <div className="flex gap-2 justify-center">
+        <button onClick={shareResult} className="btn btn-purple glass">Share</button>
+        <button onClick={startNewGame} className="btn btn-warn glass">Play again</button>
+        <button onClick={() => setVictoryOpen(false)} className="btn btn-primary glass">Close</button>
       </div>
     </div>
   </div>,

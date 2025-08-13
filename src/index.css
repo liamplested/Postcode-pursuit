@@ -14,10 +14,10 @@
   }
 
   body {
-    background-color: #e6f2ff; /* Light blue */
+    background-color: #9797d0; /* Eastern blue */
     min-height: 100vh;
     color: #1e293b; /* Slate-800 */
-    line-height: 1.5;
+    line-height: 1.2;
   }
 
   /* Reset OS button styling */
@@ -89,6 +89,10 @@
 
   .btn-purple { background-color: #9333ea; color: white; }
   .btn-purple:hover { background-color: #7e22ce; }
+  
+  .btn-hollowgreen { background-color: #ffffff; color: green; border: 2px solid green }
+  .btn-hollowgreen:hover { background-color: #cdcdcd; }
+
 
   /* Disabled state */
   .btn:disabled {
@@ -130,3 +134,5 @@
 .badge-green { background:#ecfdf5; color:#065f46; border-color:#10b981; } /* emerald-ish */
 .badge-blue  { background:#eff6ff; color:#1e40af; border-color:#3b82f6; }
 .badge-gray  { background:#f9fafb; color:#374151; border-color:#d1d5db; }
+
+
