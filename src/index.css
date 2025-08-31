@@ -5,6 +5,7 @@
 @tailwind components;
 @tailwind utilities;
 
+
 /* --------------------------------------
    Base: fonts + global styles
 --------------------------------------- */
@@ -94,11 +95,35 @@
   .btn-success { background-color: #059669; color: white; }
   .btn-success:hover { background-color: #047857; }
 
-  .btn-purple { background-color: #9333ea; color: white; }
-  .btn-purple:hover { background-color: #7e22ce; }
+
   
   .btn-hollowgreen { background-color: #ffffff; color: green; border: 2px solid green }
   .btn-hollowgreen:hover { background-color: #cdcdcd; }
+
+/* Easy */
+.btn-green  { background-color:#15803d; color:#fff; border:2px solid #166534; }
+.btn-green:hover  { background-color:#166534; }
+
+/* Normal (note: black text for accessibility on yellow) */
+.btn-yellow { background-color:#eab308; color:#000; border:2px solid #a16207; }
+.btn-yellow:hover { background-color:#ca8a04; }
+
+/* Hard */
+.btn-orange { background-color:#c2410c; color:#fff; border:2px solid #7c2d12; }
+.btn-orange:hover { background-color:#9a3412; }
+
+/* Master (yours, but both states pass) */
+.btn-purple { background-color:#9333ea; color:#fff; border:2px solid #7e22ce; }
+.btn-purple:hover { background-color:#7e22ce; }
+
+/* Strong, visible focus for all buttons (meets 3:1 vs surroundings) */
+.btn-green:focus-visible,
+.btn-yellow:focus-visible,
+.btn-orange:focus-visible,
+.btn-purple:focus-visible {
+  outline: 3px solid #111827;   /* slate-900 */
+  outline-offset: 2px;
+}
 
 
   /* Disabled state */
@@ -127,6 +152,31 @@
 /* --------------------------------------
    Utilities
 --------------------------------------- */
+@layer utilities {
+  @keyframes menu-pop-in {
+    0%   { opacity: 0; transform: translateY(-6px) scale(0.96); }
+    100% { opacity: 1; transform: translateY(0)    scale(1); }
+  }
+  .animate-menu-pop {
+    animation: menu-pop-in 140ms cubic-bezier(.2,.8,.2,1) both;
+    transform-origin: top right;
+  }
+}
+
+/* Pin element to the top-right of its nearest positioned ancestor.
+   Uses logical props so it also works if direction ever changes. */
+.pin-top-right {
+  position: absolute;
+  top: 0.5rem;                  /* ~8px */
+  inset-inline-end: 0.75rem;    /* ~12px; logical 'right' */
+  /* Hard fallback for older browsers / odd Tailwind builds: */
+  right: 0.75rem !important;
+  left: auto !important;
+  z-index: 10;
+}
+
+
+
 @layer utilities {
   .gap-small > * {
     margin: 0.25rem;
@@ -174,4 +224,30 @@
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .area-pulse { animation: none; }
+}
+
+/* Subtle animated ring around the selector wrapper */
+.pp-pulse-wrap {
+  position: relative;
+}
+
+.pp-pulse-wrap::after {
+  content: "";
+  position: absolute;
+  inset: -6px;                 /* outside the input’s border */
+  border-radius: 16px;         /* match your input’s rounded-2xl */
+  box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.45); /* indigo-ish glow */
+  animation: ppPulseShadow 5s ease-in-out infinite;
+  pointer-events: none;        /* don’t block clicks */
+}
+
+@keyframes ppPulseShadow {
+  0%   { box-shadow: 0 0 0 0   rgba(26, 53, 141, 0.45); }
+  70%  { box-shadow: 0 0 0 14px rgba(96, 235, 217, 0.274); }
+  100% { box-shadow: 0 0 0 0   rgba(26, 53, 141, 0.45); }
+}
+
+/* Respect user motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .pp-pulse-wrap::after { animation: none; }
 }

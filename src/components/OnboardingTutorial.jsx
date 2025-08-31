@@ -14,6 +14,8 @@ export default function OnboardingTutorial({
   const inputRef = useRef(null);
 const ONBOARDING_KEY = 'pp:onboardingComplete:v1';
 
+
+
   // Mini graph (undirected) – keep this tiny & obvious
   const miniGraph = useMemo(
     () => ({
@@ -49,6 +51,55 @@ const ONBOARDING_KEY = 'pp:onboardingComplete:v1';
   const neighbours = miniGraph[current] || [];
   const visibleStep = step >= 3 && current !== TARGET ? 3 : step;
 
+
+
+// reset when the tutorial opens
+useEffect(() => {
+  if (isOpen) setShowStuckHint(false);
+}, [isOpen]);
+
+// hide the hint as soon as you leave Step 2
+useEffect(() => {
+  if (visibleStep !== 1) setShowStuckHint(false);
+}, [visibleStep]);
+
+
+  const [showStuckHint, setShowStuckHint] = useState(false);
+  const [showStuckHint3, setShowStuckHint3] = useState(false);
+
+const nudgeStuck = useCallback(() => {
+  if (visibleStep !== 1 || current === TARGET) return; // only step 2
+  setShowStuckHint(true);
+  if (inputRef.current) {
+    if (!input.trim()) setInput('DD'); // prefill if empty
+    inputRef.current.focus();
+    inputRef.current.select?.();
+  }
+}, [visibleStep, current, TARGET, input]);
+
+
+useEffect(() => {
+  if (isOpen) {
+    setShowStuckHint(false);
+    setShowStuckHint3(false);
+  }
+}, [isOpen]);
+useEffect(() => {
+  if (visibleStep !== 1) setShowStuckHint(false);
+}, [visibleStep]);
+
+useEffect(() => {
+  if (visibleStep !== 2) setShowStuckHint3(false);
+}, [visibleStep]);
+
+const nudgeStuckStep3 = useCallback(() => {
+  if (visibleStep !== 2 || current === TARGET) return;
+  setShowStuckHint3(true);
+  if (!input.trim()) setInput('KY');
+  inputRef.current?.focus();
+  inputRef.current?.select?.();
+}, [visibleStep, current, input]);
+
   function isNeighbour(code) {
     return neighbours.includes(code.toUpperCase());
   }
@@ -57,6 +108,8 @@ function restartTutorial() {
    setStep(1);           // jump straight to the “do a move” step
    setInput("");
    setPath([START]);     // reset path
+   setShowStuckHint(false);
+   setShowStuckHint3(false);
    inputRef.current?.focus();
  }
 
@@ -237,12 +290,28 @@ onSkip(); // or onComplete()
     </>
   ) : (
     <>
-      <button
-        onClick={steps[visibleStep].onCta}
-        className="btn btn-primary"
-      >
-        {steps[visibleStep].cta}
-      </button>
+      <div className="flex items-center gap-2">
+ <div className="flex items-center gap-2">
+   <button onClick={steps[visibleStep].onCta} className="btn btn-primary">
+     {steps[visibleStep].cta}
+   </button>
+
+   {visibleStep === 2 && current !== TARGET && (
+     <button type="button" className="btn btn-neutral" onClick={nudgeStuckStep3}>
+       Still stuck? Click here
+     </button>
+   )}
+ </div>
+        {visibleStep === 1 && current !== TARGET && (
+          <button
+            type="button"
+            className="btn btn-neutral"
+            onClick={nudgeStuck}
+          >
+            Stuck? Click here
+          </button>
+        )}
+      </div>
 
               {/* Input */}
         {current !== TARGET && (
@@ -262,7 +331,17 @@ onSkip(); // or onComplete()
             </button>
           </form>
         )}
+{showStuckHint && visibleStep === 1 && current !== TARGET && (
+  <div className="mt-2 text-sm text-slate-100/90">
+    Try typing <b>DD</b> or <b>PH</b> into the box and press <b>Enter</b>.
+  </div>
+)}
 
+{showStuckHint3 && visibleStep === 2 && current !== TARGET && (
+  <div className="mt-2 text-sm text-slate-100/90">
+    Try typing <b>KY</b> (the target) and press <b>Enter</b>.
+  </div>
+)}
         {/* Mini map (tight-fit to subset) */}
         <div className="mt-4 border rounded-xl overflow-hidden bg-slate-50">
           <svg
