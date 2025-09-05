@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useId} from 'react';
-import { MapPin, Trophy, Flag, Menu, ArrowRight } from 'lucide-react';
+import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { postcodeAreas, ferryLinks, bridgeLinks } from './postcodeAreas';
 import useSvgPan from './hooks/useSvgPan';
@@ -15,9 +15,6 @@ const ZOOM_STEP = 1.25; // button zoom factor
 
 // Daily helpers
 const DAILY_STREAK_KEY = 'pp_daily_streak_v1'; // {count:number, lastWinDate:'YYYY-MM-DD'}
-
-
-
 
 function parseUTC(dateStr){ return new Date(dateStr + 'T00:00:00Z'); }
 function daysBetweenUTC(a,b){
@@ -90,10 +87,14 @@ const hasFitRef = useRef(false);
 const controlsRef = useRef(null);
 
 
-
 //Toggle for Master Mode
 const [masterMode, setMasterMode] = useState(false);
 
+const edgeType = (a, b) => {
+  if (ferryAdj.get(a)?.has(b)) return 'ferry';
+  if (bridgeAdj.get(a)?.has(b)) return 'bridge';
+  return 'land';
+};
 
 // -------- Daily Challenge setup --------
 
@@ -189,6 +190,46 @@ useEffect(() => { setBurgerOpen(false); }, [gameState, showAbout, showTutorial, 
 
 // --- Daily streak (UTC) ---
 
+// --- Streak helpers (v2) ---  (place above the first effect that uses them)
+const STREAK_KEY_V2 = (d) => `pp_daily_streak_v2_${d}`;
+
+const readStreakRecord = React.useCallback((diff) => {
+  try { return JSON.parse(localStorage.getItem(STREAK_KEY_V2(diff)) || 'null'); }
+  catch { return null; }
+}, []);
+
+const saveStreakRecord = React.useCallback((diff, count, lastWinDate) => {
+  localStorage.setItem(STREAK_KEY_V2(diff), JSON.stringify({ count, lastWinDate }));
+}, []);
+
+const bumpStreakFor = React.useCallback((diff) => {
+  const today = (Daily?.todayUTC?.() || todayUTC());
+  const rec = readStreakRecord(diff) || { count: 0, lastWinDate: null };
+
+  let next = 1;
+  if (rec.lastWinDate === today) {
+    next = rec.count;                       // already counted today
+  } else if (rec.lastWinDate && daysBetweenUTC(rec.lastWinDate, today) === 1) {
+    next = rec.count + 1;                   // extend
+  }
+  saveStreakRecord(diff, next, today);
+  return next;
+}, [readStreakRecord, saveStreakRecord]);
+
+const readStreak = React.useCallback((diff) => {
+  const rec = readStreakRecord(diff);
+  if (rec && Number.isFinite(+rec.count)) return +rec.count;
+
+  // Legacy fallback for Easy if v2 not present
+  if (diff === 'easy') {
+    const legacy = loadDailyStreak();
+    const n = Number(legacy?.count || 0);
+    return Number.isNaN(n) ? 0 : n;
+  }
+  return 0;
+}, [readStreakRecord]);
+
+
 
 const [dailyStreak, setDailyStreak] = useState(() => {
   const s = loadDailyStreak();
@@ -208,6 +249,19 @@ useEffect(() => {
   }
 }, []); 
 
+React.useEffect(() => {
+  // If v2 easy is missing but legacy exists, copy it across
+  const v2 = readStreakRecord('easy');
+  if (!v2) {
+    try {
+      const legacy = JSON.parse(localStorage.getItem('pp_daily_streak_v1') || 'null');
+      if (legacy && Number(legacy.count) > 0 && legacy.lastWinDate) {
+        saveStreakRecord('easy', Number(legacy.count), legacy.lastWinDate);
+        setStreaks((s) => ({ ...s, easy: Number(legacy.count) }));
+      }
+    } catch {}
+  }
+}, [readStreakRecord, saveStreakRecord]);
 
 // Daily puzzle hash
 function bfsAllDistances(start){
@@ -252,6 +306,7 @@ const DIFF_DESCRIPTIONS = {
   master: 'Only start, target and visited areas are shown. Revisit and undo both disabled.',
 };
 
+
 const undoLastMove = useCallback(() => {
   if (currentPath.length <= 1 || gameWon) return; // can't undo the start, or after win
   const newPath = currentPath.slice(0, -1);
@@ -279,6 +334,8 @@ useEffect(() => {
   window.addEventListener('keydown', onKeyDown);
   return () => window.removeEventListener('keydown', onKeyDown);
 }, [undoLastMove, masterMode]);
+
+
 
 function startOrResumeDaily(difficulty) {
   const today = Daily.todayUTC();
@@ -444,6 +501,9 @@ useEffect(() => {
 
 
 
+const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
+
+
   const { reset, zoomIn, zoomOut } = useSvgPan(svgRef, gRef, {
     enabled: isMapInteractive,
     min: MIN_SCALE,
@@ -568,7 +628,6 @@ const allPostcodeOptions = React.useMemo(
 );
 
 
-
 const forceUppercase = useCallback((e) => {
   const el = e.currentTarget;
   const { selectionStart, selectionEnd } = el;
@@ -616,12 +675,7 @@ const dismissNudge = () => {
   setShowNudge(false);
 };
 
-useEffect(() => {
-  if (gameState === 'playing' && !showTutorial && !showAbout && !victoryOpen) {
-    inputRef.current?.focus();
-    inputRef.current?.select?.();
-  }
-}, [gameState, showTutorial, showAbout, victoryOpen]);
+
 
 useEffect(() => {
   console.log('toast check', { consentResolved, gameState, len: currentPath.length, dismissed: nudgeDismissedRef.current });
@@ -649,6 +703,17 @@ useEffect(() => {
 const [showDailyChooser, setShowDailyChooser] = useState(false);
 const [showFreePlayChooser, setShowFreePlayChooser] = useState(false);
 
+// simple appear animation state
+/* const [dailyAnim, setDailyAnim] = useState("opacity-0 -translate-y-2 scale-95");
+useEffect(() => {
+  if (!showDailyChooser) return;
+  const id = requestAnimationFrame(() =>
+    setDailyAnim("opacity-100 translate-y-0 scale-100")
+  );
+  return () => cancelAnimationFrame(id);
+}, [showDailyChooser]); */
+
+
 // Close chooser(s) with Escape
 useEffect(() => {
   if (!showDailyChooser && !showFreePlayChooser) return;
@@ -658,12 +723,26 @@ useEffect(() => {
 }, [showDailyChooser, showFreePlayChooser]);
 
 
+// simple appear animation for Free Play
+const [freeAnim, setFreeAnim] = useState("opacity-0 -translate-y-2 scale-95");
 useEffect(() => {
-  if (gameState === 'playing' && !showTutorial && !showAbout && !victoryOpen) {
-    inputRef.current?.focus();
-    inputRef.current?.select?.();
-  }
-}, [gameState, showTutorial, showAbout, victoryOpen]);
+  if (!showFreePlayChooser) return;
+  const id = requestAnimationFrame(() =>
+    setFreeAnim("opacity-100 translate-y-0 scale-100")
+  );
+  return () => cancelAnimationFrame(id);
+}, [showFreePlayChooser]);
+
+const [menuAnimClass, setMenuAnimClass] = useState("opacity-0 -translate-y-1 scale-95");
+
+useEffect(() => {
+  if (!burgerOpen) return;
+  // let the element paint, then animate in
+  const id = requestAnimationFrame(() =>
+    setMenuAnimClass("opacity-100 translate-y-0 scale-100")
+  );
+  return () => cancelAnimationFrame(id);
+}, [burgerOpen]);
 
 
 // --- unified neighbors (land + ferries + bridges) ---
@@ -813,6 +892,14 @@ function fireReroll(reason = 'new_game_button') {
   });
 }
 
+const [errorToast, setErrorToast] = useState('');
+
+const showError = useCallback((msg) => {
+  setErrorToast(msg);
+  try { 
+    if ('vibrate' in navigator) navigator.vibrate(40); 
+  } catch {}
+}, []);
 
 function Toast({ open, onClose, action, children }) {
   if (!open) return null;
@@ -828,7 +915,7 @@ function Toast({ open, onClose, action, children }) {
         zIndex: 2147483000,
       }}
     >
-      <div className="glass rounded-xl shadow-lg px-3 py-2 flex items-start gap-2 max-w-[92vw] w-[520px]">
+      <div className="glass glass- rounded-xl shadow-lg px-3 py-2 flex items-start gap-2 max-w-[92vw] w-[520px]">
         <div className="text-sm flex-1">{children}</div>
         {action && (
           <button type="button" className="btn btn-success" onClick={action.onClick}>
@@ -927,14 +1014,14 @@ const getAreaStyle = (code) => {
 
   
   // 🔴 Invalid/duplicate guess flash overrides everything for 400ms
-  if (isFlashing) {
-    return {
-      fill: '#f43f5e',                                // rose-500
-      stroke: showOutlines ? '#be123c' : 'none',      // rose-700 outline only if outlines on
-      strokeWidth: showOutlines ? 1.25 : 1,
-      // Don't dash during flash; keeps the flash clean & obvious
-    };
-  }
+if (isFlashing) {
+  return {
+    fill: 'url(#pp-invalid-stripes)',   // texture (not color)
+    stroke: '#000',                     // high-contrast border
+    strokeWidth: 4.5,                   // clearly thicker than normal
+    strokeDasharray: '6 4',             // hint via line style
+  };
+}
 
   // ---- normal coloring ----
   let fill   = COLORS.baseFill;
@@ -1000,21 +1087,14 @@ useEffect(() => {
     const ms = gameStartRef.current ? Math.max(0, end - gameStartRef.current) : 0;
     setElapsedMs(ms);
     // Update Daily streak only for Daily mode
-if (dailyMode && dailyDate) {
-  const today = todayUTC();
-  const s = loadDailyStreak() || { count: 0, lastWinDate: null };
+if (dailyMode && dailyDate && dailyDifficulty) {
+  const next = bumpStreakFor(dailyDifficulty);
+  setStreaks((s) => ({ ...s, [dailyDifficulty]: next }));
 
-  // Only increment once per day
-  if (s.lastWinDate === today) {
-    // already counted today's win; keep as-is
-    setDailyStreak(s.count);
-    saveDailyStreak(s.count, s.lastWinDate);
-  } else {
-    // check if yesterday was the last win → extend, else reset to 1
-    const extend = s.lastWinDate && daysBetweenUTC(s.lastWinDate, today) === 1;
-    const next = extend ? (s.count + 1) : 1;
+  // Optional: keep legacy single-key in sync for Easy if you still show dailyStreak elsewhere
+  if (dailyDifficulty === 'easy') {
     setDailyStreak(next);
-    saveDailyStreak(next, today);
+    saveDailyStreak(next, todayUTC());
   }
 }
 	   if (window.gtag) {
@@ -1030,7 +1110,16 @@ if (dailyMode && dailyDate) {
 	
 	
     setVictoryOpen(true);
-  }, [currentPath.length, difficulty, startArea, targetArea, dailyDate,dailyMode]);
+ }, [
+   currentPath.length,
+   difficulty,
+   startArea,
+   targetArea,
+   dailyDate,
+   dailyMode,
+   dailyDifficulty,   // ✅ used inside when updating streaks per difficulty
+   bumpStreakFor      // ✅ helper used to write v2 streak
+ ]);
 
 useEffect(() => {
   if (gameState !== 'menu' && !hasFitRef.current) {
@@ -1226,9 +1315,12 @@ const startNewGame = () => {
 };
 
 // const minStepsByMode = { easy: 3, normal: 4, hard: 5, master: 6 };
-const makeGuess = useCallback((area) => {
-  if (gameWon) return;
+ const makeGuess = useCallback((area) => {
+   if (gameWon) return;
+   // clear any existing error without capturing errorToast in deps
+   setErrorToast(prev => (prev ? '' : prev));
   setShowHints(false); 
+  
 
   const currentLocation = currentPath[currentPath.length - 1];
   const isValidMove = getNeighbors(currentLocation).includes(area);
@@ -1243,14 +1335,21 @@ const makeGuess = useCallback((area) => {
   ]);
   
 
-  if (!isValidMove || (alreadyVisited && !revisitAllowed)) {
-    setFlashAreas((prev) => [...prev, area]);
-    setTimeout(() => {
-      setFlashAreas((prev) => prev.filter((a) => a !== area));
-    }, 400);
-    ;
-    return;
+if (!isValidMove || (alreadyVisited && !revisitAllowed)) {
+  setFlashAreas((prev) => [...prev, area]);
+  setTimeout(() => {
+    setFlashAreas((prev) => prev.filter((a) => a !== area));
+  }, 400);
+
+  // NEW: reasoned feedback
+  if (!isValidMove) {
+    showError(`${area} isn’t adjacent to ${currentLocation}`);
+  } else if (alreadyVisited && !revisitAllowed) {
+    showError(`You've already visited ${area} in this game. Revisiting is not allowed in ${difficulty} difficulty`);
   }
+
+  return;
+}
 
   const newPath = [...currentPath, area];
   setCurrentPath(newPath);
@@ -1260,7 +1359,7 @@ const makeGuess = useCallback((area) => {
   } else {
     ;
   }
-}, [getNeighbors, gameWon, currentPath, targetArea, finishGame, ferryAdj, bridgeAdj, difficulty]);
+}, [getNeighbors, gameWon, currentPath, targetArea, finishGame, ferryAdj, bridgeAdj, difficulty, showError]);
 
 // const isFerryEdge  = (a,b) => ferryAdj.get(a)?.has(b)  || false;
 // const isBridgeEdge = (a,b) => bridgeAdj.get(a)?.has(b) || false;
@@ -1280,11 +1379,20 @@ const handleClick = useCallback((code) => {
   const labelPxForScale = (s) => clamp(30 + 200 * s, 30, 300); // readable range
   const svgFontSizeForScale = (s) => labelPxForScale(s) / s;
 
-  const resetView = useCallback(() => {
-    hasFitRef.current = false;
-    didAutoFitRef.current = false;
-    requestAnimationFrame(() => fitToContent());
-  }, [fitToContent]);
+const resetView = useCallback(() => {
+  hasFitRef.current = false;
+  didAutoFitRef.current = false;
+
+  requestAnimationFrame(() => {
+    if (startArea && targetArea) {
+      // pad controls how tight the frame is around the pair (0.2 ≈ your default)
+      focusStartAndTarget(startArea, targetArea, 0.2);
+    } else {
+      // fallback if there’s no puzzle yet
+      fitToContent();
+    }
+  });
+}, [startArea, targetArea, focusStartAndTarget, fitToContent]);
 
   // ---------- Optimal path overlay ----------
   const renderOptimalOverlay = () => {
@@ -1352,7 +1460,7 @@ const renderMap = () => (
     <div className="absolute top-2 left-2 z-10 flex gap-2">
       <button onClick={() => zoomOut(ZOOM_STEP)} className="btn btn-neutral" title="Zoom out">-</button>
       <button onClick={() => zoomIn(ZOOM_STEP)}  className="btn btn-neutral" title="Zoom in">+</button>
-      <button onClick={resetView} className="btn btn-neutral" title="Reset view">Reset</button>
+      <button onClick={resetView} className="btn btn-neutral" title="Reset view to Start & Target">Reset</button>
     </div>
 
     <svg
@@ -1378,6 +1486,11 @@ const renderMap = () => (
             ))}
           </clipPath>
         )}
+
+        <pattern id="pp-invalid-stripes" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)">
+  <rect width="10" height="10" fill="#ffffffff" />
+  <path d="M0 0 L0 10" stroke="#111" strokeWidth="4" opacity="0.01" />
+</pattern>
       </defs>
 		
       {/* Outer g transforms (pan/zoom). Inner g is content for getBBox */}
@@ -1532,14 +1645,14 @@ const renderControls = () => (
   <div ref={controlsRef} className="sticky top-0 z-20 w-full pt-3 px-4">
     <div
       className="glass mx-auto relative"   // <- ensure positioned ancestor
-      style={{ width: '100%', maxWidth: '600px', overflow: 'hidden', borderRadius: 16 }}
+      style={{ width: '100%', maxWidth: '600px', overflow: 'hidden', borderRadius: 10 }}
     >
       {/* Burger pinned over the card, top-right */}
       <div className="pin-top-right">
         <button
           ref={burgerButtonRef}
           type="button"
-          className="btn btn-neutral inline-flex w-auto items-center gap-2"
+          className="btn btn-primary inline-flex w-auto items-center gap-2"
           aria-haspopup="menu"
           aria-expanded={burgerOpen ? 'true' : 'false'}
           aria-label="Open menu"
@@ -1551,7 +1664,7 @@ const renderControls = () => (
       </div>
 
       {/* Title row */}
-      <div className="px-3 py-2">
+      <div className="px-3 py-2" style={{ textAlign: 'center' }}>
         <h2 className="text-base sm:text-lg font-semibold text-slate-100 leading-tight">
           Travel from <span className="text-indigo-200">{startArea || '—'}</span> to{' '}
           <span className="text-indigo-200">{targetArea || '—'}</span>
@@ -1564,12 +1677,17 @@ const renderControls = () => (
     id="pp-burger-menu"
     role="menu"
     aria-orientation="vertical"
-    className="glass rounded-xl shadow-lg p-2 animate-menu-pop"
+        className={[
+          "glass rounded-xl shadow-lg p-2",
+          "transition duration-150 ease-out",
+          "transform will-change-transform will-change-opacity",
+          menuAnimClass
+          ].join(" ")}
     style={{
       position: 'fixed',
-      top: burgerPos.top,
-      left: burgerPos.left,
-      width: burgerPos.width,
+      top: burgerPos.top ,
+      left: burgerPos.left + 60,
+      width: Math.min(burgerPos.width * 0.8, 180), // Smaller width
       zIndex: 2147483000,
       willChange: 'transform, opacity'
     }}
@@ -1578,8 +1696,8 @@ const renderControls = () => (
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 8,
-        margin: 0,
+        gap: 10, // Reduced gap
+        margin: 8,
         padding: 0,
         listStyle: 'none'
       }}
@@ -1591,7 +1709,12 @@ const renderControls = () => (
           disabled={dailyMode}
           aria-disabled={dailyMode}
           className={`btn btn-primary`}
-          style={{ display: 'block', width: '100%' }}
+          style={{ 
+            display: 'block', 
+            width: '90%', 
+            padding: '0.3rem 1rem', // Smaller padding
+            fontSize: '0.8rem', // Smaller text
+          }}
           title={dailyMode ? 'Unavailable during Daily Challenge' : 'Start a new random game'}
         >
           New Game
@@ -1612,7 +1735,12 @@ const renderControls = () => (
           disabled={dailyMode}
           aria-disabled={dailyMode}
           className="btn btn-warn"
-          style={{ display: 'block', width: '100%' }}
+          style={{ 
+            display: 'block', 
+            width: '90%', 
+            padding: '0.3rem 0.1rem', 
+            fontSize: '0.8rem',
+          }}
           title={dailyMode ? 'Unavailable during Daily Challenge' : 'Restart this round'}
         >
           Restart
@@ -1624,10 +1752,15 @@ const renderControls = () => (
           role="menuitem"
           onClick={() => { abandonIfActive('menu'); setGameState('menu'); setBurgerOpen(false); }}
           className="btn btn-neutral"
-          style={{ display: 'block', width: '100%' }}
+          style={{ 
+            display: 'block', 
+            width: '90%', 
+            padding: '0.3rem 0.1rem', 
+            fontSize: '0.8rem',
+          }}
           title="Return to main menu"
         >
-          Menu
+          Return to Menu
         </button>
       </li>
 
@@ -1636,7 +1769,12 @@ const renderControls = () => (
           role="menuitem"
           onClick={() => { localStorage.removeItem(ONBOARDING_KEY); setShowTutorial(true); setBurgerOpen(false); }}
           className="btn btn-neutral"
-          style={{ display: 'block', width: '100%' }}
+          style={{ 
+            display: 'block', 
+            width: '90%', 
+            padding: '0.3rem 0.1rem', 
+            fontSize: '0.8rem',
+          }}
           title="Replay the tutorial"
         >
           How to Play
@@ -1650,10 +1788,16 @@ const renderControls = () => (
 {/* Middle: BIG centered selection box with inline submit arrow */}
 {!gameWon && (
   <div className="px-3 pb-3">
-    <div className="w-full flex justify-center">
+    <div className="w-full">
       {/* inline-block wrapper so the absolute button can anchor correctly */}
   <div
-    style={{ display: 'inline-block', position: 'relative' }}
+    style={{ 
+      display: 'block', 
+      position: 'relative', 
+      textAlign: 'center',
+      width: 'fit-content',
+      margin: '0 auto'
+    }}
     className={shouldPulse ? 'pp-pulse-wrap' : undefined}
   >
         <input
@@ -1677,7 +1821,9 @@ const renderControls = () => (
             padding: '16px 64px 16px 20px', // room for the arrow button inside
             textTransform: 'uppercase',
             letterSpacing: '0.04em',
-            display: 'block'               // avoid inline baseline quirks,
+            display: 'inline-block', // Explicitly set to inline-block
+            margin: '0 auto', // Belt and suspenders centering
+            borderRadius: 45
           }}
         />
 
@@ -1695,7 +1841,7 @@ const renderControls = () => (
           aria-label="Submit postcode"
           style={{
             position: 'absolute',
-            top: '50%',
+            top: '45%',
             right: 8,
             transform: 'translateY(-50%)',
             width: 48,
@@ -1704,7 +1850,8 @@ const renderControls = () => (
             lineHeight: 1,
             display: 'grid',
             placeItems: 'center',
-            zIndex: 1
+            zIndex: 1,
+            borderRadius: 45
           }}
         >
           <ArrowRight className="w-6 h-6" />
@@ -1745,20 +1892,25 @@ const renderControls = () => (
   <div className="flex flex-wrap items-center gap-2">
     <div className="badges flex flex-wrap items-center gap-2">
       <span className="text-slate-200/90">Journey:</span>
-      {currentPath.map((a, i) => (
-        <span
-          key={i}
-          className={`badge ${
-            a === targetArea
-              ? 'badge-green'
-              : i === currentPath.length - 1
-                ? 'badge-blue'
-                : 'badge-gray'
-          }`}
-        >
-          <span style={{ marginRight: 6 }}>{i}:</span>{a}
-        </span>
-      ))}
+{currentPath.map((code, i) => {
+  const type = i > 0 ? edgeType(currentPath[i-1], code) : null;
+  return (
+    <span
+      key={i}
+      className={`badge ${
+        code === targetArea ? 'badge-green'
+        : i === currentPath.length - 1 ? 'badge-blue'
+        : 'badge-gray'
+      }`}
+      title={i === 0 ? 'Start' : type === 'ferry' ? 'Ferry crossing' : type === 'bridge' ? 'Bridge/tunnel' : 'Land border'}
+    >
+      <span style={{ marginRight: 6 }}>{i === 0 ? 'Start' : i}:</span>
+      {code}
+      {type === 'ferry' && <Ship className="w-3 h-3 ml-1" aria-label="Ferry" />}
+      {type === 'bridge' && <Route className="w-3 h-3 ml-1" aria-label="Bridge/tunnel" />}
+    </span>
+  );
+})}
     </div>
 
     {/* Actions on the right */}
@@ -1878,8 +2030,14 @@ const renderControls = () => (
         onClose={dismissNudge}
         action={{ label: 'Open tutorial', onClick: () => { setShowTutorial(true); dismissNudge(); } }}
       >
-        You are in the <b>glowing Postcode area</b>. Enter a neighbouring postcode like <b>{exampleNeighbor}</b> and press <b>Enter</b>. If you’re still unsure, try the tutorial.
+        You are in the <b>glowing Postcode area</b>. Enter a neighbouring postcode like <b>{exampleNeighbor}</b> and press <b>Enter</b>. If you're still unsure, try the tutorial.
       </Toast>
+
+<Toast open={!!errorToast} onClose={() => setErrorToast('')}>
+  {errorToast}
+</Toast>
+
+
     </div>
   </div>
 );
@@ -1894,7 +2052,7 @@ const renderControls = () => (
 const renderGameBoard = () => (
   <div className="mx-auto w-full max-w-[600px] px-4">
     {renderControls()}
-    <div className="grid place-items-center min-h-[calc(100dvh-var(--controls-h,0px))]"><br /><br />
+    <div className="grid place-items-center min-h-[calc(100dvh-var(--controls-h,0px))]"><br />
       <div className="absolute inset-0 grid place-items-center">
         {renderMap()}
       </div>
@@ -1902,6 +2060,20 @@ const renderGameBoard = () => (
   </div>
 );
 // ---------- Menu page ----------
+
+function handleDailyChoice(diff) {
+  const status = normalizeStatus(Daily.dailyStatus?.(diff)); // 'idle' | 'continue' | 'finished'
+  if (status === 'finished' || status === 'continue') {
+    // jump straight in: resume or show the result
+    startOrResumeDaily(diff);
+    setShowDailyChooser(false);
+    setDailyChoice(null);
+    return;
+  }
+  // otherwise, show the info panel with Play button
+  setDailyChoice(diff);
+}
+
 const renderMenu = () => (
   <div className="max-w-2xl mx-auto p-8 glass text-center mt-8 relative">
     <MapPin className="w-16 h-16 mx-auto text-indigo-600 mb-4" />
@@ -1910,39 +2082,89 @@ const renderMenu = () => (
       Navigate between UK postcode areas by following their geographical connections!
     </p>
 
-    {/* Two big CTAs */}
-    <div className="flex flex-col sm:flex-row items-stretch justify-center gap-3 mb-6">
-      <button
-        type="button"
-        className="btn btn-success text-lg py-3 sm:flex-1"
-        onClick={() => setShowDailyChooser(true)}
-      >
-        Daily Challenge
-      </button>
-      <button
-        type="button"
-        className="btn btn-purple text-lg py-3 sm:flex-1"
-        onClick={() => setShowFreePlayChooser(true)}
-      >
-        Free Play
-      </button>
-        <button
-    type="button"
-    className="btn btn-neutral text-lg py-3"
-    onClick={() => setShowTutorial(true)}
-  >
-    How to Play
-  </button>
+    {/* Three big CTAs */}
+    <div className="mx-autoflex flex-col sm:flex-row items-stretch justify-center gap-3 mb-6 mx-auto w-full sm:w-auto ">
+<button
+      type="button"
+      className="btn btn-glass tint-green btn-cta"
+      onClick={() => setShowDailyChooser(true)}
+    >
+      <Trophy className="w-6 h-6 shrink-0" aria-hidden="true" />
+      <span>Daily Challenge</span>
+    </button>
+
+    <button
+      type="button"
+      className="btn btn-glass tint-purple btn-cta"
+      onClick={() => setShowFreePlayChooser(true)}
+    >
+      <Flag className="w-6 h-6 shrink-0" aria-hidden="true" />
+      <span>Free Play</span>
+    </button>
+
+    <button
+      type="button"
+      className="btn btn-glass glass--white btn-cta"
+      onClick={() => setShowTutorial(true)}
+    >
+      <BookOpen className="w-6 h-6 shrink-0" aria-hidden="true" />
+      <span>How to Play</span>
+    </button>
+
     </div>
+
+{/* Daily streaks summary */}
+{Object.values(streaks).some(n => (Number(n) || 0) > 0) && (
+<div className="mt-6 mx-auto w-full max-w-xl">
+  <div className="glass glass--white rounded-xl p-4">
+    <h3 className="text-base font-semibold text-slate-900 mb-3 text-center">
+      Your Daily Streaks
+    </h3>
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="text-slate-600">
+          <th className="text-left py-2">Difficulty</th>
+          <th className="text-right py-2">Streak</th>
+        </tr>
+      </thead>
+      <tbody>
+        {DIFF_ORDER.map((d) => (
+          <tr key={d} className="border-t border-slate-200/40">
+            <td className="py-2 font-medium">
+              {DIFF_LABELS[d] ?? d}
+            </td>
+            <td className="py-2 text-right">
+              {streaks?.[d] > 0 ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="tabular-nums font-semibold">{streaks[d]}</span>
+                  <span aria-hidden="true">{renderStreak(streaks[d])}</span>
+                  <span className="sr-only">{streaks[d]}-day streak</span>
+                </span>
+              ) : (
+                <span className="text-slate-500">—</span>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
+)}
 
     <button className="btn btn-neutral" onClick={() => setShowAbout(true)}>About</button>
 
     {/* --- Daily chooser modal --- */}
 {showDailyChooser && createPortal(
   <div
-    role="dialog"
-    aria-modal="true"
+    role="menu"
     onClick={() => setShowDailyChooser(false)}
+    className={[
+      "glass glass--slate rounded-xl shadow-lg p-2",
+      "transition duration-150 ease-out",
+      "transform will-change-transform will-change-opacity",
+      menuAnimClass
+    ].join(" ")}
     style={{
       position: 'fixed',
       inset: 0,
@@ -1955,67 +2177,145 @@ const renderMenu = () => (
       padding: '10vh 16px 16px'
     }}
   >
+
     <div
-      className="glass w-full max-w-md p-5 rounded-2xl shadow-lg"
+      className={[
+        "glass p-5 rounded-2xl shadow-lg",
+        "transition duration-200 ease-out transform-gpu",
+        freeAnim
+      ].join(" ")}
       onClick={(e) => e.stopPropagation()}
       tabIndex={-1}
       style={{
+        width: '400px', // Fixed width
+        maxHeight: '80vh',
+        overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         overscrollBehavior: 'contain',
-        touchAction: 'pan-y',
-        maxHeight: '80vh',
-        overflowY: 'auto'
+        touchAction: 'pan-y'
       }}
     >
-      <h2 className="text-xl font-bold mb-3">Choose Daily Challenge Difficulty</h2>
-<div className="grid gap-2">
-  <button className="btn btn-green btn--full"  onClick={() => setDailyChoice('easy')}>
-    Easy — {Daily.dailyStatus('easy')}
-  </button>
-  <button className="btn btn-yellow btn--full" onClick={() => setDailyChoice('normal')}>
-    Normal — {Daily.dailyStatus('normal')}
-  </button>
-  <button className="btn btn-orange btn--full" onClick={() => setDailyChoice('hard')}>
-    Hard — {Daily.dailyStatus('hard')}
-  </button>
-  <button className="btn btn-purple btn--full" onClick={() => setDailyChoice('master')}>
-    Master — {Daily.dailyStatus('master')}
-  </button>
-</div>
+      <h2 className="text-2xl font-bold mb-4 text-center">Choose Daily Challenge Difficulty</h2>
 
-{dailyChoice && (
-  <div className="mt-4 p-3 rounded-xl bg-white/75 text-slate-900">
-    <div className="font-semibold">
-      {DIFF_LABELS[dailyChoice]}
-    </div>
-    <p className="text-sm mt-1">{DIFF_DESCRIPTIONS[dailyChoice]}</p>
-
-    <div className="mt-3 flex gap-2">
-      <button
-        className="btn btn-primary flex-1"
-        onClick={() => {
-          startOrResumeDaily(dailyChoice);
-          setShowDailyChooser(false);
-          setDailyChoice(null);
+      <ul
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10, // Reduced gap
+          margin: 8,
+          padding: 0,
+          listStyle: 'none'
         }}
       >
-        Play game
-      </button>
-      <button className="btn btn-neutral" onClick={() => setDailyChoice(null)}>
-        Change
-      </button>
-    </div>
-  </div>
-)}
+        <li className="choice-item">
+          <button
+            type="button"
+            className="btn btn-green btn-choice"
+            onClick={() => handleDailyChoice('easy')}
+            role="menuitem"
+            style={{ 
+              display: 'block', 
+              width: '95%', 
+              padding: '0.3rem 1rem', // Smaller padding
+              fontSize: '2rem', // Smaller text
+            }}
+          >
+            <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('easy') : <>Easy — {Daily.dailyStatus('easy')}</>}</span>
+            {typeof renderStreak === 'function' ? renderStreak(streaks?.easy) : null}
+          </button>
+        </li>
 
-<div className="mt-4">
-  <button
-    className="btn btn-neutral w-full"
-    onClick={() => { setShowDailyChooser(false); setDailyChoice(null); }}
-  >
-    Close
-  </button>
-</div>
+        <li className="choice-item">
+          <button
+            type="button"
+            className="btn btn-yellow btn-choice"
+            onClick={() => handleDailyChoice('normal')}
+            role="menuitem"
+            style={{ 
+              display: 'block', 
+              width: '95%', 
+              padding: '0.3rem 1rem', // Smaller padding
+              fontSize: '2rem', // Smaller text
+            }}
+          >
+            <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('normal') : <>Normal — {Daily.dailyStatus('normal')}</>}</span>
+            {typeof renderStreak === 'function' ? renderStreak(streaks?.normal) : null}
+          </button>
+        </li>
+
+        <li className="choice-item">
+          <button
+            type="button"
+            className="btn btn-orange btn-choice"
+            onClick={() => handleDailyChoice('hard')}
+            role="menuitem"
+            style={{ 
+              display: 'block', 
+              width: '95%', 
+              padding: '0.3rem 1rem', // Smaller padding
+              fontSize: '2rem', // Smaller text
+            }}
+          >
+            <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('hard') : <>Hard — {Daily.dailyStatus('hard')}</>}</span>
+            {typeof renderStreak === 'function' ? renderStreak(streaks?.hard) : null}
+          </button>
+        </li>
+
+        <li className="choice-item">
+          <button
+            type="button"
+            className="btn btn-purple btn-choice"
+            onClick={() => handleDailyChoice('master')}
+            role="menuitem"
+            style={{ 
+              display: 'block', 
+              width: '95%', 
+              padding: '0.3rem 1rem', // Smaller padding
+              fontSize: '2rem', // Smaller text
+            }}
+          >
+            <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('master') : <>Master — {Daily.dailyStatus('master')}</>}</span>
+            {typeof renderStreak === 'function' ? renderStreak(streaks?.master) : null}
+          </button>
+        </li>
+      </ul>
+
+      <div className={`collapsible ${dailyChoice ? 'open' : ''}`}>
+        <div className="inner">
+          <div className="mt-4 p-4 rounded-xl bg-white/75 text-slate-900 text-center">
+            <div className="font-semibold"><b>{dailyChoice && DIFF_LABELS[dailyChoice]}</b></div>
+            <p className="text-sm mt-1 font-bold">{dailyChoice && DIFF_DESCRIPTIONS[dailyChoice]}</p>
+
+            <div className="mt-3 flex gap-2 justify-center">
+              <button
+                className="btn btn-glass tint-green w-full max-w-[20rem]"
+                onClick={() => {
+                  startOrResumeDaily(dailyChoice);
+                  setShowDailyChooser(false);
+                  setDailyChoice(null);
+                }}
+                style={{ 
+                  display: 'block', 
+                  width: '90%', 
+                  padding: '1rem 0.5rem', // Smaller padding
+                  fontSize: '2rem', // Smaller text
+                }}
+              >
+                Play game
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex justify-center">
+        <button
+          className="btn btn-neutral w-full max-w-[20rem]"
+          onClick={() => { setShowDailyChooser(false); setDailyChoice(null); }}
+        >
+          Close
+        </button>
+      </div>
 
     </div>
   </div>,
@@ -2026,9 +2326,14 @@ const renderMenu = () => (
     {/* --- Free Play chooser modal --- */}
 {showFreePlayChooser && createPortal(
   <div
-    role="dialog"
-    aria-modal="true"
+    role="menu"
     onClick={() => setShowFreePlayChooser(false)}
+        className={[
+      "glass glass--slate rounded-xl shadow-lg p-2",
+      "transition duration-150 ease-out",
+      "transform will-change-transform will-change-opacity",
+      menuAnimClass
+    ].join(" ")}
     style={{
       position: 'fixed',
       inset: 0,
@@ -2041,51 +2346,134 @@ const renderMenu = () => (
       padding: '10vh 16px 16px'
     }}
   >
-    <div
-      className="glass w-full max-w-md p-5 rounded-2xl shadow-lg"
+   <div
+      className={[
+        "glass p-5 rounded-2xl shadow-lg",
+        "transition duration-200 ease-out transform-gpu",
+        freeAnim
+      ].join(" ")}
       onClick={(e) => e.stopPropagation()}
       tabIndex={-1}
       style={{
+        width: '400px', // Fixed width
+        maxHeight: '80vh',
+        overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
         overscrollBehavior: 'contain',
-        touchAction: 'pan-y',
-        maxHeight: '80vh',
-        overflowY: 'auto'
+        touchAction: 'pan-y'
       }}
     >
-<h2 className="text-xl font-bold mb-3">Choose Free Play Difficulty</h2>
+<h2 className="text-2xl font-bold mb-4 text-center">Choose Free Play Difficulty</h2>
 
-<div className="grid gap-2">
-  <button className="btn btn-green btn--full"  onClick={() => setFreeChoice('easy')}>Easy</button>
-  <button className="btn btn-yellow btn--full" onClick={() => setFreeChoice('normal')}>Normal</button>
-  <button className="btn btn-orange btn--full" onClick={() => setFreeChoice('hard')}>Hard</button>
-  <button className="btn btn-purple btn--full" onClick={() => setFreeChoice('master')}>Master</button>
-</div>
-
-{freeChoice && (
-  <div className="mt-4 p-3 rounded-xl bg-white/75 text-slate-900">
-    <div className="font-semibold">
-      {DIFF_LABELS[freeChoice]}
-    </div>
-    <p className="text-sm mt-1">{DIFF_DESCRIPTIONS[freeChoice]}</p>
-
-    <div className="mt-3 flex gap-2">
-      <button
-        className="btn btn-primary flex-1"
-        onClick={() => {
-          startWithDifficulty(freeChoice);
-          setShowFreePlayChooser(false);
-          setFreeChoice(null);
+<ul
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10, // Reduced gap
+          margin: 8,
+          padding: 0,
+          listStyle: 'none'
         }}
       >
-        Play game
-      </button>
-      <button className="btn btn-neutral" onClick={() => setFreeChoice(null)}>
-        Change
-      </button>
+        <li className="choice-item">
+          <button
+            type="button"
+            className="btn btn-green btn-choice"
+            onClick={() => setFreeChoice('easy')}
+            role="menuitem"
+            style={{ 
+              display: 'block', 
+              width: '95%', 
+              padding: '0.3rem 1rem', // Smaller padding
+              fontSize: '2rem', // Smaller text
+            }}
+          >
+            <span><>Easy</></span>
+          </button>
+        </li>
+
+        <li className="choice-item">
+          <button
+            type="button"
+            className="btn btn-yellow btn-choice"
+            onClick={() => setFreeChoice('normal')}
+            role="menuitem"
+            style={{ 
+              display: 'block', 
+              width: '95%', 
+              padding: '0.3rem 1rem', // Smaller padding
+              fontSize: '2rem', // Smaller text
+            }}
+          >
+            <span>Normal</span>
+          </button>
+        </li>
+
+        <li className="choice-item">
+          <button
+            type="button"
+            className="btn btn-orange btn-choice"
+            onClick={() => setFreeChoice('hard')}
+            role="menuitem"
+            style={{ 
+              display: 'block', 
+              width: '95%', 
+              padding: '0.3rem 1rem', // Smaller padding
+              fontSize: '2rem', // Smaller text
+            }}
+          >
+            <span>Hard</span>
+          </button>
+        </li>
+
+        <li className="choice-item">
+          <button
+            type="button"
+            className="btn btn-purple btn-choice"
+            onClick={() => setFreeChoice('master')}
+            role="menuitem"
+            style={{ 
+              display: 'block', 
+              width: '95%', 
+              padding: '0.3rem 1rem', // Smaller padding
+              fontSize: '2rem', // Smaller text
+            }}
+          >
+            <span>Master</span>
+          </button>
+        </li>
+      </ul>
+
+
+
+
+ <div className={`collapsible ${freeChoice ? 'open' : ''}`}>
+  <div className="inner">
+    <div className="mt-4 p-3 rounded-xl bg-white/75 text-slate-900">
+      <div className="font-semibold">{freeChoice && DIFF_LABELS[freeChoice]}</div>
+      <p className="text-sm mt-1">{freeChoice && DIFF_DESCRIPTIONS[freeChoice]}</p>
+
+      <div className="mt-3 flex gap-2 justify-center">
+        <button
+          className="btn btn-glass tint-green w-full max-w-[20rem]"
+          onClick={() => {
+            startWithDifficulty(freeChoice);
+            setShowFreePlayChooser(false);
+            setFreeChoice(null);
+          }}
+                          style={{ 
+                  display: 'block', 
+                  width: '90%', 
+                  padding: '1rem 0.5rem', // Smaller padding
+                  fontSize: '2rem', // Smaller text
+                }}
+        >
+          Play game
+        </button>
+      </div>
     </div>
   </div>
-)}
+</div>
 
 <div className="mt-4">
   <button
@@ -2194,6 +2582,52 @@ const renderMenu = () => (
   </div>
 );
 
+// ---- Daily chooser helpers & streak state ----
+const DIFF_BASE_LABELS = { easy: 'Easy', normal: 'Normal', hard: 'Hard', master: 'Master' };
+
+// Map whatever Daily.dailyStatus returns into { idle | continue | finished }
+function normalizeStatus(raw) {
+  const s = String(raw || '').toLowerCase();
+  if (/finish|done|complete|result/.test(s)) return 'finished';   // -> "See Result"
+  if (/cont|progress|resume|started|ongoing/.test(s)) return 'continue'; // -> "Continue"
+  return 'idle';
+}
+
+function makeDailyLabel(diff) {
+  const base = DIFF_BASE_LABELS[diff] ?? diff;
+  const status = normalizeStatus(Daily.dailyStatus?.(diff));
+  if (status === 'continue') return `${base} - Continue`;
+  if (status === 'finished') return `${base} - Result`;
+  return base; // idle
+}
+
+
+function renderStreak(count) {
+  const n = Number(count) || 0;
+  if (n <= 0) return null;
+  if (n < 10) {
+    return <span aria-label={`${n}-day streak`}>{'🔥'.repeat(n)}</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-1" aria-label={`${n}-day streak`}>
+      🔥×{n}
+    </span>
+  );
+}
+
+const [streaks, setStreaks] = React.useState({
+  easy: 0, normal: 0, hard: 0, master: 0
+});
+
+React.useEffect(() => {
+  setStreaks({
+    easy: readStreak('easy'),
+    normal: readStreak('normal'),
+    hard: readStreak('hard'),
+    master: readStreak('master'),
+  });
+  // If you emit an event when a daily is completed, add it to the deps.
+}, [readStreak]);
 
 
 return (

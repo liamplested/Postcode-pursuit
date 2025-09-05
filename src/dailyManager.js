@@ -105,3 +105,15 @@ export const dailyStatus = (difficulty) => {
   if (snap && snap.date === today) return snap.gameWon ? 'View result' : 'Continue';
   return 'Start';
 };
+
+export function getStreak(diff) {
+  try {
+    const raw = localStorage.getItem(`pp_daily_streak_v2_${diff}`);
+    if (raw) return Number(JSON.parse(raw)?.count ?? 0) || 0;
+    if (diff === 'easy') {
+      const legacy = localStorage.getItem('pp_daily_streak_v1');
+      if (legacy) return Number(JSON.parse(legacy)?.count ?? 0) || 0;
+    }
+  } catch {}
+  return 0;
+}

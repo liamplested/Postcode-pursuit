@@ -5,6 +5,45 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --glass-bg: rgba(31, 69, 167, 0.65);      /* default indigo-ish */
+  --glass-fallback-bg: rgba(44, 42, 182, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.35);
+  --glass-blur: 10px;
+}
+
+@layer utilities {
+  .card-cta {
+    @apply glass rounded-2xl p-5 text-left transition duration-200 ease-out ring-1 ring-black/5 hover:shadow-xl hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400;
+  }
+  .icon-chip {
+    @apply inline-flex items-center justify-center w-10 h-10 rounded-xl text-white shadow;
+  }
+  .icon-chip--indigo { @apply bg-indigo-600; }
+  .icon-chip--purple { @apply bg-purple-600; }
+  .icon-chip--emerald { @apply bg-emerald-600; }
+
+  .animate-slow-float { animation: slow-float 18s ease-in-out infinite; }
+  .animate-slow-float.delay-150 { animation-delay: .15s; }
+  @keyframes slow-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(12px) } }
+}
+
+@layer utilities {
+  /* Glass already exists in your app; if not, uncomment:
+  .glass { @apply bg-white/10 backdrop-blur-md border border-white/20; } */
+
+  .card {
+    @apply glass rounded-2xl p-5 shadow-md ring-1 ring-white/15
+           transition duration-200 ease-out transform
+           hover:-translate-y-0.5 hover:shadow-xl
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400;
+  }
+  .chip {
+    @apply grid place-items-center w-10 h-10 rounded-xl text-white shadow;
+  }
+}
+
+
 
 /* --------------------------------------
    Base: fonts + global styles
@@ -15,12 +54,12 @@
   }
 
   body {
-    background-color: #0f175a; /* Eastern blue */
+    background-color: #04395e; /* Eastern blue */
     min-height: 100vh;
     color: #f5f5f5; /* Slate-800 */
     line-height: 1.2;
   display: grid;
-  place-items: start center
+  place-items: start center;
   /* justify-content: center; */
   /* align-content: center; */
   }
@@ -46,24 +85,74 @@
    Components
 --------------------------------------- */
 @layer components {
-  /* Card-like container for panels if needed */
+/* Base glass – uses variables */
 .glass {
-  /* fallback when blur unsupported */
-  background: rgba(43, 23, 156, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   box-shadow: 0 6px 30px rgba(0,0,0,0.08);
   border-radius: 16px;
 }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass {
-    background: rgba(31, 69, 167, 0.65);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
   }
 }
 
-.no-backdrop .glass { background: rgba(44, 42, 182, 0.8); } /* stronger fallback */
+.no-backdrop .glass { background: var(--glass-fallback-bg); }
+
+.tutorial-scope .glass {
+  --glass-bg: #fff8e1;                 /* warm paper */
+  --glass-border: rgba(250, 204, 21, .55); /* amber-400-ish */
+  --glass-blur: 0px;
+  color: #1f2937;                       /* readable on light bg */
+}
+.consent-scope .glass {
+  --glass-bg: #e0f2fe;                  /* sky-100 */
+  --glass-border: rgba(147, 197, 253, .65);
+  --glass-blur: 0px;
+  color: #0f172a;
+}
+
+/* Glass color variants (modifiers) */
+.glass--indigo {
+  --glass-bg: rgba(124, 31, 167, 0.65);
+  --glass-fallback-bg: rgba(44, 42, 182, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.35);
+}
+
+.glass--white {
+  --glass-bg: rgba(255, 255, 255, 0.5);
+  --glass-fallback-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.50);
+  color: #0f172a; /* darker text on light-ish glass */
+}
+
+.glass--emerald {
+  --glass-bg: rgba(16, 185, 129, 0.18);    /* tailwind emerald-500-ish */
+  --glass-fallback-bg: rgba(16, 185, 129, 0.28);
+  --glass-border: rgba(16, 185, 129, 0.45);
+}
+
+.glass--slate {
+  --glass-bg: rgba(100, 116, 139, 0.20);   /* slate-ish */
+  --glass-fallback-bg: rgba(100, 116, 139, 0.35);
+  --glass-border: rgba(148, 163, 184, 0.45);
+}
+
+.glass--black {
+  --glass-bg: rgba(2, 6, 23, 0.40);        /* near-black */
+  --glass-fallback-bg: rgba(2, 6, 23, 0.60);
+  --glass-border: rgba(148, 163, 184, 0.25);
+}
+
+
+
+
+
+
 
   /* Base button styling */
   .btn {
@@ -95,10 +184,13 @@
   .btn-success { background-color: #059669; color: white; }
   .btn-success:hover { background-color: #047857; }
 
+  .btn-menu { background-color: #0400ff; color: white; }
+  .btn-menu:hover { background-color: #4338ca; }
+
 
   
   .btn-hollowgreen { background-color: #ffffff; color: green; border: 2px solid green }
-  .btn-hollowgreen:hover { background-color: #cdcdcd; }
+  .btn-hollowgreen:hover { background-color: green; color:#ffffff }
 
 /* Easy */
 .btn-green  { background-color:#15803d; color:#fff; border:2px solid #166534; }
@@ -149,6 +241,90 @@
   }
 }
 
+/* Glass buttons */
+
+@layer components {
+  .btn-cta {
+    @apply w-full m-0 justify-center gap-3 text-xl px-6 py-4 rounded-xl;
+  }
+}
+
+@layer components {
+  /* Base glassy button */
+  .btn-glass {
+    @apply btn;
+    position: relative;
+    border: 1px solid var(--glass-border);
+    background: var(--glass-bg);
+    color: var(--glass-fg, #ffffff);
+    border-radius: 0.75rem; /* a touch rounder reads more "glassy" */
+    box-shadow:
+      0 6px 30px rgba(0,0,0,0.10),
+      inset 0 1px 0 rgba(255,255,255,0.10);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+  }
+
+  .btn-glass:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 10px 30px rgba(0,0,0,0.18),
+      inset 0 1px 0 rgba(255,255,255,0.14);
+  }
+
+  .btn-glass:active {
+    transform: translateY(0);            /* remove lift on press */
+    filter: saturate(115%);              /* tiny pop */
+  }
+
+  .btn-glass:focus-visible {
+    outline: 3px solid #111827;          /* strong, accessible */
+    outline-offset: 2px;
+  }
+
+  .btn-glass:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  /* Fallback when blur is unavailable */
+  .no-backdrop .btn-glass { background: var(--glass-fallback-bg); }
+}
+
+/* Neutral/white glass */
+.glass--white {
+  --glass-bg: rgba(255, 255, 255, 0.5);
+  --glass-fallback-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.50);
+  --glass-fg: #0f172a;
+}
+
+/* Difficulty-aligned tints */
+.tint-green {
+  --glass-bg: rgba(34, 197, 94, 0.5);   /* ~emerald-500 */
+  --glass-fallback-bg: rgba(34, 197, 94, 0.32);
+  --glass-border: rgba(34, 197, 94, 0.48);
+  --glass-fg: #ffffff;
+}
+.tint-yellow {
+  --glass-bg: rgba(234, 179, 8, 0.26);   /* yellow has black text for a11y */
+  --glass-fallback-bg: rgba(234, 179, 8, 0.40);
+  --glass-border: rgba(250, 204, 21, 0.55);
+  --glass-fg: #111827;
+}
+.tint-orange {
+  --glass-bg: rgba(194, 65, 12, 0.22);
+  --glass-fallback-bg: rgba(194, 65, 12, 0.34);
+  --glass-border: rgba(234, 88, 12, 0.50);
+  --glass-fg: #ffffff;
+}
+.tint-purple {
+  --glass-bg: rgba(147, 51, 234, 0.22);
+  --glass-fallback-bg: rgba(147, 51, 234, 0.34);
+  --glass-border: rgba(168, 85, 247, 0.50);
+  --glass-fg: #ffffff;
+}
+
 /* --------------------------------------
    Utilities
 --------------------------------------- */
@@ -175,7 +351,30 @@
   z-index: 10;
 }
 
+@layer components {
+  /* UL-style stack */
+  .choice-list { @apply list-none m-0 p-0 space-y-3; }
+  .choice-item { @apply m-0 flex justify-center; }
 
+  /* Row that holds [button][streak] centered together */
+  .choice-row { @apply inline-flex items-center justify-center gap-3; }
+
+  /* Big, centered button (content centered now) */
+  .btn-choice {
+    @apply w-full max-w-[28rem] justify-center items-center
+           text-xl sm:text-2xl px-6 py-4 rounded-2xl;
+  }
+
+  /* Streak display that sits AFTER the button */
+  .streak-box {
+    @apply text-xl sm:text-2xl;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+    user-select: none;
+  }
+}
 
 @layer utilities {
   .gap-small > * {
@@ -231,23 +430,60 @@
   position: relative;
 }
 
+
+
 .pp-pulse-wrap::after {
   content: "";
   position: absolute;
-  inset: -6px;                 /* outside the input’s border */
-  border-radius: 16px;         /* match your input’s rounded-2xl */
+  inset: 5px;                 /* outside the input’s border */
+  border-radius: 45px;         /* match your input’s rounded-2xl */
   box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.45); /* indigo-ish glow */
-  animation: ppPulseShadow 5s ease-in-out infinite;
+  animation: ppPulseShadow 7s ease-in-out infinite;
   pointer-events: none;        /* don’t block clicks */
+}
+
+@keyframes pop { 
+  0% { transform: scale(0.8); opacity: 0 }
+  60% { transform: scale(1.02); opacity: 1 }
+  100% { transform: scale(1); opacity: 1 }
 }
 
 @keyframes ppPulseShadow {
   0%   { box-shadow: 0 0 0 0   rgba(26, 53, 141, 0.45); }
-  70%  { box-shadow: 0 0 0 14px rgba(96, 235, 217, 0.274); }
-  100% { box-shadow: 0 0 0 0   rgba(26, 53, 141, 0.45); }
+  70%  { box-shadow: 0 0 0 14px rgba(93, 170, 221, 0.637); }
+  100% { box-shadow: 0 0 0 0   rgb(255, 255, 255); }
 }
 
 /* Respect user motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .pp-pulse-wrap::after { animation: none; }
+}
+
+/* --- Modal pop-in (card) --- */
+@layer utilities {
+  .animate-modal-in {
+    animation: modal-in 180ms ease-out both;
+  }
+  @keyframes modal-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0)   scale(1); }
+  }
+
+  /* Backdrop fade */
+  .animate-backdrop-in {
+    animation: backdrop-in 160ms ease-out both;
+  }
+  @keyframes backdrop-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* Smooth expand/collapse that works with "auto" height (CSS-only) */
+  .collapsible {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 220ms ease;
+  }
+  .collapsible.open { grid-template-rows: 1fr; }
+  .collapsible > .inner { overflow: hidden; }
 }
