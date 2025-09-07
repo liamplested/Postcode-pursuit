@@ -487,3 +487,111 @@
   .collapsible.open { grid-template-rows: 1fr; }
   .collapsible > .inner { overflow: hidden; }
 }
+
+/* ===== Stats page look & feel ===== */
+[data-page="stats"] .glass-panel {
+  /* a squarer panel than your default glass */
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+}
+
+/* KPI tiles */
+[data-page="stats"] .glass-tile {
+  border-radius: 10px;               /* squarer than pill */
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.22);
+}
+[data-page="stats"] .stat-label {
+  color: rgba(255,255,255,0.75);
+  font-size: 0.9rem;
+}
+[data-page="stats"] .stat-value {
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.35rem;
+  margin-top: 2px;
+}
+
+/* Table container */
+[data-page="stats"] .glass-table {
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.20);
+}
+[data-page="stats"] .table-head {
+  background: rgba(255,255,255,0.18);
+  color: rgba(0,0,0,0.75);
+}
+[data-page="stats"] .table-row {
+  border-top: 1px solid rgba(255,255,255,0.18);
+  transition: background-color 120ms ease-in-out;
+}
+
+/* Row accents by difficulty (soft color bands + left bar) */
+[data-page="stats"] .table-row.diff-easy {
+  background: linear-gradient(90deg, rgba(16,185,129,0.10), transparent 40%);
+  border-left: 4px solid rgba(16,185,129,0.6);   /* emerald */
+}
+[data-page="stats"] .table-row.diff-normal {
+  background: linear-gradient(90deg, rgba(245,158,11,0.10), transparent 40%);
+  border-left: 4px solid rgba(245,158,11,0.6);   /* amber */
+}
+[data-page="stats"] .table-row.diff-hard {
+  background: linear-gradient(90deg, rgba(249,115,22,0.10), transparent 40%);
+  border-left: 4px solid rgba(249,115,22,0.6);   /* orange */
+}
+[data-page="stats"] .table-row.diff-master {
+  background: linear-gradient(90deg, rgba(139,92,246,0.12), transparent 40%);
+  border-left: 4px solid rgba(139,92,246,0.6);   /* violet */
+}
+
+[data-page="stats"] .table-row:hover {
+  background-color: rgba(255,255,255,0.12);
+}
+
+/* Make cell backgrounds visible and allow a left accent bar */
+[data-page="stats"] .glass-table table {
+  border-collapse: separate;   /* important: let cell backgrounds show */
+  border-spacing: 0;
+}
+
+/* Base row hover (apply to cells) */
+[data-page="stats"] .table-row:hover td {
+  background-color: rgba(255,255,255,0.08);
+}
+
+/* EASY – emerald */
+[data-page="stats"] .table-row.diff-easy td {
+  background: linear-gradient(90deg, rgba(16,185,129,0.12), transparent 45%);
+}
+[data-page="stats"] .table-row.diff-easy td:first-child {
+  box-shadow: inset 100px 0 0 0 rgba(16,185,129,0.65);
+}
+
+/* NORMAL – amber */
+[data-page="stats"] .table-row.diff-normal td {
+  background: linear-gradient(90deg, rgba(245,158,11,0.12), transparent 45%);
+}
+[data-page="stats"] .table-row.diff-normal td:first-child {
+  box-shadow: inset 100px 0 0 0 rgba(245,158,11,0.65);
+}
+
+/* HARD – orange */
+[data-page="stats"] .table-row.diff-hard td {
+  background: linear-gradient(90deg, rgba(249,115,22,0.12), transparent 45%);
+}
+[data-page="stats"] .table-row.diff-hard td:first-child {
+  box-shadow: inset 100px 0 0 0 rgba(249,115,22,0.65);
+}
+
+/* MASTER – violet */
+[data-page="stats"] .table-row.diff-master td {
+  background: linear-gradient(90deg, rgba(139,92,246,0.14), transparent 45%);
+}
+[data-page="stats"] .table-row.diff-master td:first-child {
+  box-shadow: inset 100px 0 0 0 rgba(139,92,246,0.65);
+}
+

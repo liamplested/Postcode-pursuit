@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback, useId} from 'react';
-import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route} from 'lucide-react';
+import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { postcodeAreas, ferryLinks, bridgeLinks } from './postcodeAreas';
 import useSvgPan from './hooks/useSvgPan';
 import OnboardingTutorial from './components/OnboardingTutorial';
 import * as Daily from './dailyManager';
+
+ import StatsPage from './pages/StatsPage.jsx';
+ import AchievementsPage from './pages/AchievementsPage.jsx';
 
 // ---- Module-level constants -------------------------------------------------
 // Define the World
@@ -29,6 +32,417 @@ function saveDailyStreak(count, lastWinDate){
 }
 //function todayUTC(){ return new Date().toISOString().slice(0,10); }
 
+// ===== Module-scope utils (stable identity) =====
+export const USED_FERRIES_KEY = 'pp_used_ferries_v1';
+export const USED_BRIDGES_KEY = 'pp_used_bridges_v1';
+export const VISITED_KEY      = 'pp_visited_areas_v1';
+export const GAME_HISTORY_KEY = 'pp_history_v2';
+export const ACHIEVEMENTS_KEY = 'pp_achievements_v1';
+
+
+
+export function readJSON(key, fallback){
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+  catch { return fallback; }
+}
+export function writeJSON(key, val){
+  localStorage.setItem(key, JSON.stringify(val));
+}
+
+// ---- edges coverage ----
+export function canonEdge(a, b) {
+  if (!a || !b) return null;
+  return [a, b].sort((x, y) => x.localeCompare(y)).join('-');
+}
+export function readEdgeSet(key) {
+  try { return new Set(JSON.parse(localStorage.getItem(key) || '[]')); }
+  catch { return new Set(); }
+}
+export function writeEdgeSet(key, set) {
+  localStorage.setItem(key, JSON.stringify([...set]));
+}
+export function addUsedFerryEdge(a, b) {
+  const id = canonEdge(a, b); if (!id) return false;
+  const s = readEdgeSet(USED_FERRIES_KEY);
+  if (s.has(id)) return false;
+  s.add(id); writeEdgeSet(USED_FERRIES_KEY, s);
+  return true;
+}
+export function addUsedBridgeEdge(a, b) {
+  const id = canonEdge(a, b); if (!id) return false;
+  const s = readEdgeSet(USED_BRIDGES_KEY);
+  if (s.has(id)) return false;
+  s.add(id); writeEdgeSet(USED_BRIDGES_KEY, s);
+  return true;
+}
+export function getCoverageMeta(ferries = ferryLinks, bridges = bridgeLinks) {
+  const usedF = readEdgeSet(USED_FERRIES_KEY);
+  const usedB = readEdgeSet(USED_BRIDGES_KEY);
+  const allF = new Set((ferries ?? []).map(({ a, b }) => canonEdge(a, b)).filter(Boolean));
+  const allB = new Set((bridges ?? []).map(({ a, b }) => canonEdge(a, b)).filter(Boolean));
+  return {
+    usedFerriesCount: usedF.size,
+    usedBridgesCount: usedB.size,
+    totalFerries: allF.size,
+    totalBridges: allB.size,
+    hasMersey: usedF.has(canonEdge('L', 'CH')),
+  };
+}
+
+// ---- visited areas ----
+export function readVisited() {
+  try { return new Set(JSON.parse(localStorage.getItem(VISITED_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+export function writeVisited(set) {
+  localStorage.setItem(VISITED_KEY, JSON.stringify([...set]));
+}
+export function addVisited(codes = [], areas = postcodeAreas) {
+  const s = readVisited();
+  let changed = false;
+  for (const c of codes) {
+    if (c && areas[c] && !s.has(c)) { s.add(c); changed = true; }
+  }
+  if (changed) writeVisited(s);
+  return changed;
+}
+export function getVisitedCount() { return readVisited().size; }
+
+// ---- path helpers for achievements ----
+export function pathHasSequence(path, seq) {
+  if (!Array.isArray(path) || path.length < seq.length) return false;
+  for (let i = 0; i <= path.length - seq.length; i++) {
+    let ok = true;
+    for (let j = 0; j < seq.length; j++) if (path[i + j] !== seq[j]) { ok = false; break; }
+    if (ok) return true;
+  }
+  return false;
+}
+
+function readStreakCount(diff) {
+  try {
+    const rec = JSON.parse(localStorage.getItem(`pp_daily_streak_v2_${diff}`) || 'null');
+    let n = Number(rec?.count || 0);
+    if ((!rec || !Number.isFinite(n)) && diff === 'easy') {
+      // legacy easy streak fallback
+      const legacy = JSON.parse(localStorage.getItem('pp_daily_streak_v1') || 'null');
+      n = Number(legacy?.count || 0) || 0;
+    }
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function lastNGamesArePerfect(n) {
+  const db = readJSON(GAME_HISTORY_KEY, { games: [] });
+  const recent = db.games.slice(-n);
+  if (recent.length < n) return false;
+  return recent.every(g =>
+    g.won &&
+    Number.isFinite(g.optimalMoves) &&
+    g.moves === g.optimalMoves
+  );
+}
+
+export const ACHIEVEMENTS = [
+  // ---- originals ----
+  { id: 'first',       name: 'First Steps',  icon:'⭐', tier:'bronze',
+    description: 'Finish your first game',
+    check: (_e,h) => (h.totalGames ?? 0) >= 1 },
+
+  { id: 'normal_win',  name: 'Cartographer', icon:'🧭', tier:'bronze',
+    description: 'Win on Normal',
+    check: (e) => e.won && e.difficulty==='normal' },
+
+  { id: 'hard_win',    name: 'Pathfinder',   icon:'🗺️', tier:'silver',
+    description: 'Win on Hard',
+    check: (e) => e.won && e.difficulty==='hard' },
+
+  { id: 'master_win',  name: 'Postcode Master', icon:'📮', tier:'gold',
+    description: 'Win on Master',
+    check: (e) => e.won && e.difficulty==='master' },
+
+  { id: 'speedy',      name: 'Commuter',     icon:'🚆', tier:'silver',
+    description: 'Win using the optimal number of moves',
+    check: (e) => e.won && Number.isFinite(e.optimalMoves) && e.moves === e.optimalMoves },
+
+  { id: 'ferry_win',   name: 'Mariner',      icon:'⛴️', tier:'bronze',
+    description: 'Use at least two ferries in a winning route',
+    check: (e) => e.won && (e.ferryCount ?? 0) >= 2 },
+
+  { id: 'bridge_win',  name: 'Engineer',     icon:'🌉', tier:'bronze',
+    description: 'Use at least two bridges/tunnels in a winning route',
+    check: (e) => e.won && (e.bridgeCount ?? 0) >= 2 },
+
+  { id: 'centurion',   name: 'Die-hard',     icon:'💯', tier:'legendary',
+    description: 'Play 100 games',
+    check: (_e,h) => (h.totalGames ?? 0) >= 100 },
+
+  { id: 'visit_25', name: 'Explorer: 25%', icon:'🧭', tier:'bronze',
+    description: 'Visit 25% of all postcode areas',
+    check: (_e,_h,meta) => (meta?.totalAreas > 0) && (meta.visitedCount / meta.totalAreas >= 0.25) },
+
+  { id: 'visit_50', name: 'Explorer: 50%', icon:'🗺️', tier:'silver',
+    description: 'Visit 50% of all postcode areas',
+    check: (_e,_h,meta) => (meta?.totalAreas > 0) && (meta.visitedCount / meta.totalAreas >= 0.50) },
+
+  { id: 'visit_100', name: 'Explorer: All Areas', icon:'🌐', tier:'legendary',
+    description: 'Visit every postcode area',
+    check: (_e,_h,meta) => (meta?.totalAreas > 0) && (meta.visitedCount >= meta.totalAreas) },
+
+  { id: 'mersey', name: 'Ferry Cross the Mersey', icon:'⛴️', tier:'bronze', hidden:true,
+    description: 'Use the ferry across the Mersey in either direction',
+    check: (_e,_h,meta) => !!meta?.hasMersey },
+
+  { id: 'all_ferries', name: 'Harbour Master', icon:'⚓', tier:'gold',
+    description: 'Use every ferry route at least once (across all games)',
+    check: (_e,_h,meta) => (meta?.totalFerries ?? 0) > 0 && (meta.usedFerriesCount >= meta.totalFerries) },
+
+  { id: 'all_bridges', name: 'Civil Engineer', icon:'🏗️', tier:'gold',
+    description: 'Use every bridge/tunnel at least once (across all games)',
+    check: (_e,_h,meta) => (meta?.totalBridges ?? 0) > 0 && (meta.usedBridgesCount >= meta.totalBridges) },
+
+  { id: 'lejog', name: 'Land’s End to John O’Groats', icon:'🏁', tier:'silver',
+    description: 'Start in TR and finish in KW in a single game',
+    check: (e) => e.won && e.startArea === 'TR' && e.endArea === 'KW' },
+
+  { id: 'shortcut', name: 'You call that a shortcut?', icon:'🌀', tier:'silver', hidden:true,
+    description: 'Path contains L → IM → BT → DG (or reverse) in one game',
+    check: (e) => e.won && Array.isArray(e.pathUsed) &&
+      (pathHasSequence(e.pathUsed, ['L','IM','BT','DG']) || pathHasSequence(e.pathUsed, ['DG','BT','IM','L'])) },
+
+  // ---- new: Bronze ----
+  { id: 'straight_shooter', name: 'Straight Shooter', icon:'🎯', tier:'bronze',
+    description: 'Win without revisiting any area',
+    check: (e) => e.won && Array.isArray(e.pathUsed) &&
+      new Set(e.pathUsed).size === e.pathUsed.length },
+
+  { id: 'so_close', name: 'So Close', icon:'➕', tier:'bronze',
+    description: 'Win in exactly optimal +1 moves',
+    check: (e) => e.won && Number.isFinite(e.optimalMoves) && e.moves === e.optimalMoves + 1 },
+
+  { id: 'dry_feet', name: 'Dry Feet', icon:'🥿', tier:'bronze',
+    description: 'Win without using any ferries or bridges',
+    check: (e) => e.won && (e.ferryCount ?? 0) === 0 && (e.bridgeCount ?? 0) === 0 },
+
+  { id: 'quick_trip', name: 'Quick Trip', icon:'⏱️', tier:'bronze',
+    description: 'Win in under 2 minutes',
+    check: (e) => e.won && (e.durationMs ?? Infinity) <= 120000 },
+
+  { id: 'first_crossing', name: 'First Crossing', icon:'🚢', tier:'bronze',
+    description: 'Use any ferry route at least once (lifetime)',
+    check: (_e,_h,meta) => (meta?.usedFerriesCount ?? 0) >= 1 },
+
+  { id: 'first_span', name: 'First Span', icon:'🧱', tier:'bronze',
+    description: 'Use any bridge/tunnel at least once (lifetime)',
+    check: (_e,_h,meta) => (meta?.usedBridgesCount ?? 0) >= 1 },
+
+  // ---- new: Silver ----
+  { id: 'bridge_club', name: 'Bridge Club', icon:'🌉', tier:'silver',
+    description: 'Win using 3+ bridges/tunnels',
+    check: (e) => e.won && (e.bridgeCount ?? 0) >= 3 },
+
+  { id: 'ferry_captain', name: 'Ferry Captain', icon:'⛴️', tier:'silver',
+    description: 'Win using 3+ ferries',
+    check: (e) => e.won && (e.ferryCount ?? 0) >= 3 },
+
+  { id: 'marathoner', name: 'Marathoner', icon:'🥾', tier:'silver',
+    description: 'Win with a route of 12+ moves',
+    check: (e) => e.won && (e.moves ?? 0) >= 12 },
+
+  { id: 'sprinter', name: 'Sprinter', icon:'🏃', tier:'silver',
+    description: 'Win in under 60 seconds',
+    check: (e) => e.won && (e.durationMs ?? Infinity) <= 60000 },
+
+  { id: 'flawless_line', name: 'Flawless Line', icon:'🧵', tier:'silver',
+    description: 'Optimal win with no revisits',
+    check: (e) => e.won && Number.isFinite(e.optimalMoves) &&
+      e.moves === e.optimalMoves &&
+      Array.isArray(e.pathUsed) &&
+      new Set(e.pathUsed).size === e.pathUsed.length },
+
+  { id: 'sea_and_stone', name: 'Sea & Stone', icon:'⚓', tier:'silver',
+    description: 'Win using both a ferry and a bridge',
+    check: (e) => e.won && (e.ferryCount ?? 0) > 0 && (e.bridgeCount ?? 0) > 0 },
+
+  // ---- new: Gold ----
+  { id: 'trailblazer', name: 'Trailblazer', icon:'🧭', tier:'gold',
+    description: 'Win on Hard with no ferries or bridges',
+    check: (e) => e.won && e.difficulty==='hard' && (e.ferryCount ?? 0)===0 && (e.bridgeCount ?? 0)===0 },
+
+  { id: 'masterpiece', name: 'Masterpiece', icon:'🎨', tier:'gold',
+    description: 'Win on Master with optimal moves',
+    check: (e) => e.won && e.difficulty==='master' && Number.isFinite(e.optimalMoves) && e.moves === e.optimalMoves },
+
+  { id: 'explorer_75', name: 'Explorer: 75%', icon:'🧭', tier:'gold',
+    description: 'Visit 75% of all postcode areas',
+    check: (_e,_h,meta) => (meta?.totalAreas > 0) && (meta.visitedCount / meta.totalAreas >= 0.75) },
+
+  { id: 'networker', name: 'Networker', icon:'🔗', tier:'gold',
+    description: 'Use at least half of all ferries and half of all bridges (lifetime)',
+    check: (_e,_h,meta) => {
+      const tf = meta?.totalFerries ?? 0, tb = meta?.totalBridges ?? 0;
+      if (tf === 0 || tb === 0) return false;
+      return (meta.usedFerriesCount ?? 0) >= Math.ceil(tf/2) &&
+             (meta.usedBridgesCount ?? 0) >= Math.ceil(tb/2);
+    } },
+
+  // ---- new: Legendary ----
+  { id: 'grand_tour', name: 'Grand Tour', icon:'🎒', tier:'legendary',
+    description: 'Win with a route of 20+ moves',
+    check: (e) => e.won && (e.moves ?? 0) >= 20 },
+
+  { id: 'zero_assist_master', name: 'Zero-Assist Master', icon:'🧘', tier:'legendary',
+    description: 'Win on Master with zero hints',
+    check: (e,_h,meta) => e.won && e.difficulty==='master' && ((meta?.hintsUsed ?? 0) === 0) },
+
+  { id: 'double_perfect', name: 'Double Perfect', icon:'✨', tier:'gold',
+  description: 'Two consecutive wins with optimal moves',
+  check: () => lastNGamesArePerfect(2) },
+
+{ id: 'turkey', name: 'Turkey', icon:'✨', tier:'legendary',
+  description: 'Three consecutive wins with optimal moves',
+  check: () => lastNGamesArePerfect(3) },
+
+  { id: 'infrastructure_chief', name: 'Infrastructure Chief', icon:'🏆', tier:'legendary',
+    description: 'Use every ferry AND every bridge at least once (lifetime)',
+    check: (_e,_h,meta) => {
+      const tf = meta?.totalFerries ?? 0, tb = meta?.totalBridges ?? 0;
+      if (tf === 0 || tb === 0) return false;
+      return (meta.usedFerriesCount >= tf) && (meta.usedBridgesCount >= tb);
+    } },
+
+    // ---- Easy streaks ----
+{ id: 'streak7_easy',  name: 'Warming Up — Easy',  icon:'🔥', tier:'bronze',
+  description: '7-day daily streak on Easy',
+  check: () => readStreakCount('easy') >= 7 },
+
+{ id: 'streak14_easy', name: 'In the Groove — Easy', icon:'🔥', tier:'silver',
+  description: '14-day daily streak on Easy',
+  check: () => readStreakCount('easy') >= 14 },
+
+{ id: 'streak30_easy', name: 'On a Roll — Easy', icon:'🔥', tier:'gold',
+  description: '30-day daily streak on Easy',
+  check: () => readStreakCount('easy') >= 30 },
+
+// ---- Normal streaks ----
+{ id: 'streak7_normal',  name: 'Warming Up — Normal',  icon:'🔥', tier:'bronze',
+  description: '7-day daily streak on Normal',
+  check: () => readStreakCount('normal') >= 7 },
+
+{ id: 'streak14_normal', name: 'In the Groove — Normal', icon:'🔥', tier:'silver',
+  description: '14-day daily streak on Normal',
+  check: () => readStreakCount('normal') >= 14 },
+
+{ id: 'streak30_normal', name: 'On a Roll — Normal', icon:'🔥', tier:'gold',
+  description: '30-day daily streak on Normal',
+  check: () => readStreakCount('normal') >= 30 },
+
+// ---- Hard streaks ----
+{ id: 'streak7_hard',  name: 'Warming Up — Hard',  icon:'🔥', tier:'bronze',
+  description: '7-day daily streak on Hard',
+  check: () => readStreakCount('hard') >= 7 },
+
+{ id: 'streak14_hard', name: 'In the Groove — Hard', icon:'🔥', tier:'silver',
+  description: '14-day daily streak on Hard',
+  check: () => readStreakCount('hard') >= 14 },
+
+{ id: 'streak30_hard', name: 'On a Roll — Hard', icon:'🔥', tier:'gold',
+  description: '30-day daily streak on Hard',
+  check: () => readStreakCount('hard') >= 30 },
+
+// ---- Master streaks ----
+{ id: 'streak7_master',  name: 'Warming Up — Master',  icon:'🔥', tier:'bronze',
+  description: '7-day daily streak on Master',
+  check: () => readStreakCount('master') >= 7 },
+
+{ id: 'streak14_master', name: 'In the Groove — Master', icon:'🔥', tier:'silver',
+  description: '14-day daily streak on Master',
+  check: () => readStreakCount('master') >= 14 },
+
+{ id: 'streak30_master', name: 'On a Roll — Master', icon:'🔥', tier:'gold',
+  description: '30-day daily streak on Master',
+  check: () => readStreakCount('master') >= 30 },
+
+// 365 streak
+{ id: 'streak_365', name: 'Unbreakable', icon:'🔥', tier:'legendary',
+  description: 'Daily streak of 365 (any difficulty)',
+  check: (_e,_h,_meta) => ['easy','normal','hard','master'].some(d => readStreakCount(d) >= 365) },
+
+  // ---- new: Hidden (bonus) ----
+  { id: 'island_hopper', name: 'Island Hopper', icon:'🏝️', tier:'silver', hidden:true,
+    description: 'In one game, visit IM, JE and GY',
+    check: (e) => e.won && Array.isArray(e.pathUsed) && ['IM','JE','GY'].every(x => e.pathUsed.includes(x)) },
+
+  { id: 'there_and_back_again', name: 'There and Back Again', icon:'🔁', tier:'gold', hidden:true,
+    description: 'Return to your start area before finishing (and still win)',
+    check: (e) => {
+      if (!e.won || !Array.isArray(e.pathUsed) || !e.startArea) return false;
+      const mid = e.pathUsed.slice(1,-1);
+      return mid.includes(e.startArea);
+    } },
+
+  { id: 'all_aboard', name: 'All Aboard!', icon:'🛳️', tier:'gold', hidden:true,
+    description: 'Use 5+ ferries in a single win',
+    check: (e) => e.won && (e.ferryCount ?? 0) >= 5 },
+
+  { id: 'tunneller', name: 'Tunneller', icon:'🕳️', tier:'gold', hidden:true,
+    description: 'Use 5+ bridges/tunnels in a single win',
+    check: (e) => e.won && (e.bridgeCount ?? 0) >= 5 },
+
+  { id: 'unlucky_13', name: 'Unlucky for Some', icon:'🎲', tier:'silver', hidden:true,
+    description: 'Win in exactly 13 moves',
+    check: (e) => e.won && e.moves === 13 },
+
+  { id: 'bookends', name: 'Bookends', icon:'🔤', tier:'silver', hidden:true,
+    description: 'Start and finish with the same initial letter',
+    check: (e) => e.won && e.startArea?.[0] && (e.startArea[0] === e.endArea?.[0]) },
+
+  { id: 'lejog_plus', name: 'LeJoG+', icon:'🏁', tier:'legendary', hidden:true,
+    description: 'TR → KW in 15+ moves',
+    check: (e) => e.won && e.startArea==='TR' && e.endArea==='KW' && (e.moves ?? 0) >= 15 },
+];
+
+
+export function evaluateAndUnlockAchievements(event, history, meta){
+  const have = readJSON(ACHIEVEMENTS_KEY, {}); // { [id]: rec }
+  const nowISO = new Date().toISOString();
+  const newly = [];
+  for (const a of ACHIEVEMENTS){
+    if (!have[a.id] && a.check(event, history, meta)){
+      have[a.id] = { ...a, unlockedAt: nowISO };
+      newly.push(have[a.id]);
+    }
+  }
+  if (newly.length) writeJSON(ACHIEVEMENTS_KEY, have);
+  return newly;
+}
+
+export function addGameToHistory(event){
+  const db = readJSON(GAME_HISTORY_KEY, { games: [] });
+  db.games.push(event);
+  writeJSON(GAME_HISTORY_KEY, db);
+  return {
+    totalGames: db.games.length,
+    totalWins: db.games.filter(g=>g.won).length,
+  };
+}
+
+// Helper that recalculates meta-based achievements (visits/coverage) and returns newly unlocked
+export function checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks) {
+  const db = readJSON(GAME_HISTORY_KEY, { games: [] });
+  const history = { totalGames: db.games.length, totalWins: db.games.filter(g => g.won).length };
+  const cov = getCoverageMeta();
+  const meta = {
+    ...cov,
+    visitedCount: getVisitedCount(),
+    totalAreas: Object.keys(postcodeAreas).length,
+    dailyStreak: 0,
+  };
+  const dummy = { won: false, moves: 0, difficulty };
+  return evaluateAndUnlockAchievements(dummy, history, meta);
+}
 
 export default function PostcodePursuit() {
 // ------------------- STATE & REFS (unchanged from your file) --------------
@@ -40,7 +454,7 @@ const [currentPath, setCurrentPath] = useState([]);
 const [guesses, setGuesses] = useState([]);
 const [gameWon, setGameWon] = useState(false);
 const [optimalPath, setOptimalPath] = useState([]);
-
+const [achievementToasts, setAchievementToasts] = useState([]);
 const [showHints, setShowHints] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -66,7 +480,29 @@ const [consentResolved, setConsentResolved] = useState(
 
 const canClickAreas = difficulty === 'easy';
 
-//const mapHostRef = useRef(null);
+// --- Soft Par helpers (Daily only) ---
+const parForOptimal = (optimalMoves) => Math.max(1, Math.ceil(optimalMoves * 1.5));
+const parDelta = (moves, par) => moves - par; // negative = under par
+function golfLabel(delta) {
+  if (delta <= -3) return 'albatross';
+  if (delta === -2) return 'eagle';
+  if (delta === -1) return 'birdie';
+  if (delta === 0)  return 'par';
+  if (delta === 1)  return 'bogey';
+  if (delta === 2)  return 'double bogey';
+  if (delta === 3)  return 'triple bogey';
+  return `${Math.abs(delta)} over par`;
+}
+function golfPhrase(moves, par) {
+  if (!Number.isFinite(par)) return null;
+  const d = parDelta(moves, par);
+  const name = golfLabel(d);
+  if (d < 0)  return `${Math.abs(d)} under par (${name})`;
+  if (d === 0) return `level par`;
+  return `${d} over par (${name})`;
+}
+
+const [dailyPar, setDailyPar] = useState(null);
 
 // Geometric helpers (centroids etc)
 const roundIdRef = useRef(null);
@@ -118,17 +554,23 @@ const saveDailySessionSnapshot = React.useCallback(() => {
     startArea, targetArea, currentPath, guesses, hintsUsed,
     optimalPath, elapsedMs: Math.floor(elapsedSoFar),
     gameWon, showOptimal, victoryOpen,
+    par: dailyPar,
   };
   localStorage.setItem(dailySessionKey(dailyDifficulty), JSON.stringify(snapshot));
 }, [
   dailyMode, dailyDate, dailyDifficulty,
   startArea, targetArea, currentPath, guesses, hintsUsed,
-  optimalPath, elapsedMs, gameWon, showOptimal, victoryOpen
+  optimalPath, elapsedMs, gameWon, showOptimal, victoryOpen, dailyPar
 ]);
 
 const [burgerOpen, setBurgerOpen] = useState(false);
 const burgerButtonRef = useRef(null);  // anchor for positioning
 const [burgerPos, setBurgerPos] = useState({ top: 0, left: 0, width: 224 }); // menu width ~224px
+
+const guessesCount = Math.max(0, currentPath.length - 1);
+const parLine = (dailyMode && Number.isFinite(dailyPar))
+  ? <>Par: <b>{dailyPar}</b> · <b>{golfPhrase(guessesCount, dailyPar)}</b></>
+  : null;
 
 // close on outside click / Escape
 useEffect(() => {
@@ -229,9 +671,21 @@ const readStreak = React.useCallback((diff) => {
   return 0;
 }, [readStreakRecord]);
 
+function getRouteFromHash() {
+  const h = (window.location.hash || '').replace(/^#\/?/, '').trim();
+  return h || ''; // '' = main app
+}
+const [route, setRoute] = useState(getRouteFromHash());
+useEffect(() => {
+  const onHash = () => setRoute(getRouteFromHash());
+  window.addEventListener('hashchange', onHash);
+  return () => window.removeEventListener('hashchange', onHash);
+}, []);
+const navigate = useCallback((r) => {
+  window.location.hash = r ? `#/${r}` : '#/';
+}, []);
 
-
-const [dailyStreak, setDailyStreak] = useState(() => {
+const [setDailyStreak] = useState(() => {
   const s = loadDailyStreak();
   return s?.count || 0;
 });
@@ -247,7 +701,7 @@ useEffect(() => {
     setDailyStreak(0);
     saveDailyStreak(0, s.lastWinDate);
   }
-}, []); 
+}, [setDailyStreak]); 
 
 React.useEffect(() => {
   // If v2 easy is missing but legacy exists, copy it across
@@ -349,7 +803,25 @@ function startOrResumeDaily(difficulty) {
   setDifficulty(difficulty);
 
   // Resume if today’s snapshot exists for this difficulty
+
+  // Fresh daily
+  const { start, target, path } =
+    Daily.generateTodayDaily(difficulty, postcodeAreas, getNeighbors, boundsByDifficulty);
+
+
   if (snap && snap.date === today) {
+
+        const resolvedOptimal =
+          Array.isArray(snap.optimalPath) && snap.optimalPath.length
+            ? snap.optimalPath
+            : Daily.findShortestPathDet(snap.startArea, snap.targetArea, getNeighbors);
+
+            setOptimalPath(resolvedOptimal);
+            setDailyPar(
+             Number.isFinite(snap.par) ? snap.par : parForOptimal(Math.max(0, resolvedOptimal.length - 1))
+            );
+
+    addVisited([start]);
     setDailyMode(true);
     setDailyDate(snap.date);
     setDailyDifficulty(difficulty);
@@ -359,8 +831,8 @@ function startOrResumeDaily(difficulty) {
     setTargetArea(snap.targetArea);
     setCurrentPath(Array.isArray(snap.currentPath) && snap.currentPath.length ? snap.currentPath : [snap.startArea]);
     setGuesses(Array.isArray(snap.guesses) ? snap.guesses : []);
-    setOptimalPath(Array.isArray(snap.optimalPath) ? snap.optimalPath
-                    : Daily.findShortestPathDet(snap.startArea, snap.targetArea, getNeighbors));
+/*     setOptimalPath(Array.isArray(snap.optimalPath) ? snap.optimalPath
+                    : Daily.findShortestPathDet(snap.startArea, snap.targetArea, getNeighbors)); */
     setShowOptimal(!!snap.showOptimal);
     setElapsedMs(snap.elapsedMs || 0);
 
@@ -382,9 +854,7 @@ function startOrResumeDaily(difficulty) {
 setDailyChoice(null);
 setFreeChoice(null);
 
-  // Fresh daily
-  const { start, target, path } =
-    Daily.generateTodayDaily(difficulty, postcodeAreas, getNeighbors, boundsByDifficulty);
+  
 
   setDailyMode(true);
   setDailyDate(today);
@@ -404,6 +874,8 @@ setFreeChoice(null);
   setElapsedMs(0);
   setVictoryOpen(false);
   setShowOptimal(false);
+
+  addVisited([start]);
 
   requestAnimationFrame(() => focusStartAndTarget(start, target));
 }
@@ -429,12 +901,13 @@ useEffect(() => {
     gameWon,
     showOptimal,
     victoryOpen,
+    par: dailyPar
   });
 }, [
   dailyMode, dailyDate, dailyDifficulty,
   startArea, targetArea, currentPath, guesses,
   hintsUsed, optimalPath, elapsedMs, gameWon,
-  showOptimal, victoryOpen
+  showOptimal, victoryOpen, dailyPar
 ]);
 
 
@@ -458,9 +931,6 @@ useEffect(() => {
     }
     startNewGame();
   };
-
-
-
   
 const arcPathBridge = (a, b) => arcPath(a, b, 0.12);
 const arcPathFerry  = (a, b) => arcPath(a, b, 0.18);
@@ -497,10 +967,6 @@ useEffect(() => {
   showOptimal, victoryOpen, saveDailySessionSnapshot
 ]);
 
-
-
-
-
 const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
 
 
@@ -532,12 +998,31 @@ const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
     hasFitRef.current = true;
   }, [reset]);
 
+
+  function parInfo({ moves, optimal, parMoves }) {
+  const par = Number.isFinite(parMoves) ? parMoves : Math.max(1, Math.ceil(optimal * 1.5));
+  const delta = moves - par;
+
+  const label =
+    delta <= -3 ? `Albatross (${delta})` :
+    delta === -2 ? 'Eagle (-2)' :
+    delta === -1 ? 'Birdie (-1)' :
+    delta ===  0 ? 'Par (E)' :
+    delta ===  1 ? 'Bogey (+1)' :
+    delta ===  2 ? 'Double bogey (+2)' :
+                   `+${delta}`;
+
+  return { par, delta, label };
+}
+
 const buildShareText = () => {
   const guessesCount = Math.max(0, currentPath.length - 1);
-  const optimal = Math.max(0, optimalPath.length - 1);
+  const optimal = Math.max(0, (optimalPath?.length || 1) - 1);
+
+  const { par, label } = parInfo({ moves: guessesCount, optimal });
   const time = elapsedMs ? formatTime(elapsedMs) : null;
 
-  let header = dailyMode
+  const header = dailyMode
     ? `Postcode Pursuit — Daily ${dailyDate} (${dailyDifficulty?.toUpperCase()})`
     : `Postcode Pursuit — ${startArea} → ${targetArea}`;
 
@@ -546,13 +1031,19 @@ const buildShareText = () => {
 
   text += `Guesses: ${guessesCount}`;
   if (optimal) text += ` (optimal ${optimal})`;
+  text += ` · Par ${par} — ${label}`;
   if (dailyMode) text += ` · Hints: ${hintsUsed}/${MAX_DAILY_HINTS}`;
   if (time) text += ` · Time: ${time}`;
-  if (dailyMode && dailyStreak) text += ` · Streak: ${dailyStreak}`;
-  text += `\npostcode-pursuit.co.uk`;
 
+  if (dailyMode && dailyDifficulty) {
+    const streak = (streaks?.[dailyDifficulty] ?? readStreak?.(dailyDifficulty) ?? 0);
+    if (streak > 0) text += ` · ${DIFF_LABELS[dailyDifficulty]} streak: ${streak}`;
+  }
+
+  text += `\npostcode-pursuit.co.uk`;
   return text;
 };
+
   
   const linkPaint = (type) => {
   switch (type) {
@@ -675,6 +1166,15 @@ const dismissNudge = () => {
   setShowNudge(false);
 };
 
+const tallyEdgeUsage = useCallback((path) => {
+  let ferryCount = 0, bridgeCount = 0;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1], b = path[i];
+    if (ferryAdj.get(a)?.has(b)) ferryCount++;
+    else if (bridgeAdj.get(a)?.has(b)) bridgeCount++;
+  }
+  return { ferryCount, bridgeCount };
+}, [ferryAdj, bridgeAdj]);
 
 
 useEffect(() => {
@@ -876,7 +1376,6 @@ function bfsDistance(start, target) {
   return Infinity;
 }
 
-
 function fireReroll(reason = 'new_game_button') {
   if (!isActiveRound()) return;
   const elapsedSec =
@@ -892,6 +1391,8 @@ function fireReroll(reason = 'new_game_button') {
   });
 }
 
+
+
 const [errorToast, setErrorToast] = useState('');
 
 const showError = useCallback((msg) => {
@@ -900,6 +1401,63 @@ const showError = useCallback((msg) => {
     if ('vibrate' in navigator) navigator.vibrate(40); 
   } catch {}
 }, []);
+
+
+
+const [giveUpOpen, setGiveUpOpen] = useState(false);
+
+const giveUpNow = useCallback(() => {
+  // stop the clock
+  const end = performance.now();
+  const ms = gameStartRef.current ? Math.max(0, end - gameStartRef.current) : 0;
+  setElapsedMs(ms);
+
+  // record a LOSS in history (mirrors your win event)
+  const advancingGuesses = guesses.filter(g => g.valid && !g.alreadyVisited);
+  const ferryCount   = advancingGuesses.filter(g => g.viaFerry).length;
+  const bridgeCount  = advancingGuesses.filter(g => g.viaBridge).length;
+  const optimalMoves = Math.max(0, (optimalPath?.length || 1) - 1);
+
+  const event = {
+    id: (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
+    dateISO: new Date().toISOString(),
+    mode: dailyMode ? 'daily' : 'free',
+    difficulty,
+    won: false,                                        // 👈 LOSS
+    moves: Math.max(0, currentPath.length - 1),
+    durationMs: ms,
+    usedFerry: ferryCount > 0,
+    usedBridge: bridgeCount > 0,
+    ferryCount,
+    bridgeCount,
+    optimalMoves,
+    pathUsed: currentPath.slice(),
+    startArea,
+    endArea: targetArea,
+  };
+  addGameToHistory(event);
+
+  // optional: analytics
+  window.gtag?.('event', 'game_gave_up', {
+    difficulty,
+    start_postcode: startArea,
+    target_postcode: targetArea,
+    guesses: Math.max(0, currentPath.length - 1),
+    time_ms: ms,
+    round_id: roundIdRef.current || undefined,
+  });
+
+  // close + go back
+  setGiveUpOpen(false);
+  setVictoryOpen(false);
+  setGameState('menu');
+  roundIdRef.current = null;
+}, [
+  guesses, optimalPath, currentPath, startArea, targetArea,
+  dailyMode, difficulty
+]);
+
+
 
 function Toast({ open, onClose, action, children }) {
   if (!open) return null;
@@ -1079,47 +1637,176 @@ useEffect(() => {
     setExampleNeighbor('');
   }
 }, [gameState, currentPath, getNeighbors, targetArea]);
-  // ---------- Victory modal timing ----------
-  const finishGame = useCallback(() => {
-    setGameWon(true);
-	setGameState('gameWon');
-    const end = performance.now();
-    const ms = gameStartRef.current ? Math.max(0, end - gameStartRef.current) : 0;
-    setElapsedMs(ms);
-    // Update Daily streak only for Daily mode
-if (dailyMode && dailyDate && dailyDifficulty) {
-  const next = bumpStreakFor(dailyDifficulty);
-  setStreaks((s) => ({ ...s, [dailyDifficulty]: next }));
 
-  // Optional: keep legacy single-key in sync for Easy if you still show dailyStreak elsewhere
+// --- Achievements setup
+
+const [statsVersion, setStatsVersion] = React.useState(0);
+
+const resetAllStats = React.useCallback(({ alsoResetStreaks = true } = {}) => {
+  // Gameplay history
+  localStorage.removeItem(GAME_HISTORY_KEY);
+
+  // Achievements + visited progress
+  localStorage.removeItem(ACHIEVEMENTS_KEY);
+  localStorage.removeItem(VISITED_KEY);
+
+  // Lifetime coverage caches (🚨 the missing bit)
+  localStorage.removeItem(USED_FERRIES_KEY);
+  localStorage.removeItem(USED_BRIDGES_KEY);
+
+  // Daily streaks (optional)
+  if (alsoResetStreaks) {
+    ['easy','normal','hard','master'].forEach(d =>
+      localStorage.removeItem(STREAK_KEY_V2(d))
+    );
+    localStorage.removeItem('pp_daily_streak_v1'); // legacy
+  }
+
+  // UI updates
+  setAchievementToasts([]);
+  setStatsVersion(v => v + 1);
+}, []);
+
+
+function computeStats(){
+  const db = readJSON(GAME_HISTORY_KEY, { games: [] });
+  const g = db.games;
+  const wins = g.filter(x=>x.won);
+
+  // helper: average (moves - par) where par = ceil(optimal*1.5)
+  const avgVsPar = (list) => {
+    const deltas = [];
+    for (const x of list) {
+      if (!x.won) continue;
+      const opt = Number(x.optimalMoves);
+      const mov = Math.max(0, Number(x.moves || 0));
+      if (!Number.isFinite(opt)) continue;
+      const par = Math.ceil(Math.max(0, opt) * 1.5);
+      deltas.push(mov - par);
+    }
+    if (!deltas.length) return null;
+    const mean = deltas.reduce((a,b)=>a+b,0) / deltas.length;
+    return Number(mean.toFixed(1));  // e.g. -1.2, +0.7
+  };
+
+  const DIFFS = ['easy','normal','hard','master'];
+  const byDiff = DIFFS.map(d => {
+    const list = g.filter(x=>x.difficulty===d);
+    const games = list.length;
+    const w = list.filter(x=>x.won).length;
+    return {
+      difficulty: d,
+      games,
+      wins: w,
+      avgVsPar: avgVsPar(list),  // may be null if no qualifying wins
+    };
+  });
+
+  return {
+    totalGames: g.length,
+    winRate: g.length ? Math.round(wins.length / g.length * 100) : 0,
+    avgMoves: wins.length ? (wins.reduce((s,x)=>s+x.moves,0)/wins.length).toFixed(1) : '—',
+    bestTime: wins.length ? Math.min(...wins.map(x=>x.durationMs)) : null,
+    avgVsPar: avgVsPar(g), // overall
+    byDiff,
+  };
+}
+
+
+
+
+
+
+  // ---------- Victory modal timing ----------
+// BEFORE: const finishGame = useCallback(() => { ... }, [...]);
+
+const finishGame = useCallback((finalPath) => {
+  const path = Array.isArray(finalPath) && finalPath.length ? finalPath : currentPath;
+
+  setGameWon(true);
+  addVisited([targetArea], postcodeAreas);
+
+  setGameState('gameWon');
+  const end = performance.now();
+  const ms = gameStartRef.current ? Math.max(0, end - gameStartRef.current) : 0;
+  setElapsedMs(ms);
+
+  const { ferryCount, bridgeCount } = tallyEdgeUsage(path);
+  const optimalMoves = Math.max(0, (optimalPath?.length || 1) - 1);
+
+  const event = {
+    id: (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
+    dateISO: new Date().toISOString(),
+    mode: dailyMode ? 'daily' : 'free',
+    difficulty,
+    won: true,
+    moves: Math.max(0, path.length - 1),
+    durationMs: ms,
+    usedFerry: ferryCount > 0,
+    usedBridge: bridgeCount > 0,
+    ferryCount,
+    bridgeCount,
+    optimalMoves,
+    pathUsed: path.slice(),
+    startArea,
+    endArea: targetArea,
+  };
+
+  const history = addGameToHistory(event);
+
+// 1) Bump streak first so achievements see the new value
+let streakAfter = 0;
+if (dailyMode && dailyDate && dailyDifficulty) {
+  streakAfter = bumpStreakFor(dailyDifficulty);
+  setStreaks((s) => ({ ...s, [dailyDifficulty]: streakAfter }));
   if (dailyDifficulty === 'easy') {
-    setDailyStreak(next);
-    saveDailyStreak(next, todayUTC());
+    setDailyStreak(streakAfter);
+    saveDailyStreak(streakAfter, todayUTC());
   }
 }
-	   if (window.gtag) {
-     window.gtag('event', 'game_won', {
-       difficulty,
-       start_postcode: startArea,
-       target_postcode: targetArea,
-       guesses: Math.max(0, currentPath.length - 1),
-       time_ms: ms,
-	   round_id: roundIdRef.current || undefined,
-     });
-   }
-	
-	
-    setVictoryOpen(true);
- }, [
-   currentPath.length,
-   difficulty,
-   startArea,
-   targetArea,
-   dailyDate,
-   dailyMode,
-   dailyDifficulty,   // ✅ used inside when updating streaks per difficulty
-   bumpStreakFor      // ✅ helper used to write v2 streak
- ]);
+
+// 2) Now compute meta and evaluate
+  // 🔹 Get the *post-win* streak first (0 if not daily)
+  let nextStreak = 0;
+  if (dailyMode && dailyDate && dailyDifficulty) {
+    nextStreak = bumpStreakFor(dailyDifficulty);           // persists & returns new count
+    setStreaks((s) => ({ ...s, [dailyDifficulty]: nextStreak }));
+    if (dailyDifficulty === 'easy') {
+      setDailyStreak(nextStreak);                           // keep legacy state in sync
+      saveDailyStreak(nextStreak, todayUTC());
+    }
+  }
+
+  const cov = getCoverageMeta(ferryLinks, bridgeLinks);
+  const meta = {
+    dailyStreak: nextStreak,                                // ✅ use the updated value
+    visitedCount: getVisitedCount(),
+    totalAreas: Object.keys(postcodeAreas).length,
+    ...cov,
+  };
+const unlocked = evaluateAndUnlockAchievements(event, history, meta);
+if (unlocked.length) setAchievementToasts(q => [...q, ...unlocked]);
+
+  if (window.gtag) {
+    window.gtag('event', 'game_won', {
+      difficulty,
+      start_postcode: startArea,
+      target_postcode: targetArea,
+      guesses: Math.max(0, path.length - 1),
+      time_ms: ms,
+      round_id: roundIdRef.current || undefined,
+    });
+  }
+
+  setVictoryOpen(true);
+}, [
+  currentPath, optimalPath,
+  difficulty, startArea, targetArea,
+  dailyDate, dailyMode, dailyDifficulty,
+  bumpStreakFor, tallyEdgeUsage, setDailyStreak
+]);
+
+
 
 useEffect(() => {
   if (gameState !== 'menu' && !hasFitRef.current) {
@@ -1303,6 +1990,7 @@ const startNewGame = () => {
   setCurrentPath([start]);
   setGuesses([]);
   setGameWon(false);
+  addVisited([start]);
 
   setOptimalPath(path);              // we already have it
   setGameState('playing');
@@ -1315,20 +2003,22 @@ const startNewGame = () => {
 };
 
 // const minStepsByMode = { easy: 3, normal: 4, hard: 5, master: 6 };
- const makeGuess = useCallback((area) => {
-   if (gameWon) return;
-   // clear any existing error without capturing errorToast in deps
-   setErrorToast(prev => (prev ? '' : prev));
-  setShowHints(false); 
+const makeGuess = useCallback((area) => {
+  if (gameWon) return;
   
+
+
+  setErrorToast(prev => (prev ? '' : prev));
+  setShowHints(false);
 
   const currentLocation = currentPath[currentPath.length - 1];
   const isValidMove = getNeighbors(currentLocation).includes(area);
   const alreadyVisited = currentPath.includes(area);
   const revisitAllowed = (difficulty === 'easy' || difficulty === 'normal');
 
-  const viaFerry = ferryAdj.get(currentLocation)?.has(area) || false;
+  const viaFerry  = ferryAdj.get(currentLocation)?.has(area) || false;
   const viaBridge = !!bridgeAdj.get(currentLocation)?.has(area);
+
   setGuesses((prev) => [
   ...prev,
   { area, valid: isValidMove, alreadyVisited, viaFerry, viaBridge }
@@ -1348,17 +2038,35 @@ if (!isValidMove || (alreadyVisited && !revisitAllowed)) {
     showError(`You've already visited ${area} in this game. Revisiting is not allowed in ${difficulty} difficulty`);
   }
 
+
+
   return;
 }
-
-  const newPath = [...currentPath, area];
-  setCurrentPath(newPath);
-
-  if (area === targetArea) {
-    finishGame();
-  } else {
-    ;
+  if (viaFerry) {
+    if (addUsedFerryEdge(currentLocation, area)) {
+      const newly = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
+      if (newly.length) setAchievementToasts(q => [...q, ...newly]);
+    }
   }
+  if (viaBridge) {
+    if (addUsedBridgeEdge(currentLocation, area)) {
+      const newly = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
+      if (newly.length) setAchievementToasts(q => [...q, ...newly]);
+    }
+  }
+
+  // mark newly visited
+  if (addVisited([area])) {
+    const newly = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
+    if (newly.length) setAchievementToasts(q => [...q, ...newly]);
+  }
+
+const newPath = [...currentPath, area];
+setCurrentPath(newPath);
+
+if (area === targetArea) {
+  finishGame(newPath);  // <-- pass final path so last edge is counted
+}
 }, [getNeighbors, gameWon, currentPath, targetArea, finishGame, ferryAdj, bridgeAdj, difficulty, showError]);
 
 // const isFerryEdge  = (a,b) => ferryAdj.get(a)?.has(b)  || false;
@@ -1373,6 +2081,21 @@ const handleClick = useCallback((code) => {
   if (Date.now() < suppressClickUntilRef.current) return;
   makeGuess(code);
 }, [gameState, isRevealed, makeGuess, canClickAreas, victoryOpen, showTutorial, showAbout]);
+
+
+useEffect(() => {
+function onKey(e){
+if (e.key === 'Escape') {
+e.preventDefault();
+abandonIfActive('menu');
+setGameState('menu');
+setBurgerOpen(false);
+}
+}
+window.addEventListener('keydown', onKey);
+return () => window.removeEventListener('keydown', onKey);
+}, [abandonIfActive, setGameState, setBurgerOpen]);
+
 
   // ---------- Label sizing helpers ----------
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -1393,6 +2116,9 @@ const resetView = useCallback(() => {
     }
   });
 }, [startArea, targetArea, focusStartAndTarget, fitToContent]);
+
+
+
 
   // ---------- Optimal path overlay ----------
   const renderOptimalOverlay = () => {
@@ -1647,6 +2373,19 @@ const renderControls = () => (
       className="glass mx-auto relative"   // <- ensure positioned ancestor
       style={{ width: '100%', maxWidth: '600px', overflow: 'hidden', borderRadius: 10 }}
     >
+
+
+<div className="absolute right-2 top-2 flex items-center gap-2 z-30">
+<button
+type="button"
+className="btn btn-primary px-3 py-1 text-sm"
+onClick={() => { abandonIfActive('menu'); setGameState('menu'); setBurgerOpen(false); }}
+aria-label="Back to menu"
+title="Back to menu (Esc)"
+>
+←
+</button>
+</div>
       {/* Burger pinned over the card, top-right */}
       <div className="pin-top-right">
         <button
@@ -1666,9 +2405,16 @@ const renderControls = () => (
       {/* Title row */}
       <div className="px-3 py-2" style={{ textAlign: 'center' }}>
         <h2 className="text-base sm:text-lg font-semibold text-slate-100 leading-tight">
-          Travel from <span className="text-indigo-200">{startArea || '—'}</span> to{' '}
-          <span className="text-indigo-200">{targetArea || '—'}</span>
+          Travel from <span className="text-indigo-200">{startArea || '—'}</span> to{' '} 
+          <span className="text-indigo-200">{targetArea || '—'}           {dailyMode && Number.isFinite(dailyPar) && (
+
+      <span className="inline-flex items-center gap-2 px-2 py-0.5 rounded border border-emerald-300 bg-emerald-100 text-emerald-900 text-xs">
+        - par {dailyPar}
+      </span>
+
+  )}</span>
         </h2>
+
       </div>
 
       {/* Burger menu portal (slide-in, overlays everything) */}
@@ -1913,6 +2659,8 @@ const renderControls = () => (
 })}
     </div>
 
+    
+
     {/* Actions on the right */}
     <div className="ml-auto flex items-center gap-2">
       {!gameWon && !masterMode && (
@@ -1926,6 +2674,61 @@ const renderControls = () => (
           Undo
         </button>
       )}
+
+
+{!gameWon && (
+  <button
+    className="btn btn-warn"
+    onClick={() => setGiveUpOpen(true)}
+    title="End this game as a loss"
+  >
+    Give up
+  </button>
+)}
+
+{giveUpOpen && createPortal(
+  <div
+    style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.6)',
+      zIndex: 2147483647,              // same as victory modal
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+      paddingTop: '10vh',
+      padding: '10vh 16px 16px'
+    }}
+    onClick={() => setGiveUpOpen(false)} // click backdrop to close
+  >
+    <div
+      className="glass p-5 rounded-2xl shadow-xl text-center"
+      style={{
+        maxWidth: 520,
+        width: '92vw',
+        maxHeight: '80vh',
+        overflowY: 'auto'
+      }}
+      onClick={(e) => e.stopPropagation()} // keep clicks inside
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="giveup-title"
+    >
+      <h2 id="giveup-title" className="text-xl font-semibold mb-2">Give up?</h2>
+      <p className="mb-4">
+        This will record a <b>loss</b> for this {dailyMode ? 'Daily' : 'Free Play'} game.<br/>
+        Current route: <b>{Math.max(0, currentPath.length - 1)}</b> moves
+        {optimalPath.length > 0 && <> · Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
+      </p>
+      <div className="flex gap-2 justify-center">
+        <button onClick={giveUpNow} className="btn btn-warn glass">Give up</button>
+        <button onClick={() => setGiveUpOpen(false)} className="btn btn-neutral glass">Cancel</button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
 
       {!gameWon && (
         <button
@@ -2037,6 +2840,22 @@ const renderControls = () => (
   {errorToast}
 </Toast>
 
+{achievementToasts[0] && (
+  <Toast
+    open
+    onClose={() => setAchievementToasts(q => q.slice(1))} // pop the head -> next shows
+  >
+    <div className="flex items-center gap-2">
+      <div><Trophy className="w-6 h-6 shrink-0" aria-hidden="true" /><b>Achievement unlocked</b> </div>
+      <span className="text-xl" aria-hidden>{achievementToasts[0].icon}</span>
+      <div>
+        <div className="font-semibold">{achievementToasts[0].name}</div>
+        <div className="text-xs opacity-80">{achievementToasts[0].description}</div>
+      </div>
+    </div>
+  </Toast>
+)}
+
 
     </div>
   </div>
@@ -2136,7 +2955,7 @@ const renderMenu = () => (
             <td className="py-2 text-right">
               {streaks?.[d] > 0 ? (
                 <span className="inline-flex items-center gap-2">
-                  <span className="tabular-nums font-semibold">{streaks[d]}</span>
+                  
                   <span aria-hidden="true">{renderStreak(streaks[d])}</span>
                   <span className="sr-only">{streaks[d]}-day streak</span>
                 </span>
@@ -2152,7 +2971,15 @@ const renderMenu = () => (
 </div>
 )}
 
-    <button className="btn btn-neutral" onClick={() => setShowAbout(true)}>About</button>
+    <button className="btn btn-neutral" onClick={() => setShowAbout(true)}><InfoIcon className="w-4 h-4" />About</button>
+
+<button className="btn btn-neutral ml-2" onClick={() => navigate('stats')}>
+  <ChartColumnBig className="w-4 h-4" /> Stats
+</button>
+
+<button className="btn btn-neutral ml-2" onClick={() => navigate('achievements')}>
+  <Medal className="w-4 h-4" /> Achievements
+</button>
 
     {/* --- Daily chooser modal --- */}
 {showDailyChooser && createPortal(
@@ -2221,7 +3048,7 @@ const renderMenu = () => (
             }}
           >
             <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('easy') : <>Easy — {Daily.dailyStatus('easy')}</>}</span>
-            {typeof renderStreak === 'function' ? renderStreak(streaks?.easy) : null}
+            {renderSingleFireForChooser(streaks?.easy)}
           </button>
         </li>
 
@@ -2239,7 +3066,7 @@ const renderMenu = () => (
             }}
           >
             <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('normal') : <>Normal — {Daily.dailyStatus('normal')}</>}</span>
-            {typeof renderStreak === 'function' ? renderStreak(streaks?.normal) : null}
+            {renderSingleFireForChooser(streaks?.normal)}
           </button>
         </li>
 
@@ -2257,7 +3084,7 @@ const renderMenu = () => (
             }}
           >
             <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('hard') : <>Hard — {Daily.dailyStatus('hard')}</>}</span>
-            {typeof renderStreak === 'function' ? renderStreak(streaks?.hard) : null}
+            {renderSingleFireForChooser(streaks?.hard)}
           </button>
         </li>
 
@@ -2275,7 +3102,7 @@ const renderMenu = () => (
             }}
           >
             <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('master') : <>Master — {Daily.dailyStatus('master')}</>}</span>
-            {typeof renderStreak === 'function' ? renderStreak(streaks?.master) : null}
+            {renderSingleFireForChooser(streaks?.master)}
           </button>
         </li>
       </ul>
@@ -2615,9 +3442,25 @@ function renderStreak(count) {
   );
 }
 
+function renderSingleFireForChooser(count) {
+  const n = Number(count) || 0;
+  return n > 0 ? (
+    <span aria-label={`${n}-day streak`} title={`${n}-day streak`}>🔥</span>
+  ) : null;
+}
+
 const [streaks, setStreaks] = React.useState({
   easy: 0, normal: 0, hard: 0, master: 0
 });
+
+/* 
+const DIFFICULTY_META = {
+easy: { label: 'Easy', hint: 'Outlines + labels', icon: '🔥' },
+normal: { label: 'Normal', hint: 'Outlines only', icon: '🔥' },
+hard: { label: 'Hard', hint: 'No outlines', icon: '🔥' },
+master: { label: 'Master', hint: 'Start & end only', icon: '🔥' },
+};
+ */
 
 React.useEffect(() => {
   setStreaks({
@@ -2629,6 +3472,28 @@ React.useEffect(() => {
   // If you emit an event when a daily is completed, add it to the deps.
 }, [readStreak]);
 
+// Route pages that replace the app UI
+if (route === 'stats') {
+  return (
+    <StatsPage
+      key={statsVersion}
+      stats={computeStats()}
+      onBack={() => navigate('')}
+      onResetAll={resetAllStats}
+    />
+  );
+}
+if (route === 'achievements') {
+  return (
+    
+    <AchievementsPage
+      onBack={() => navigate('')}
+      achievements={ACHIEVEMENTS}
+      visitedCount={getVisitedCount()}
+      totalAreas={Object.keys(postcodeAreas).length}
+    />
+  );
+}
 
 return (
   <>
@@ -2636,13 +3501,14 @@ return (
       {gameState === 'menu' ? renderMenu() : renderGameBoard()}
     </div>
 
-    {/* Single OnboardingTutorial instance */}
-<OnboardingTutorial
-  isOpen={consentResolved && showTutorial}   // extra guard is fine
-  onSkip={() => { localStorage.setItem(ONBOARDING_KEY, 'true'); setShowTutorial(false); }}
-  onComplete={() => { localStorage.setItem(ONBOARDING_KEY, 'true'); setShowTutorial(false); }}
-  postcodeAreas={postcodeAreas}
-/>
+    <OnboardingTutorial
+      isOpen={consentResolved && showTutorial}
+      onSkip={() => { localStorage.setItem(ONBOARDING_KEY, 'true'); setShowTutorial(false); }}
+      onComplete={() => { localStorage.setItem(ONBOARDING_KEY, 'true'); setShowTutorial(false); }}
+      postcodeAreas={postcodeAreas}
+    />
+
+    
 
     {victoryOpen && createPortal(
       <div style={{
@@ -2665,10 +3531,14 @@ return (
           <h2 className="text-xl font-semibold mb-2">Victory! 🎉</h2>
           <p className="mb-4">
             From <b>{startArea}</b> to <b>{targetArea}</b><br />
-            Guesses: <b>{Math.max(0, currentPath.length - 1)}</b>
-            {optimalPath.length > 0 && <> · Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
-            {elapsedMs > 0 && <> · Time: <b>{formatTime(elapsedMs)}</b></>}
-            {dailyMode && dailyStreak > 0 && <> · Streak: <b>{dailyStreak}</b></>}
+            Moves: <b>{Math.max(0, currentPath.length - 1)}</b><br />
+            Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b><br />
+            {parLine}<br />
+            
+             {dailyMode && (streaks?.[dailyDifficulty] ?? 0) > 0 && (
+   <>Streak: <b>{streaks[dailyDifficulty]}</b> · </>
+ )}
+            {elapsedMs > 0 && <>Time: <b>{formatTime(elapsedMs)}</b></>}
           </p>
           <div className="flex gap-2 justify-center">
             <button onClick={shareResult} className="btn btn-purple glass">Share</button>
