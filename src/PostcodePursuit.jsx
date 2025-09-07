@@ -485,6 +485,51 @@ export function checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryL
   return evaluateAndUnlockAchievements(dummy, history, meta);
 }
 
+function Modal({ open, onClose, title, children }) {
+  if (!open) return null;
+  return createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.6)',
+        zIndex: 2147483647,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        paddingTop: '10vh',
+        padding: '10vh 16px 16px'
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={title ? 'modal-title' : undefined}
+    >
+      <div
+        className="glass glass--white p-5 rounded-2xl shadow-xl text-left"
+        style={{
+          maxWidth: 520,
+          width: '92vw',
+          maxHeight: '80vh',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          touchAction: 'pan-y'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {title && <h2 id="modal-title" className="text-xl font-semibold mb-3">{title}</h2>}
+        {children}
+        <div className="mt-4">
+          <button className="btn btn-primary w-full" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+
 export default function PostcodePursuit() {
 // ------------------- STATE & REFS (unchanged from your file) --------------
 const [gameState, setGameState] = useState('menu');
@@ -711,10 +756,7 @@ const navigate = useCallback((r) => {
   window.location.hash = r ? `#/${r}` : '#/';
 }, []);
 
-const [setDailyStreak] = useState(() => {
-  const s = loadDailyStreak();
-  return s?.count || 0;
-});
+const [setDailyStreak] = useState(() => loadDailyStreak()?.count || 0);
 
 useEffect(() => {
   const s = loadDailyStreak();
@@ -801,6 +843,8 @@ const undoLastMove = useCallback(() => {
     round_id: roundIdRef.current || undefined,
   });
 }, [currentPath, gameWon, difficulty, startArea, targetArea]);
+
+
 
 useEffect(() => {
   if (masterMode) return; // 🚫 no hotkey in Master
@@ -1373,6 +1417,9 @@ const getNeighbors = React.useCallback((code) => {
   return dist; // Map<areaCode, steps>
 } */
 
+
+  
+
   // Return a quadratic curve string between area centres, with a slight bend
 function arcPath(a, b, bend = 0.18) {
   const A = getCenter(a), B = getCenter(b);
@@ -1789,23 +1836,23 @@ if (dailyMode && dailyDate && dailyDifficulty) {
 
 // 2) Now compute meta and evaluate
   // 🔹 Get the *post-win* streak first (0 if not daily)
-  let nextStreak = 0;
-  if (dailyMode && dailyDate && dailyDifficulty) {
-    nextStreak = bumpStreakFor(dailyDifficulty);           // persists & returns new count
-    setStreaks((s) => ({ ...s, [dailyDifficulty]: nextStreak }));
-    if (dailyDifficulty === 'easy') {
-      setDailyStreak(nextStreak);                           // keep legacy state in sync
-      saveDailyStreak(nextStreak, todayUTC());
-    }
+let nextStreak = 0;
+if (dailyMode && dailyDate && dailyDifficulty) {
+  nextStreak = bumpStreakFor(dailyDifficulty);       // <-- only once
+  setStreaks((s) => ({ ...s, [dailyDifficulty]: nextStreak }));
+  if (dailyDifficulty === 'easy') {
+    setDailyStreak(nextStreak);                       // legacy mirror
+    saveDailyStreak(nextStreak, todayUTC());
   }
+}
 
-  const cov = getCoverageMeta(ferryLinks, bridgeLinks);
-  const meta = {
-    dailyStreak: nextStreak,                                // ✅ use the updated value
-    visitedCount: getVisitedCount(),
-    totalAreas: Object.keys(postcodeAreas).length,
-    ...cov,
-  };
+const cov = getCoverageMeta(ferryLinks, bridgeLinks);
+const meta = {
+  dailyStreak: nextStreak,                            // use updated value
+  visitedCount: getVisitedCount(),
+  totalAreas: Object.keys(postcodeAreas).length,
+  ...cov,
+};
 const unlocked = evaluateAndUnlockAchievements(event, history, meta);
 if (unlocked.length) setAchievementToasts(q => [...q, ...unlocked]);
 
@@ -2912,6 +2959,42 @@ title="Back to menu (Esc)"
 );
 
 
+useEffect(() => {
+  const overlayOpen =
+    showDailyChooser || showFreePlayChooser ||
+    victoryOpen || giveUpOpen || showAbout ||
+    leaveConfirmOpen || showTutorial;
+
+  const lockDuringPlay = (gameState !== 'menu') && !overlayOpen;
+
+  const shouldLock = overlayOpen || lockDuringPlay;
+
+  if (shouldLock) {
+    const y = window.scrollY;
+    document.body.dataset.ppScrollY = String(y);
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${y}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+    // ✗ do not touch documentElement
+  } else {
+    const y = parseInt(document.body.dataset.ppScrollY || '0', 10);
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+    delete document.body.dataset.ppScrollY;
+    window.scrollTo(0, y);
+  }
+}, [
+  gameState,
+  showDailyChooser, showFreePlayChooser,
+  victoryOpen, giveUpOpen, showAbout, leaveConfirmOpen, showTutorial
+]);
 
 
 
@@ -3368,94 +3451,97 @@ const renderMenu = () => (
 
 
     {/* Existing About modal remains unchanged below */}
-    {showAbout && createPortal(
-      <div
-        className="fixed inset-0 bg-black/50 z-[2147483646] grid place-items-center p-4 overflow-hidden"
-        role="dialog"
-        aria-modal="true"
-        onClick={() => setShowAbout(false)}
-      >
-        <div
-          className="bg-white w-full max-w-lg p-6 rounded-2xl shadow-lg h-[85dvh] overflow-y-scroll"
-          tabIndex={-1}
-          style={{
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-            touchAction: 'pan-y'
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-<h2 className="text-xl font-bold mb-4">About Postcode Pursuit</h2>
+<Modal
+  open={showAbout}
+  onClose={() => setShowAbout(false)}
+  title="About Postcode Pursuit"
+>
+<div className="prose prose-slate max-w-none">
+  <p>
+    <b>Postcode Pursuit</b> is a geography-based puzzle game: travel from your <b>Start</b> postcode area
+    to the <b>Target</b> by stepping through adjacent UK postcode areas.
+    It’s inspired by the excellent{" "}
+    <a href="https://travle.earth" target="_blank" rel="noreferrer" className="text-indigo-600 underline">
+      Travle
+    </a>.
+  </p>
 
-<p className="mb-3">
-  Postcode Pursuit is a geography puzzle: travel from your <b>start</b> postcode area to the <b>target</b> by
-  stepping through connected UK postcode areas. It’s inspired by the brilliant{" "}
-  <a href="https://travle.earth" target="_blank" rel="noreferrer" className="text-indigo-600 underline">
-    Travle
-  </a>.
-</p>
+  <h3 className="font-semibold">Connections</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li><b>Land borders</b> between postcode areas</li>
+    <li><b>Ferries</b> — dashed lines</li>
+    <li><b>Major bridges &amp; tunnels</b> — solid lines</li>
+  </ul>
 
-<h3 className="font-semibold mb-2">Connections</h3>
-<ul className="list-disc list-inside space-y-1 mb-4">
-  <li><b>Land borders</b> between postcode areas</li>
-  <li><b>Ferries</b> — dashed lines</li>
-  <li><b>Major bridges &amp; tunnels</b> — solid lines</li>
-</ul>
+  <h3 className="font-semibold">Game Modes</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li><b>Easy</b> — outlines and labels always visible. <b>Revisit</b> and <b>Undo</b> allowed.</li>
+    <li><b>Normal</b> — outlines on; labels on <b>Start</b> &amp; <b>Visited</b> areas. Revisit and Undo both allowed.</li>
+    <li><b>Hard</b> — no outlines or labels. <b>No revisits</b>. Undo not allowed.</li>
+    <li><b>Master</b> — only start/current/visited/target visible. No <b>revisits</b>, No <b>undo</b>.</li>
+  </ul>
 
-<h3 className="font-semibold mb-2">Game Modes</h3>
-<ul className="list-disc list-inside space-y-1 mb-4">
-  <li>
-    <b>Easy</b> — outlines and labels are visible. You may <b>revisit</b> previously visited areas.
-  </li>
-  <li>
-    <b>Normal</b> — outlines are shown; labels are shown only on <b>Start</b> and <b>Visited</b> areas. Revisit is <b>allowed</b>.
-  </li>
-  <li>
-    <b>Hard</b> — no outlines, no labels (connections still visible). Revisit is <b>blocked</b>.
-  </li>
-  <li>
-    <b>Master</b> — only start/current/visited/target are visible; connections hidden. Revisit &amp; <b>Undo</b> are disabled.
-  </li>
-</ul>
+  <h3 className="font-semibold">Par &amp; Scoring</h3>
+  <p>
+    Each daily puzzle has a <b>Par</b> based on the optimal number of moves.
+  </p>
 
-<h3 className="font-semibold mb-2">Daily Challenge</h3>
-<ul className="list-disc list-inside space-y-1 mb-4">
-  <li>Pick a difficulty (Easy/Normal/Hard/Master) once per day.</li>
-  <li>Progress auto-saves; you can <b>resume</b> later the same day.</li>
-  <li><b>Hints:</b> up to 3 per day. Opening the hint panel consumes one.</li>
-  <li><b>Streak:</b> win on consecutive days to build your daily streak.</li>
-  <li>Share your result from the victory screen.</li>
-</ul>
+  <h3 className="font-semibold">Achievements</h3>
+  <p>
+    Unlock achievements for milestones like winning on harder modes, using ferries/bridges,
+    perfect runs (optimal number of moves), long routes, lifetime coverage, and daily streaks.
+    Some are <i>hidden</i>—you’ll discover them as you play.
+  </p>
 
-<h3 className="font-semibold mb-2">How to Play</h3>
-<ul className="list-disc list-inside space-y-1 mb-4">
-  <li>
-    Use the <b>selection box</b> to enter a postcode. Submit with <b>Enter</b>.
-  </li>
-  <li>
-    Pan/zoom the map; quick controls live at the <b>top-left</b> of the map (Zoom In/Out, Reset View).
-  </li>
-  <li>
-    Use the <b>Menu</b> (top-right) for New Game, Restart, return to Menu, or Replay the Tutorial.
-  </li>
-</ul>
+  <h3 className="font-semibold">Stats</h3>
+  <p>
+    The <b>Stats</b> page shows totals, win rate, average moves (wins), best time,
+    and average vs Par, plus a per-difficulty breakdown. You can reset data from there.
+  </p>
 
-<h3 className="font-semibold mb-2">Tips &amp; Shortcuts</h3>
-<ul className="list-disc list-inside space-y-1 mb-6">
-  <li>Hints list neighbouring areas; click a suggestion to move there.</li>
-  <li>Revisiting (Easy/Normal) helps explore; every move still counts as a guess.</li>
-  <li>Keyboard: <b>Enter</b> submits; use <b>Ctrl/Cmd+Z</b> to undo a move.</li>
-</ul>
+  <h3 className="font-semibold">Daily Challenge</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li>Pick one difficulty (Easy/Normal/Hard/Master) per day.</li>
+    <li>Progress auto-saves; you can <b>resume</b> later the same day.</li>
+    <li><b>Hints:</b> up to 3 per day for each difficulty.</li>
+    <li><b>Streaks</b> are tracked per difficulty. Keep winning to build them.</li>
+    <li>Share your result from the victory screen.</li>
+  </ul>
 
-<div className="sticky bottom-0 pt-3 bg-white">
-  <button className="btn btn-primary w-full" onClick={() => setShowAbout(false)}>
-    Close
-  </button>
+  <h3 className="font-semibold">How to Play</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li>Type a neighbouring postcode in the selector and press <b>Enter</b>.</li>
+    <li>Use the map controls (top-left) to zoom and reset view.</li>
+    <li>Open the menu (top-right) for New Game, Restart, Tutorial, or Back to Menu.</li>
+  </ul>
+
+  <h3 className="font-semibold">Tips &amp; Shortcuts</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li>Hints list valid neighbours; click one to move there.</li>
+    <li>Revisiting (Easy/Normal) can help explore—moves still count.</li>
+    <li><b>Ctrl/Cmd+Z</b> to undo a move (not available in Master).</li>
+  </ul>
+
+  <h3 className="font-semibold">Privacy &amp; Data</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li>Your progress, stats, achievements, coverage, and streaks are stored <b>locally</b> in your browser.</li>
+    <li>Clearing site data or using another browser/device resets your progress.</li>
+  </ul>
+
+  <h3 className="font-semibold">Contact</h3>
+  <p className="mb-0">
+    Feedback is welcome!
+    <br />
+    <a className="btn btn-neutral mt-2" href="mailto:plestedl@gmail.com?subject=Postcode%20Pursuit%20Feedback">
+      Send Feedback
+    </a>
+  </p>
 </div>
-        </div>
-      </div>,
-      document.body
-    )}
+
+</Modal>
+
+
+
   </div>
 );
 

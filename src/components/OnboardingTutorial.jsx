@@ -333,7 +333,7 @@ onSkip(); // or onComplete()
         )}
 {showStuckHint && visibleStep === 1 && current !== TARGET && (
   <div className="mt-2 text-sm text-slate-100/90">
-    Try typing <b>DD</b> or <b>PH</b> into the box and press <b>Enter</b>.
+    Try typing <b>DD</b> or <b>PH</b> into the box and pressing <b>Enter</b>.
   </div>
 )}
 
