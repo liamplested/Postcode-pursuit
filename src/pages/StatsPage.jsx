@@ -17,6 +17,8 @@ const BAR_TINT = {
 };
 
 const DIFFS = ['easy', 'normal', 'hard', 'master'];
+const DIFF_LABEL = { easy: 'Easy', normal: 'Normal', hard: 'Hard', master: 'Master' };
+
 
 function zeroStats() {
   return {
@@ -61,34 +63,6 @@ export default function StatsPage({
   useEffect(() => {
     setViewStats(stats || zeroStats());
   }, [stats]);
-
-/*   const doReset = () => {
-    try {
-     if (typeof onResetAll === 'function') {
-       onResetAll({ alsoResetStreaks });
-     } else if (typeof onResetStats === 'function') {
-       onResetStats({ alsoResetStreaks });
-      } else {
-        // Local fallback: clear history and (optionally) streaks
-       localStorage.removeItem('pp_achievements_v1');       // achievements
-       localStorage.removeItem('pp_visited_areas_v1');      // visited areas
-       // optional: clear lifetime ferry/bridge usage too, so coverage resets
-       localStorage.removeItem('pp_used_ferries_v1');
-       localStorage.removeItem('pp_used_bridges_v1');
-        if (alsoResetStreaks) {
-          // v2 per-difficulty streaks
-          DIFFS.forEach(d => localStorage.removeItem(`pp_daily_streak_v2_${d}`));
-          // legacy easy streak
-          localStorage.removeItem('pp_daily_streak_v1');
-        }
-      }
-    } catch (e) {
-      // swallow
-    } finally {
-      setViewStats(zeroStats());
-      setShowReset(false);
-    }
-  }; */
 
   return (
     <div
@@ -159,7 +133,7 @@ export default function StatsPage({
                     const pct = row.games ? Math.round((row.wins / row.games) * 100) : 0;
                     return (
                       <tr key={row.difficulty} className={`table-row ${ROW_STYLE[row.difficulty] || ''}`}>
-                        <td className="py-2.5 px-3 font-medium capitalize">{row.difficulty}</td>
+                        <td className="py-2.5 px-3 font-medium">{DIFF_LABEL[row.difficulty] ?? row.difficulty}</td>
                         <td className="py-2.5 px-3 text-right">{row.games}</td>
                         <td className="py-2.5 px-3 text-right">{row.wins}</td>
                         <td className="py-2.5 px-3 text-right">

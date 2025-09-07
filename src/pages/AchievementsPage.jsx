@@ -6,7 +6,7 @@ const HIDDEN_BONUS_IDS = new Set(['mersey', 'shortcut']); // hide while locked
 
 const gridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
   gap: '12px',
 };
 
@@ -79,16 +79,39 @@ function groupByTier(list) {
     .filter(g => g.items.length > 0);
 }
 
+// --- Unlocked card header ---
 function AchCardUnlocked({ a, whenISO }) {
   const when = whenISO ? new Date(whenISO) : null;
   return (
-    <div className="glass rounded-2xl transition hover:shadow-lg" style={glassCardStyle(a.tier)} title={a.description}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div className="glass rounded-2xl transition hover:shadow-lg"
+         style={glassCardStyle(a.tier)} title={a.description}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          minWidth: 0,                // ← allow children to shrink
+        }}
+      >
         <div><span className="text-2xl" aria-hidden>{a.icon}</span></div>
-        <div className="font-semibold truncate"><b>{a.name}</b></div>
-        <span style={{ marginLeft: 'auto', ...tierChipStyle(a.tier) }}>{a.tier}</span>
+        <div
+          className="font-semibold truncate"
+          style={{ flex: '1 1 auto', minWidth: 0 }}  // ← let the name truncate
+        >
+          <b>{a.name}</b>
+        </div>
+        
       </div>
-      <div className="text-sm mt-2 text-white/90">{a.description}</div>
+
+      <div className="text-sm mt-2 text-white/90"><span
+          style={{
+            marginLeft: 'auto',
+            ...tierChipStyle(a.tier),
+            flex: '0 0 auto',          // ← chip never grows
+          }}
+        >
+          {a.tier}
+        </span><br />{a.description}</div>
       {when && (
         <div className="text-xs mt-2 text-emerald-200/80">
           Unlocked {when.toLocaleDateString()}
@@ -98,20 +121,43 @@ function AchCardUnlocked({ a, whenISO }) {
   );
 }
 
+
 function AchCardLocked({ a }) {
   return (
     <div className="glass rounded-2xl" style={glassCardMuted} title={a.description}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          minWidth: 0,                           // ← allow shrink
+        }}
+      >
         <div className="w-6 h-6 grid place-items-center rounded bg-slate-200 text-slate-600">
           <Lock className="w-4 h-4" aria-hidden />
         </div>
-        <div className="font-semibold text-slate-50 truncate">{a.name}</div>
-        <span style={{ marginLeft: 'auto', ...tierChipStyle(a.tier) }}>{a.tier}</span>
+        <div
+          className="font-semibold text-slate-50 truncate"
+          style={{ flex: '1 1 auto', minWidth: 0 }}   // ← truncate name
+        >
+          {a.name}
+        </div>
+
       </div>
-      <div className="text-sm mt-1 text-slate-100/90">{a.description}</div>
+
+      <div className="text-sm mt-1 text-slate-100/90">        <span
+          style={{
+            marginLeft: 'auto',
+            ...tierChipStyle(a.tier),
+            flex: '0 0 auto',                        // ← chip fixed
+          }}
+        >
+          {a.tier}
+        </span><br />{a.description}</div>
     </div>
   );
 }
+
 
 export default function AchievementsPage({
   achievements = [],

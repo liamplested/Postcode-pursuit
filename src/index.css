@@ -168,6 +168,19 @@
     margin: 0.25rem;
   }
 
+    .smlbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 0.375rem;
+    transition: all 0.15s ease;
+    margin: 0.25rem;
+  }
+
 .tutorial-scope .glass { background: #fff8e1; }      /* tutorial card bg */
 .consent-scope  .glass { background: #e0f2fe; }      /* consent card bg */
 
@@ -595,3 +608,8 @@
   box-shadow: inset 100px 0 0 0 rgba(139,92,246,0.65);
 }
 
+/* mobile tweak */
+@media (max-width: 420px) {
+  .ach-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .ach-chip { font-size: 11px; padding: 2px 6px; }
+}

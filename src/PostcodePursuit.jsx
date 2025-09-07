@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useId} from 'react';
-import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon} from 'lucide-react';
+import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, ZoomIn, ZoomOut, Scan} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { postcodeAreas, ferryLinks, bridgeLinks } from './postcodeAreas';
 import useSvgPan from './hooks/useSvgPan';
@@ -39,6 +39,47 @@ export const VISITED_KEY      = 'pp_visited_areas_v1';
 export const GAME_HISTORY_KEY = 'pp_history_v2';
 export const ACHIEVEMENTS_KEY = 'pp_achievements_v1';
 
+let _confettiPromise;
+
+/** lazy import so we don't bloat the initial bundle */
+function getConfetti() {
+  if (!_confettiPromise) _confettiPromise = import('canvas-confetti');
+  return _confettiPromise;
+}
+
+function prefersReducedMotion() {
+  return (
+    typeof window !== 'undefined' &&
+    window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+async function fireVictoryConfetti() {
+  if (prefersReducedMotion()) return;
+
+  try {
+    const { default: confetti } = await getConfetti();
+
+    // Two quick corner bursts + a center pop
+    const z = 2147483648; // above your modal overlay (which is 2147483647)
+    const base = Math.max(120, Math.min(220, Math.round(window.innerWidth / 6)));
+
+    confetti({ particleCount: Math.round(base * 0.45), spread: 20, startVelocity: 55, origin: { x: 0.15, y: 0.2 }, zIndex: z });
+    confetti({ particleCount: Math.round(base * 0.6), spread: 50, startVelocity: 55, origin: { x: 0.5, y: 0.2 }, zIndex: z });
+    confetti({ particleCount: Math.round(base * 0.75), spread: 70, startVelocity: 55, origin: { x: 0.75, y: 0.2 }, zIndex: z });
+    confetti({ particleCount: Math.round(base * 0.9), spread: 90, startVelocity: 55, origin: { x: 0.9, y: 0.2 }, zIndex: z });
+
+    setTimeout(() => {
+      confetti({ particleCount: Math.round(base * 0.6), spread: 100, scalar: 0.9, origin: { x: 0.5, y: 0.25 }, zIndex: z });
+    }, 180);
+
+    // optional: tidy up the canvas after a moment
+    setTimeout(() => confetti.reset(), 5000);
+  } catch {
+    // fail silently if the import or canvas fails
+  }
+}
 
 
 export function readJSON(key, fallback){
@@ -513,6 +554,11 @@ const centroidsRef = useRef({});
    []
  );
 
+useEffect(() => {
+  if (victoryOpen) {
+    fireVictoryConfetti();
+  }
+}, [victoryOpen]);
 
 // Pan/zoom state
 const svgRef = useRef(null);
@@ -572,26 +618,6 @@ const parLine = (dailyMode && Number.isFinite(dailyPar))
   ? <>Par: <b>{dailyPar}</b> · <b>{golfPhrase(guessesCount, dailyPar)}</b></>
   : null;
 
-// close on outside click / Escape
-useEffect(() => {
-  const onDown = (e) => {
-    if (!burgerOpen) return;
-    // If click is outside the menu and outside the button, close it.
-    const btn = burgerButtonRef.current;
-    const menu = document.getElementById('pp-burger-menu');
-    if (!btn) return setBurgerOpen(false);
-    if (btn.contains(e.target)) return;         // click on button -> ignore
-    if (menu && menu.contains(e.target)) return; // click inside menu -> ignore
-    setBurgerOpen(false);
-  };
-  const onKey = (e) => { if (e.key === 'Escape') setBurgerOpen(false); };
-  document.addEventListener('mousedown', onDown);
-  document.addEventListener('keydown', onKey);
-  return () => {
-    document.removeEventListener('mousedown', onDown);
-    document.removeEventListener('keydown', onKey);
-  };
-}, [burgerOpen]);
 
 useEffect(() => {
   if (!burgerOpen) return;
@@ -788,7 +814,6 @@ useEffect(() => {
   window.addEventListener('keydown', onKeyDown);
   return () => window.removeEventListener('keydown', onKeyDown);
 }, [undoLastMove, masterMode]);
-
 
 
 function startOrResumeDaily(difficulty) {
@@ -1023,16 +1048,16 @@ const buildShareText = () => {
   const time = elapsedMs ? formatTime(elapsedMs) : null;
 
   const header = dailyMode
-    ? `Postcode Pursuit — Daily ${dailyDate} (${dailyDifficulty?.toUpperCase()})`
-    : `Postcode Pursuit — ${startArea} → ${targetArea}`;
+    ? `Postcode Pursuit — Daily ${dailyDate} (${dailyDifficulty} difficulty)`
+    : `Postcode Pursuit`;
 
   let text = `${header}\n`;
   if (!dailyMode) text += `${startArea} → ${targetArea}\n`;
 
-  text += `Guesses: ${guessesCount}`;
-  if (optimal) text += ` (optimal ${optimal})`;
-  text += ` · Par ${par} — ${label}`;
-  if (dailyMode) text += ` · Hints: ${hintsUsed}/${MAX_DAILY_HINTS}`;
+  text += `Moves: ${guessesCount}`;
+  if (optimal) text += ` (optimal ${optimal})\n`;
+  text += `Par ${par} : ${label}\n`;
+  if (dailyMode) text += ` · Hints used: ${hintsUsed}/${MAX_DAILY_HINTS}`;
   if (time) text += ` · Time: ${time}`;
 
   if (dailyMode && dailyDifficulty) {
@@ -1044,7 +1069,8 @@ const buildShareText = () => {
   return text;
 };
 
-  
+
+
   const linkPaint = (type) => {
   switch (type) {
     case "ferry":
@@ -1536,17 +1562,13 @@ const COLORS = {
   baseFill:    '#66b860', // slate-200
   baseStroke:  '#454f5eff', // slate-400
   startFill:   '#60abb8ff', startStroke: '#1e40af',
-  currentFill: '#1d4ed8', currentStroke:'#1e3a8a',
-  visitedFill: '#bae6fd', visitedStroke:'#64748b',
+  currentFill: '#1d4ed8', currentStroke:'#ffffffff',
+  visitedFill: '#bae6fd', visitedStroke:'#424c5cff',
   targetFill:  '#FDE68A', targetStroke:'#b45309',
 };
 
   const currentArea = currentPath[currentPath.length - 1] || null;
  // const visitedSet  = useMemo(() => new Set(currentPath), [currentPath]);
-
-
-
-
  
 const getAreaStyle = (code) => {
   // Flags
@@ -1714,7 +1736,7 @@ function computeStats(){
 
 
 
-
+const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
 
   // ---------- Victory modal timing ----------
@@ -1822,7 +1844,12 @@ useEffect(() => {
  const shouldLock =
    (gameState !== 'menu' && !showAbout && !victoryOpen && !showTutorial)
    || showDailyChooser
-   || showFreePlayChooser;
+   || showFreePlayChooser
+   || victoryOpen
+   || giveUpOpen
+   || showAbout
+   || leaveConfirmOpen
+   || showTutorial;
 
   document.documentElement.style.overflow = shouldLock ? 'hidden' : prevHtml || '';
   document.body.style.overflow = shouldLock ? 'hidden' : prevBody || '';
@@ -1831,7 +1858,7 @@ useEffect(() => {
     document.documentElement.style.overflow = prevHtml;
     document.body.style.overflow = prevBody;
   };
-}, [gameState, showAbout, victoryOpen, showTutorial, showDailyChooser, showFreePlayChooser]);
+}, [gameState, showAbout, victoryOpen, showTutorial, showDailyChooser, showFreePlayChooser, giveUpOpen, leaveConfirmOpen]);
 
   // controls height -> CSS var
   useEffect(() => {
@@ -1853,6 +1880,8 @@ useEffect(() => {
     console.log('Loaded postcode areas:', Object.keys(postcodeAreas).length);
     console.log('Sample path:', postcodeAreas['AB']?.path?.slice(0, 100));
   }, []);
+
+
 
   // ---------- Pan/zoom ----------
   const [scaleForLabels, setScaleForLabels] = useState(1);
@@ -1940,6 +1969,7 @@ function generatePuzzleWithBounds(minSteps, maxSteps = null, maxRetries = 800) {
 
 const prevStateRef = useRef(gameState);
 
+
 useEffect(() => {
   const prev = prevStateRef.current;
   if (prev !== 'playing' && gameState === 'playing') {
@@ -1976,6 +2006,57 @@ useEffect(() => {
   window.addEventListener('beforeunload', onUnload);
   return () => window.removeEventListener('beforeunload', onUnload);
 }, [abandonIfActive]);
+
+
+
+
+const backToMenu = React.useCallback(() => {
+  // Daily autosaves — safe to leave immediately
+  if (dailyMode) {
+    abandonIfActive('menu');
+    setGameState('menu');
+    setBurgerOpen(false);
+    return;
+  }
+
+  // Free Play: warn if an active, unfinished round
+  if (gameState === 'playing' && !gameWon) {
+    setLeaveConfirmOpen(true);
+  } else {
+    abandonIfActive('menu');
+    setGameState('menu');
+    setBurgerOpen(false);
+  }
+}, [dailyMode, gameState, gameWon, abandonIfActive]);
+
+useEffect(() => {
+  const onKey = (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+
+    // Close any open overlays first (topmost-first order)
+    if (leaveConfirmOpen) { setLeaveConfirmOpen(false); return; }
+    if (giveUpOpen)       { setGiveUpOpen(false);       return; }
+    if (victoryOpen)      { setVictoryOpen(false);      return; }
+    if (showDailyChooser) { setShowDailyChooser(false); return; }
+    if (showFreePlayChooser) { setShowFreePlayChooser(false); return; }
+    if (showAbout)        { setShowAbout(false);        return; }
+    if (showTutorial)     { setShowTutorial(false);     return; }
+    if (burgerOpen)       { setBurgerOpen(false);       return; }
+
+    // No overlays open -> behave like Back button
+    backToMenu();
+  };
+
+  window.addEventListener('keydown', onKey);
+  return () => window.removeEventListener('keydown', onKey);
+}, [
+  backToMenu,
+  leaveConfirmOpen, giveUpOpen, victoryOpen,
+  showDailyChooser, showFreePlayChooser,
+  showAbout, showTutorial, burgerOpen
+]);
+
 
 const startNewGame = () => {
   nudgeDismissedRef.current = false;
@@ -2083,20 +2164,6 @@ const handleClick = useCallback((code) => {
 }, [gameState, isRevealed, makeGuess, canClickAreas, victoryOpen, showTutorial, showAbout]);
 
 
-useEffect(() => {
-function onKey(e){
-if (e.key === 'Escape') {
-e.preventDefault();
-abandonIfActive('menu');
-setGameState('menu');
-setBurgerOpen(false);
-}
-}
-window.addEventListener('keydown', onKey);
-return () => window.removeEventListener('keydown', onKey);
-}, [abandonIfActive, setGameState, setBurgerOpen]);
-
-
   // ---------- Label sizing helpers ----------
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const labelPxForScale = (s) => clamp(30 + 200 * s, 30, 300); // readable range
@@ -2184,9 +2251,9 @@ const renderMap = () => (
   >
     {/* Zoom overlay, top-left */}
     <div className="absolute top-2 left-2 z-10 flex gap-2">
-      <button onClick={() => zoomOut(ZOOM_STEP)} className="btn btn-neutral" title="Zoom out">-</button>
-      <button onClick={() => zoomIn(ZOOM_STEP)}  className="btn btn-neutral" title="Zoom in">+</button>
-      <button onClick={resetView} className="btn btn-neutral" title="Reset view to Start & Target">Reset</button>
+      <button onClick={() => zoomOut(ZOOM_STEP)} className="smlbtn" title="Zoom out"><ZoomOut className="w-2 h-2" /></button>
+      <button onClick={() => zoomIn(ZOOM_STEP)}  className="smlbtn" title="Zoom in"><ZoomIn className="w-2 h-2" /></button>
+      <button onClick={resetView} className="smlbtn" title="Reset view to Start & Target"><Scan className="w-2 h-2" /></button>
     </div>
 
     <svg
@@ -2379,7 +2446,7 @@ const renderControls = () => (
 <button
 type="button"
 className="btn btn-primary px-3 py-1 text-sm"
-onClick={() => { abandonIfActive('menu'); setGameState('menu'); setBurgerOpen(false); }}
+onClick={backToMenu}
 aria-label="Back to menu"
 title="Back to menu (Esc)"
 >
@@ -2490,23 +2557,6 @@ title="Back to menu (Esc)"
           title={dailyMode ? 'Unavailable during Daily Challenge' : 'Restart this round'}
         >
           Restart
-        </button>
-      </li>
-
-      <li>
-        <button
-          role="menuitem"
-          onClick={() => { abandonIfActive('menu'); setGameState('menu'); setBurgerOpen(false); }}
-          className="btn btn-neutral"
-          style={{ 
-            display: 'block', 
-            width: '90%', 
-            padding: '0.3rem 0.1rem', 
-            fontSize: '0.8rem',
-          }}
-          title="Return to main menu"
-        >
-          Return to Menu
         </button>
       </li>
 
@@ -2803,7 +2853,7 @@ title="Back to menu (Esc)"
           });
         })()}
 
-        <button type="button" className="btn btn-neutral" onClick={() => setShowHints(false)} title="Hide hints">
+        <button type="button" className="btn btn-success" onClick={() => setShowHints(false)} title="Hide hints">
           Hide
         </button>
       </div>
@@ -3508,7 +3558,64 @@ return (
       postcodeAreas={postcodeAreas}
     />
 
-    
+    {leaveConfirmOpen && createPortal(
+  <div
+    style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.6)',
+      zIndex: 2147483647,
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'flex-start',
+      paddingTop: '10vh',
+      padding: '10vh 16px 16px'
+    }}
+    onClick={() => setLeaveConfirmOpen(false)}
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="leave-title"
+  >
+    <div
+      className="glass p-5 rounded-2xl shadow-xl text-center"
+      style={{
+        maxWidth: 520,
+        width: '92vw',
+        maxHeight: '80vh',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'contain',
+        touchAction: 'pan-y'
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <h2 id="leave-title" className="text-xl font-semibold mb-2">Leave this game?</h2>
+      <p className="mb-4">
+        You’ll <b>lose your current Free Play progress</b> for this round.<br/>
+        Current route: <b>{Math.max(0, currentPath.length - 1)}</b> moves
+        {optimalPath.length > 0 && <> · Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
+      </p>
+      <div className="flex gap-2 justify-center">
+        <button
+          className="btn btn-warn glass"
+          onClick={() => {
+            setLeaveConfirmOpen(false);
+            abandonIfActive('menu');    // analytics-safe
+            setGameState('menu');
+            setBurgerOpen(false);
+          }}
+        >
+          Leave
+        </button>
+        <button className="btn btn-neutral glass" onClick={() => setLeaveConfirmOpen(false)}>
+          Stay
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
+
 
     {victoryOpen && createPortal(
       <div style={{
