@@ -436,14 +436,76 @@ export const ACHIEVEMENTS = [
     description: 'Win in exactly 13 moves',
     check: (e) => e.won && e.moves === 13 },
 
-  { id: 'bookends', name: 'Bookends', icon:'🔤', tier:'silver', hidden:true,
-    description: 'Start and finish with the same initial letter',
-    check: (e) => e.won && e.startArea?.[0] && (e.startArea[0] === e.endArea?.[0]) },
-
   { id: 'lejog_plus', name: 'LeJoG+', icon:'🏁', tier:'legendary', hidden:true,
     description: 'TR → KW in 15+ moves',
     check: (e) => e.won && e.startArea==='TR' && e.endArea==='KW' && (e.moves ?? 0) >= 15 },
-];
+ // ---- New: Bronze ----
+  {
+    id: 'backtrack',
+    name: 'Backtrack',
+    icon: '↩️',
+    tier: 'bronze',
+    description: 'Win a game where you enter the same area twice.',
+    check: (e) => e.won && Array.isArray(e.pathUsed) && e.pathUsed.length !== new Set(e.pathUsed).size,
+  },
+  {
+    id: 'long_distance',
+    name: 'Long-Distance',
+    icon: '📏',
+    tier: 'bronze',
+    description: 'Win a game where the optimal path is 5+ moves.',
+    check: (e) => e.won && (e.optimalMoves ?? 0) >= 5,
+  },
+  
+  // ---- New: Silver ----
+  {
+    id: 'scenic_route',
+    name: 'The Scenic Route',
+    icon: '🌸',
+    tier: 'silver',
+    description: 'Win with at least 5 more moves than the optimal path.',
+    check: (e) => e.won && Number.isFinite(e.optimalMoves) && (e.moves ?? 0) >= e.optimalMoves + 5,
+  },
+  {
+    id: 'first_last',
+    name: 'First and Last',
+    icon: '📚',
+    tier: 'silver',
+    description: 'Start and finish with the same initial letter.',
+    check: (e) => e.won && e.startArea?.[0] && (e.startArea[0] === e.endArea?.[0]),
+  },
+  
+  // ---- New: Gold ----
+  {
+    id: 'deep_dive',
+    name: 'Deep Dive',
+    icon: '🤿',
+    tier: 'gold',
+    description: 'Win a game on Hard difficulty, using 5+ moves.',
+    check: (e) => e.won && e.difficulty === 'hard' && (e.moves ?? 0) >= 5,
+  },
+  {
+    id: 'half_century',
+    name: 'Half-Century',
+    icon: '5️⃣0️⃣',
+    tier: 'gold',
+    description: 'Play 50 games.',
+    check: (_e, h) => (h.totalGames ?? 0) >= 50,
+  },
+  
+  // ---- New: Legendary ----
+
+  {
+    id: 'explorer_tour',
+    name: 'The Explorer',
+    icon: '🗺️',
+    tier: 'legendary',
+    description: 'Visit every postcode area at least once, in a single game.',
+    check: (e, _h, meta) => e.won && Array.isArray(e.pathUsed) && (new Set(e.pathUsed).size) >= (meta?.totalAreas ?? 0),
+  },
+
+
+  ];
 
 
 export function evaluateAndUnlockAchievements(event, history, meta){
@@ -1630,15 +1692,10 @@ const getAreaStyle = (code) => {
   if (masterMode && !revealedInMaster) 
   
   
-  
-  
   {
 
     return { fill: 'transparent', stroke: 'none', strokeWidth: 0 };
   }
-
-
-
   
   // 🔴 Invalid/duplicate guess flash overrides everything for 400ms
 if (isFlashing) {
@@ -1664,9 +1721,6 @@ if (isFlashing) {
   } else if (isVisited) {
     fill = COLORS.visitedFill; stroke = COLORS.visitedStroke; dash = '3 3';
   }
-
-
-
 
 
   // Visited areas force outlines ON regardless of toggle/mode (your a11y rule)
@@ -1823,39 +1877,35 @@ const finishGame = useCallback((finalPath) => {
 
   const history = addGameToHistory(event);
 
-// 1) Bump streak first so achievements see the new value
-let streakAfter = 0;
-if (dailyMode && dailyDate && dailyDifficulty) {
-  streakAfter = bumpStreakFor(dailyDifficulty);
-  setStreaks((s) => ({ ...s, [dailyDifficulty]: streakAfter }));
-  if (dailyDifficulty === 'easy') {
-    setDailyStreak(streakAfter);
-    saveDailyStreak(streakAfter, todayUTC());
+  // ---- Streaks: bump ONCE if it's a daily run ----
+  let postWinStreak = 0;
+  if (dailyMode && dailyDate && dailyDifficulty) {
+    postWinStreak = bumpStreakFor(dailyDifficulty);
+    setStreaks((s) => ({ ...s, [dailyDifficulty]: postWinStreak }));
+
+    // Optional: if you still persist a per-difficulty record, do it here
+    // (replace with your actual persistence function if different)
+    if (typeof saveStreakRecord === 'function') {
+      saveStreakRecord(dailyDifficulty, postWinStreak, todayUTC());
+    }
+    // If you must keep a legacy mirror for "easy" only, guard it:
+    // if (dailyDifficulty === 'easy' && typeof saveDailyStreak === 'function') {
+    //   saveDailyStreak(postWinStreak, todayUTC());
+    // }
   }
-}
 
-// 2) Now compute meta and evaluate
-  // 🔹 Get the *post-win* streak first (0 if not daily)
-let nextStreak = 0;
-if (dailyMode && dailyDate && dailyDifficulty) {
-  nextStreak = bumpStreakFor(dailyDifficulty);       // <-- only once
-  setStreaks((s) => ({ ...s, [dailyDifficulty]: nextStreak }));
-  if (dailyDifficulty === 'easy') {
-    setDailyStreak(nextStreak);                       // legacy mirror
-    saveDailyStreak(nextStreak, todayUTC());
-  }
-}
+  // ---- Meta / achievements ----
+  const cov = getCoverageMeta(ferryLinks, bridgeLinks);
+  const meta = {
+    dailyStreak: postWinStreak, // 0 if not daily
+    visitedCount: getVisitedCount(),
+    totalAreas: Object.keys(postcodeAreas).length,
+    ...cov,
+  };
+  const unlocked = evaluateAndUnlockAchievements(event, history, meta);
+  if (unlocked.length) setAchievementToasts((q) => [...q, ...unlocked]);
 
-const cov = getCoverageMeta(ferryLinks, bridgeLinks);
-const meta = {
-  dailyStreak: nextStreak,                            // use updated value
-  visitedCount: getVisitedCount(),
-  totalAreas: Object.keys(postcodeAreas).length,
-  ...cov,
-};
-const unlocked = evaluateAndUnlockAchievements(event, history, meta);
-if (unlocked.length) setAchievementToasts(q => [...q, ...unlocked]);
-
+  // ---- Analytics ----
   if (window.gtag) {
     window.gtag('event', 'game_won', {
       difficulty,
@@ -1872,8 +1922,10 @@ if (unlocked.length) setAchievementToasts(q => [...q, ...unlocked]);
   currentPath, optimalPath,
   difficulty, startArea, targetArea,
   dailyDate, dailyMode, dailyDifficulty,
-  bumpStreakFor, tallyEdgeUsage, setDailyStreak
+  bumpStreakFor, tallyEdgeUsage, saveStreakRecord
+  // NOTE: removed setDailyStreak from deps (no longer used)
 ]);
+
 
 
 
@@ -3027,7 +3079,7 @@ function handleDailyChoice(diff) {
 }
 
 const renderMenu = () => (
-  <div className="max-w-2xl mx-auto p-8 glass text-center mt-8 relative">
+  <div className="max-w-2xl mx-auto p-8 glass glass--slate text-center mt-8 relative">
     <MapPin className="w-16 h-16 mx-auto text-indigo-600 mb-4" />
     <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Postcode Pursuit</h1>
     <p className="text-slate-600 mb-6">
@@ -3047,7 +3099,7 @@ const renderMenu = () => (
 
     <button
       type="button"
-      className="btn btn-glass tint-purple btn-cta"
+      className="btn btn-glass tint-blue btn-cta"
       onClick={() => setShowFreePlayChooser(true)}
     >
       <Flag className="w-6 h-6 shrink-0" aria-hidden="true" />

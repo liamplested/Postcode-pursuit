@@ -43,7 +43,20 @@
   }
 }
 
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
 
+                .title {
+            text-align: center;
+            padding: 0 16px;
+            flex: 1;
+        }
 
 /* --------------------------------------
    Base: fonts + global styles
@@ -118,7 +131,7 @@
 
 /* Glass color variants (modifiers) */
 .glass--indigo {
-  --glass-bg: rgba(124, 31, 167, 0.65);
+  --glass-bg: rgba(152, 34, 207, 0.65);
   --glass-fallback-bg: rgba(44, 42, 182, 0.8);
   --glass-border: rgba(255, 255, 255, 0.35);
 }
@@ -332,9 +345,16 @@
   --glass-fg: #ffffff;
 }
 .tint-purple {
-  --glass-bg: rgba(147, 51, 234, 0.22);
+  --glass-bg: rgba(135, 8, 255, 0.22);
   --glass-fallback-bg: rgba(147, 51, 234, 0.34);
   --glass-border: rgba(168, 85, 247, 0.50);
+  --glass-fg: #ffffff;
+}
+
+.tint-blue {
+  --glass-bg: rgba(29, 5, 240, 0.616);
+  --glass-fallback-bg: rgba(147, 51, 234, 0.34);
+  --glass-border: rgba(255, 255, 255, 0.445);
   --glass-fg: #ffffff;
 }
 
@@ -426,7 +446,7 @@
 @keyframes areaPulseBlue {
   0%, 100% { fill: #1713e9; }   /* blue-700 */
   25%      { fill: #1393e9; }   /* sky-400-ish, brighter */
-  50%      { fill: #13d0e9; }   /* sky-400-ish, brighter */
+  50%      { fill: #77e6f5; }   /* sky-400-ish, brighter */
   75%      { fill: #1370e9; }   /* sky-400-ish, brighter */
 }
 .area-pulse {
@@ -613,3 +633,65 @@
   .ach-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
   .ach-chip { font-size: 11px; padding: 2px 6px; }
 }
+
+
+
+/* --- Tile helpers: robust 3:2 tiles regardless of button CSS --- */
+.tile {
+  position: relative;
+  width: 100%;
+}
+.tile::before {
+  content: "";
+  display: block;
+  /* 3:2 aspect ratio = 2 / 3 = 66.6667% */
+  padding-top: 66.6667%;
+}
+.tile__inner {
+  position: absolute;
+  inset: 0;
+}
+
+/* Button overrides only inside tiles */
+.tile .btn--tile {
+  /* kill padding/min-height coming from .btn/.btn-cta so the button can fill the tile */
+  padding: 0 !important;
+  min-height: 0 !important;
+  width: 100%;
+  height: 100%;
+  display: flex;            /* ensure centering works even if .btn sets inline-flex */
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;      /* match your rounded-2xl vibe */
+}
+
+        .button-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 10px;
+            width: 300px;
+            height: 200px;
+            margin: 50px auto;
+            padding: 20px;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+        }
+
+        .grid-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .grid-button:hover {
+            background-color: #45a049;
+        }
+
+        .grid-button:active {
+            background-color: #3d8b40;
+        }
