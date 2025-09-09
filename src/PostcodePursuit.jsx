@@ -985,8 +985,6 @@ function startOrResumeDaily(difficulty) {
 setDailyChoice(null);
 setFreeChoice(null);
 
-  
-
   setDailyMode(true);
   setDailyDate(today);
   setDailyDifficulty(difficulty);
@@ -1250,6 +1248,29 @@ const allPostcodeOptions = React.useMemo(
   []
 );
 
+// ----- Label visibility by zoom (future-proof layers) -----
+const LABEL_LAYERS = [
+  { minScale: 7.5, codes: ['WC', 'EC'] },                 // super-dense core
+  { minScale: 4.5, codes: ['E', 'N', 'NW', 'W'] },        // next ring
+  { minScale: 3.5, codes: ['SE', 'SW', 'IG', 'EN'] }, 
+  // Add more as needed, e.g.:
+  // { minScale: 3.5, codes: ['SE','SW'] },
+  // { minScale: 3,   codes: ['IG','HA','EN','RM','UB','TW','KT','BR','CR','DA','SM'] },
+];
+
+const LABEL_MIN_SCALE = (() => {
+  const m = new Map();
+  for (const { minScale, codes } of LABEL_LAYERS) {
+    for (const c of codes) m.set(c, minScale);
+  }
+  return m;
+})();
+
+function labelVisibleAtScale(code, scale) {
+  const need = LABEL_MIN_SCALE.get(code);
+  if (need == null) return true;       // not in a dense layer → always visible
+  return scale >= need;
+}
 
 const forceUppercase = useCallback((e) => {
   const el = e.currentTarget;
@@ -1397,44 +1418,6 @@ const getNeighbors = React.useCallback((code) => {
     centroidsRef.current[id] = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
   };
 
-  function TargetMarker({ id }) {
-    const c = centroidsRef.current[id];
-    if (!c) return null;
-    return (
-      <g pointerEvents="none">
-        <circle
-          cx={c.x}
-          cy={c.y}
-          r={1}
-          className="[transform-box:fill-box] [transform-origin:center] animate-ping fill-transparent stroke-amber-500 stroke-2 opacity-70"
-        />
-        <Flag
-          x={c.x -25} y={c.y -200} width={200} height={200}
-          className="text-white-900"
-          strokeWidth={2.5}
-          stroke='black'
-          strokeOpacity={0.5}
-        />
-      </g>
-    );
-  }
-
-  function StartMarker({ id }) {
-    const c = centroidsRef.current[id];
-    if (!c) return null;
-    return (
-      <g pointerEvents="none">
-        <circle cx={c.x} cy={c.y} r={1} className="fill-white/80" />
-        <MapPin
-          x={c.x - 100} y={c.y - 200} width={200} height={200}
-          className="text-white-700"
-          strokeWidth={2.5}
-          stroke='black'
-          strokeOpacity={0.5}
-        />
-      </g>
-    );
-  }
 
   function CurrentMarker({ id }) {
     const c = centroidsRef.current[id];
@@ -1985,6 +1968,104 @@ useEffect(() => {
   // ---------- Pan/zoom ----------
   const [scaleForLabels, setScaleForLabels] = useState(1);
 
+// Keeps on-screen sizes constant as you zoom
+function makeSpx(scale, mult = 1) {
+  const s = Math.max(Number(scale || 1), 0.0001);
+  return (n) => (mult * n) / s;   // screen-constant size, scaled up by `mult`
+}
+
+/* // Simple offset rules to keep bubbles out of cramped shapes
+const WESTish = ['W','NW','SW','HA','UB','TW','KT','SM'];
+const EASTish = ['E','N','SE','IG','EN','RM','BR','CR','DA'];
+
+function calloutOffset(code, spx) {
+  if (code === 'WC' || code === 'EC') return { ox: 0,         oy: -spx(120) };
+  if (WESTish.includes(code))         return { ox: -spx(140), oy: -spx(40)  };
+  if (EASTish.includes(code))         return { ox:  spx(140), oy: -spx(40)  };
+  return { ox: spx(120), oy: -spx(60) }; // generic
+} */
+
+function Callout({ code, label, color, getCenter, scale }) {
+  const c = getCenter(code);
+  if (!c) return null;
+
+  // 👇 tweak this multiplier until you’re happy (e.g. 1.6 → 2.2)
+  const CALLOUT_MULT = 10;
+   const CAP = {
+    stroke: 0.1,
+    dot: 14,
+    halo1: 40,
+    halo2: 80,
+    bubbleW: 320,
+    bubbleH: 96,
+    radius: 18,
+    font: 24,
+    notch: 18,
+    offset: 1,                   // max distance from centroid to bubble center
+  };
+  const spx = makeSpx(scale, CALLOUT_MULT);
+
+  // keep bubbles out of cramped shapes (same rules as before)
+  const WESTish = ['W','NW','SW','HA','UB','TW','KT','SM'];
+  const EASTish = ['E','N','SE','IG','EN','RM','BR','CR','DA'];
+  const offsetFor = (code) => {
+    if (code === 'WC' || code === 'EC') return { ox: 0,          oy: -spx(120) };
+    if (WESTish.includes(code))         return { ox: -spx(140),  oy: -spx(40)  };
+    if (EASTish.includes(code))         return { ox:  spx(140),  oy: -spx(40)  };
+    return { ox: spx(120), oy: -spx(60) };
+  };
+
+  const { ox, oy } = offsetFor(code);
+  const bx = c.x + ox, by = c.y + oy;
+
+  // 🔊 bigger bases everywhere
+  const sw    = spx(0.5, CAP.stroke);
+  const rDot  = spx(9, CAP.dot);
+  const r1    = spx(28, CAP.halo1);
+  const r2    = spx(46, CAP.halo2);
+  const bw    = spx(220, CAP.bubbleW);
+  const bh    = spx(100, CAP.bubbleH);
+  const br    = spx(14, CAP.radius);
+  const font  = spx(30, CAP.font);
+  const notch = spx(1, CAP.notch);
+
+  return (
+    <g pointerEvents="none">
+      {/* centroid halos */}
+      <circle cx={c.x} cy={c.y} r={r2} fill="none" stroke={color} strokeWidth={sw}
+              opacity="0.40" vectorEffect="non-scaling-stroke" />
+      <circle cx={c.x} cy={c.y} r={r1} fill={color} opacity="0.18" />
+
+      {/* centroid dot */}
+      <circle cx={c.x} cy={c.y} r={rDot} fill={color} stroke="#fff" strokeWidth={sw}
+              vectorEffect="non-scaling-stroke" />
+
+      {/* leader line */}
+      <line x1={c.x} y1={c.y} x2={bx} y2={by} stroke={color} strokeWidth={sw}
+            vectorEffect="non-scaling-stroke" />
+
+      {/* label bubble + notch */}
+      <g transform={`translate(${bx},${by})`}>
+        <path
+          d={`M ${-bw/2} ${-bh/2} h ${bw} a ${br} ${br} 0 0 1 ${br} ${br}
+              v ${bh - 2*br} a ${br} ${br} 0 0 1 -${br} ${br}
+              h -${bw} a ${br} ${br} 0 0 1 -${br} -${br}
+              v -${bh - 2*br} a ${br} ${br} 0 0 1 ${br} -${br} Z
+              M 0 ${bh/2} l ${-notch} ${notch} l ${2*notch} 0 Z`}
+          fill="white"
+          stroke={color}
+          strokeWidth={sw}
+          vectorEffect="non-scaling-stroke"
+          filter="url(#pp-bubble-shadow)"
+        />
+        <text x="0" y={font/3} fontSize={font} fontWeight="500"
+              textAnchor="middle" fill="#111827">
+          {label}
+        </text>
+      </g>
+    </g>
+  );
+}
 
 
   useEffect(() => {
@@ -2369,7 +2450,11 @@ const renderMap = () => (
         width={WORLD.width} height={WORLD.height}
         fill="transparent" pointerEvents="all"
       />
-		
+		<defs>
+  <filter id="pp-bubble-shadow" x="-50%" y="-50%" width="200%" height="200%">
+    <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.3" />
+  </filter>
+</defs>
       <defs>		  
         {masterMode && (
           <clipPath id={landClipId} clipPathUnits="userSpaceOnUse">
@@ -2488,13 +2573,22 @@ const renderMap = () => (
 {Object.entries(postcodeAreas).map(([code, area]) => {
   if (!isRevealed(code)) return null;
 
-  const isStart = code === startArea;
+  const isStart   = code === startArea;
+  const isTarget  = code === targetArea;
   const isVisited = currentPath.includes(code);
-  const shouldShow =
-    showLabels ||                               // Easy (and any mode where labels are on)
-    (difficulty === 'normal' && (isStart || isVisited)); // Normal: only Start + Visited
 
-  if (!shouldShow) return null;
+  // Existing logic: Easy shows labels; Normal shows Start + Visited
+  const baseShouldShow =
+    showLabels ||
+    (difficulty === 'normal' && (isStart || isVisited));
+
+  if (!baseShouldShow) return null;
+
+  // Zoom gating (always allow Start/Target)
+  const scaleNow = Number(scaleForLabels ?? 1);
+  const zoomOK   = isStart || isTarget || labelVisibleAtScale(code, scaleNow);
+  if (!zoomOK) return null;
+
   const c = area.center || centroidsRef.current[code];
   if (!c) return null;
 
@@ -2517,14 +2611,36 @@ const renderMap = () => (
 })}
         
         {/* overlays (render after paths so they sit on top) */}
-        {targetArea && <TargetMarker id={targetArea} />}
-        {startArea && <StartMarker id={startArea} />}
-        {currentArea && <CurrentMarker id={currentArea} />}
-        {currentPath.map((id, i) => <StepBadge key={`b-${id}`} id={id} index={i} />)}
+{/* overlays (render after paths so they sit on top) */}
+<g id="callouts-overlay">
+  {startArea && (
+    <Callout
+      code={startArea}
+      label={`Start: ${startArea}`}
+      color="#10b981"
+      getCenter={getCenter}
+      scale={scaleForLabels || 1}
+    />
+  )}
+  {targetArea && (
+    <Callout
+      code={targetArea}
+      label={`Target: ${targetArea}`}
+      color="#9333ea"
+      getCenter={getCenter}
+      scale={scaleForLabels || 1}
+    />
+  )}
+</g>
+
+{currentArea && <CurrentMarker id={currentArea} />}
+{currentPath.map((id, i) => <StepBadge key={`b-${id}`} id={id} index={i} />)}
+
 
         {/* Optional optimal path overlay */}
         {gameWon && showOptimal && renderOptimalOverlay()}
       </g>
+
     </svg>
   </div>
 );
@@ -3090,7 +3206,7 @@ const renderMenu = () => (
     <div className="mx-autoflex flex-col sm:flex-row items-stretch justify-center gap-3 mb-6 mx-auto w-full sm:w-auto ">
 <button
       type="button"
-      className="btn btn-glass tint-green btn-cta"
+      className="lrgbtn btn-glass tint-green btn-cta"
       onClick={() => setShowDailyChooser(true)}
     >
       <Trophy className="w-6 h-6 shrink-0" aria-hidden="true" />
@@ -3099,7 +3215,7 @@ const renderMenu = () => (
 
     <button
       type="button"
-      className="btn btn-glass tint-blue btn-cta"
+      className="lrgbtn btn-glass tint-blue btn-cta"
       onClick={() => setShowFreePlayChooser(true)}
     >
       <Flag className="w-6 h-6 shrink-0" aria-hidden="true" />
@@ -3108,15 +3224,17 @@ const renderMenu = () => (
 
     <button
       type="button"
-      className="btn btn-glass glass--white btn-cta"
+      className="lrgbtn btn-glass glass--white btn-cta"
       onClick={() => setShowTutorial(true)}
     >
       <BookOpen className="w-6 h-6 shrink-0" aria-hidden="true" />
       <span>How to Play</span>
     </button>
 
-    </div>
 
+
+ <button className="lrgbtn btn-neutral" onClick={() => setShowAbout(true)}><InfoIcon className="w-4 h-4" />About</button>
+    </div>
 {/* Daily streaks summary */}
 {Object.values(streaks).some(n => (Number(n) || 0) > 0) && (
 <div className="mt-6 mx-auto w-full max-w-xl">
@@ -3128,6 +3246,7 @@ const renderMenu = () => (
       <thead>
         <tr className="text-slate-600">
           <th className="text-left py-2">Difficulty</th>
+          <th className="text-left py-2"></th>
           <th className="text-right py-2">Streak</th>
         </tr>
       </thead>
@@ -3137,11 +3256,14 @@ const renderMenu = () => (
             <td className="py-2 font-medium">
               {DIFF_LABELS[d] ?? d}
             </td>
+            <td>
+              <span aria-hidden="true">{renderStreak(streaks[d])}</span>
+            </td>
             <td className="py-2 text-right">
               {streaks?.[d] > 0 ? (
                 <span className="inline-flex items-center gap-2">
                   
-                  <span aria-hidden="true">{renderStreak(streaks[d])}</span>
+                  
                   <span className="sr-only">{streaks[d]}-day streak</span>
                 </span>
               ) : (
@@ -3156,13 +3278,11 @@ const renderMenu = () => (
 </div>
 )}
 
-    <button className="btn btn-neutral" onClick={() => setShowAbout(true)}><InfoIcon className="w-4 h-4" />About</button>
-
-<button className="btn btn-neutral ml-2" onClick={() => navigate('stats')}>
+<button className="lrgbtn btn-neutral ml-2" onClick={() => navigate('stats')}>
   <ChartColumnBig className="w-4 h-4" /> Stats
 </button>
 
-<button className="btn btn-neutral ml-2" onClick={() => navigate('achievements')}>
+<button className="lrgbtn btn-neutral ml-2" onClick={() => navigate('achievements')}>
   <Medal className="w-4 h-4" /> Achievements
 </button>
 
@@ -3300,7 +3420,7 @@ const renderMenu = () => (
 
             <div className="mt-3 flex gap-2 justify-center">
               <button
-                className="btn btn-glass tint-green w-full max-w-[20rem]"
+                className="button-shiny green w-full max-w-[20rem]"
                 onClick={() => {
                   startOrResumeDaily(dailyChoice);
                   setShowDailyChooser(false);
@@ -3457,8 +3577,6 @@ const renderMenu = () => (
       </ul>
 
 
-
-
  <div className={`collapsible ${freeChoice ? 'open' : ''}`}>
   <div className="inner">
     <div className="mt-4 p-3 rounded-xl bg-white/75 text-slate-900">
@@ -3467,7 +3585,7 @@ const renderMenu = () => (
 
       <div className="mt-3 flex gap-2 justify-center">
         <button
-          className="btn btn-glass tint-green w-full max-w-[20rem]"
+          className="button-shiny green w-full max-w-[20rem]"
           onClick={() => {
             startWithDifficulty(freeChoice);
             setShowFreePlayChooser(false);
