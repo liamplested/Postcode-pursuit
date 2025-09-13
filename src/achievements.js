@@ -1,5 +1,4 @@
 // achievements.js
-import { postcodeAreas, ferryLinks, bridgeLinks, } from './postcodeAreas';
 import { pathHasSequence } from './utils/pathUtils';
 import { lastNGamesArePerfect } from './utils/historyUtils';
 import { readStreakCount } from './utils/streakUtils';
