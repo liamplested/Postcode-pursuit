@@ -1,18 +1,65 @@
-// achievements.js
+import { postcodeAreas } from './postcodeAreas'; 
 import { pathHasSequence } from './utils/pathUtils';
 import { lastNGamesArePerfect } from './utils/historyUtils';
-import { readStreakCount } from './utils/streakUtils';
-import { getCoverageMeta, getVisitedCount } from './utils/coverageUtils';
-import { readJSON, GAME_HISTORY_KEY } from './utils/storageUtils';
-import { ACHIEVEMENTS_KEY, writeJSON} from './PostcodePursuit';
+import { readJSON } from './utils/storageUtils';
+import { ACHIEVEMENTS_KEY, writeJSON, canonEdge} from './PostcodePursuit';
+
+const ACH_MAP_KEY = 'pp_achievements_v1';                 // map used by pages
+const STREAK_KEY_V2 = (d) => `pp_daily_streak_v2_${d}`;   // per-difficulty
+
+const getJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
+
+const HISTORY_KEY = 'pp_history_v2';
+const VISITED_KEY = 'pp_visited_areas_v1';
 
 
+
+function buildHistoryIfMissing(h) {
+  if (h && h.totalGames != null && h.totalWins != null) return h;
+  const db = readJSON(HISTORY_KEY, { games: [] });
+  return {
+    totalGames: db.games.length,
+    totalWins:  db.games.filter(g => g.won).length,
+  };
+}
+
+function buildMetaIfMissing(m) {
+  const meta = { ...(m || {}) };
+  if (meta.totalAreas == null) {
+    meta.totalAreas = postcodeAreas ? Object.keys(postcodeAreas).length : 0;
+  }
+  if (meta.visitedCount == null) {
+    const v = readJSON(VISITED_KEY, []);
+    meta.visitedCount =
+      Array.isArray(v) ? v.length :
+      (v && typeof v === 'object') ? Object.keys(v).length : 0;
+  }
+  return meta;
+}
+
+function unlockAndPersist(list) {
+  if (!list?.length) return [];
+  const map = getJSON(ACH_MAP_KEY, {}) || {};
+  const now = new Date().toISOString();
+  const fresh = [];
+  for (const a of list) {
+    if (!a?.id) continue;
+    if (!map[a.id]) { map[a.id] = { unlockedAt: now }; fresh.push(a); }
+  }
+  if (fresh.length) localStorage.setItem(ACH_MAP_KEY, JSON.stringify(map));
+  return fresh;
+}
+
+export function readStreakCount(diff) {
+  const rec = getJSON(STREAK_KEY_V2(diff), null);
+  return Number(rec?.count || 0);
+}
 
 // ---- Definitions ----
 export const achievements = [
-  { id: 'first',       name: 'First Steps',  icon:'⭐', tier:'bronze',
-    description: 'Finish your first game',
-    check: (_e,h) => (h.totalGames ?? 0) >= 1 },
+{ id: 'first', name: 'First Steps', icon:'⭐', tier:'bronze',
+  description: 'Finish your first game',
+  check: (e, h) => e.won && (h.totalWins ?? 0) >= 1 },
 
   { id: 'normal_win',  name: 'Cartographer', icon:'🧭', tier:'bronze',
     description: 'Win on Normal',
@@ -54,7 +101,7 @@ export const achievements = [
     description: 'Visit every postcode area',
     check: (_e,_h,meta) => (meta?.totalAreas > 0) && (meta.visitedCount >= meta.totalAreas) },
 
-  { id: 'mersey', name: 'Ferry Cross the Mersey', icon:'⛴️', tier:'bronze', hidden:true,
+  { id: 'mersey', name: 'Ferry Cross the Mersey', icon:'⛴️', tier:'silver', hidden:true,
     description: 'Use the ferry across the Mersey in either direction',
     check: (_e,_h,meta) => !!meta?.hasMersey },
 
@@ -272,8 +319,8 @@ export const achievements = [
     name: 'Long-Distance',
     icon: '📏',
     tier: 'bronze',
-    description: 'Win a game where the optimal path is 5+ moves.',
-    check: (e) => e.won && (e.optimalMoves ?? 0) >= 5,
+    description: 'Win a game where the optimal path is 10+ moves.',
+    check: (e) => e.won && (e.optimalMoves ?? 0) >= 10,
   },
   
   {
@@ -310,17 +357,55 @@ export const achievements = [
     check: (_e, h) => (h.totalGames ?? 0) >= 50,
   },
 
-  {
-    id: 'explorer_tour',
-    name: 'The Explorer',
-    icon: '🗺️',
-    tier: 'legendary',
-    description: 'Visit every postcode area at least once, in a single game.',
-    check: (e, _h, meta) => e.won && Array.isArray(e.pathUsed) && (new Set(e.pathUsed).size) >= (meta?.totalAreas ?? 0),
-  },
 
-
+  
   ];
+
+// unlock helper that emits *both* global and per-difficulty ids
+export function unlockStreaksFor(diff) {
+  const n = readStreakCount(diff);
+  const want = [];
+
+  // global thresholds (keep if you want the generic badges too)
+  if (n >= 3)  want.push({ id: 'streak_3',  name: 'Threepeat',        tier: 'bronze' });
+  if (n >= 7)  want.push({ id: 'streak_7',  name: 'One Week Wonder',  tier: 'silver' });
+  if (n >= 14) want.push({ id: 'streak_14', name: 'Fortnight Flyer',  tier: 'gold' });
+  if (n >= 30) want.push({ id: 'streak_30', name: 'Monthly Machine',  tier: 'gold' });
+  if (n >= 365) want.push({ id: 'streak_365', name: 'Unbreakable',  tier: 'legendary' });
+
+  // per-difficulty thresholds
+  const titleCase = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const label = titleCase(diff);
+
+  if (n >= 7)  want.push({ id: `streak7_${diff}`,  name: `Warming Up — ${label}`,  tier: 'bronze'  });
+  if (n >= 14) want.push({ id: `streak14_${diff}`, name: `In the Groove — ${label}`, tier: 'silver' });
+  if (n >= 30) want.push({ id: `streak30_${diff}`, name: `On a Roll — ${label}`,   tier: 'gold'    });
+
+  return unlockAndPersist(want); // your existing persist that returns only *new* ones
+}
+
+export function readStreakRecord(diff) {
+  try {
+    return JSON.parse(localStorage.getItem(STREAK_KEY_V2(diff)) || 'null')
+        || { count: 0, lastWinDate: null };
+  } catch {
+    return { count: 0, lastWinDate: null };
+  }
+}
+
+const STREAK_TIERS = [
+  { n: 3,  id: 'streak_3',  name: 'Threepeat',        tier: 'bronze' },
+  { n: 7,  id: 'streak_7',  name: 'One Week Wonder',  tier: 'silver' },
+  { n: 14, id: 'streak_14', name: 'Fortnight Flyer',  tier: 'gold' },
+  { n: 30, id: 'streak_30', name: 'Monthly Machine',  tier: 'gold' },
+];
+
+export function checkAndUnlockStreakAchievements(diff) {
+  const { count } = readStreakRecord(diff);
+  const want = STREAK_TIERS.filter(t => count >= t.n);
+  return unlockAndPersist(want); // must return only *newly* unlocked
+}
+
 export const evaluateAndUnlockMetaAchievements = (...args) =>
   evaluateAndUnlockAchievements(...args);
 
@@ -330,9 +415,14 @@ export function evaluateAndUnlockAchievements(
   history = { totalGames: 0, totalWins: 0 },
   meta = {}
 ) {
+  // ✅ ensure we have real history/meta when not provided
+  history = buildHistoryIfMissing(history);
+  meta    = buildMetaIfMissing(meta);
+
   const have = readJSON(ACHIEVEMENTS_KEY, {}); // { [id]: rec }
   const nowISO = new Date().toISOString();
   const newly = [];
+
   for (const a of achievements) {
     try {
       if (!have[a.id] && a.check(event, history, meta)) {
@@ -340,28 +430,15 @@ export function evaluateAndUnlockAchievements(
         newly.push(have[a.id]);
       }
     } catch {
-      // swallow any single-achievement error so one bad check
-      // doesn’t break the rest
+      // swallow single-achievement errors
     }
   }
+
   if (newly.length) writeJSON(ACHIEVEMENTS_KEY, have);
   return newly;
 }
 
-// Helper that recalculates meta-based achievements (visits/coverage) and returns newly unlocked
-export function checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks) {
-  const db = readJSON(GAME_HISTORY_KEY, { games: [] });
-  const history = { totalGames: db.games.length, totalWins: db.games.filter(g => g.won).length };
-  const cov = getCoverageMeta();
-  const meta = {
-    ...cov,
-    visitedCount: getVisitedCount(),
-    totalAreas: Object.keys(postcodeAreas).length,
-    dailyStreak: 0,
-  };
-  const dummy = { won: false, moves: 0, difficulty };
-  return evaluateAndUnlockAchievements(dummy, history, meta);
-}
+
 
 // ---- Analytics helper ----
 export function logAchievementsToGA(unlocked, context) {
@@ -377,4 +454,35 @@ export function logAchievementsToGA(unlocked, context) {
       bridge_count: context.bridgeCount ?? 0,
     });
   });
+}
+
+
+
+const USED_FERRIES_KEY = 'pp_used_ferries_v1';
+const USED_BRIDGES_KEY = 'pp_used_bridges_v1';
+
+export function checkAndUnlockMetaAchievements(_difficulty, _postcodeAreas, ferryLinks = [], bridgeLinks = []) {
+  // read used edges from LS
+  const usedF = new Set(getJSON(USED_FERRIES_KEY, []));
+  const usedB = new Set(getJSON(USED_BRIDGES_KEY, []));
+
+  // compute totals from the arrays you pass in
+  const allF = new Set(ferryLinks.map(({a,b}) => canonEdge(a,b)));
+  const allB = new Set(bridgeLinks.map(({a,b}) => canonEdge(a,b)));
+
+  const want = [];
+  if (usedF.size >= 1) want.push({ id: 'first_crossing'  });   // harmless if already unlocked
+  if (usedB.size >= 1) want.push({ id: 'first_span' });
+
+  if (allF.size > 0 && usedF.size === allF.size) want.push({ id: 'all_ferries', name: 'Ferry Collector', tier:'gold' });
+  if (allB.size > 0 && usedB.size === allB.size) want.push({ id: 'all_bridges', name: 'Bridge Club',     tier:'gold' });
+
+  // (optional) special edge, tweak codes if yours differ
+  if (usedF.has(canonEdge('L','CH'))) want.push({ id: 'mersey', name: 'Ferry Across the Mersey', tier:'silver' });
+
+  // map the minimal items above to real objects from your defined list (by id)
+  const byId = new Map(achievements.map(a => [a.id, a]));
+  const resolved = want.map(w => byId.get(w.id)).filter(Boolean);
+
+  return unlockAndPersist(resolved);
 }

@@ -13,7 +13,8 @@ import * as Daily from './dailyManager';
   achievements,
   evaluateAndUnlockAchievements, 
   checkAndUnlockMetaAchievements, 
-  logAchievementsToGA 
+  logAchievementsToGA,
+  unlockStreaksFor
 } from './achievements.js';
 
 // ---- Module-level constants -------------------------------------------------
@@ -181,17 +182,36 @@ export function addGameToHistory(event){
 // put this near the top of the file
 function useIsTouchDevice() {
   const [isTouch, setIsTouch] = React.useState(false);
+
   React.useEffect(() => {
-    const mql = window.matchMedia?.('(hover: none), (pointer: coarse)');
-    const detect = () =>
-      setIsTouch(
-        !!('ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0) ||
-        !!mql?.matches
-      );
+    const mqCoarse = window.matchMedia?.('(pointer: coarse)');
+    const mqFine   = window.matchMedia?.('(pointer: fine)');
+    const mqHover  = window.matchMedia?.('(hover: hover)');
+
+    const detect = () => {
+      const canHover = !!mqHover?.matches;       // true on mice/trackpads
+      const isFine   = !!mqFine?.matches;        // precise pointer available
+      const isCoarse = !!mqCoarse?.matches;      // finger-ish pointer available
+      const hasTouch = (navigator.maxTouchPoints || 0) > 0;
+
+      // Desktop if it can hover OR has a fine pointer.
+      // Only treat as "mobile" when it cannot hover and only offers coarse touch.
+      const mobileLike = !canHover && (isCoarse || hasTouch) && !isFine;
+
+      setIsTouch(mobileLike);
+    };
+
     detect();
-    mql?.addEventListener?.('change', detect);
-    return () => mql?.removeEventListener?.('change', detect);
+    mqCoarse?.addEventListener?.('change', detect);
+    mqFine?.addEventListener?.('change', detect);
+    mqHover?.addEventListener?.('change', detect);
+    return () => {
+      mqCoarse?.removeEventListener?.('change', detect);
+      mqFine?.removeEventListener?.('change', detect);
+      mqHover?.removeEventListener?.('change', detect);
+    };
   }, []);
+
   return isTouch;
 }
 
@@ -420,8 +440,10 @@ function golfPhrase(moves, par) {
   return `${d} over par (${name})`;
 }
 
-const isTouch = useIsTouchDevice();
+
 const [dailyPar, setDailyPar] = useState(null);
+
+const isTouch = useIsTouchDevice();
 
 // Geometric helpers (centroids etc)
 const roundIdRef = useRef(null);
@@ -1705,13 +1727,13 @@ const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
 
   // ---------- Victory modal timing ----------
-// BEFORE: const finishGame = useCallback(() => { ... }, [...]);
-
 const finishGame = useCallback((finalPath) => {
   const path = Array.isArray(finalPath) && finalPath.length ? finalPath : currentPath;
 
   setGameWon(true);
   addVisited([targetArea], postcodeAreas);
+ const metaNew = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
+  if (metaNew?.length) setAchievementToasts(q => [...q, ...metaNew]);
 
   setGameState('gameWon');
   const end = performance.now();
@@ -1739,22 +1761,17 @@ const finishGame = useCallback((finalPath) => {
     endArea: targetArea,
   };
 
-  // ---- Streaks: bump ONCE if it's a daily run ----
-  let postWinStreak = 0;
-  if (dailyMode && dailyDate && dailyDifficulty) {
-    postWinStreak = bumpStreakFor(dailyDifficulty);
-    setStreaks((s) => ({ ...s, [dailyDifficulty]: postWinStreak }));
+addGameToHistory(event);
 
-    // Optional: if you still persist a per-difficulty record, do it here
-    // (replace with your actual persistence function if different)
-    if (typeof saveStreakRecord === 'function') {
-      saveStreakRecord(dailyDifficulty, postWinStreak, todayUTC());
-    }
-    // If you must keep a legacy mirror for "easy" only, guard it:
-    // if (dailyDifficulty === 'easy' && typeof saveDailyStreak === 'function') {
-    //   saveDailyStreak(postWinStreak, todayUTC());
-    // }
-  }
+if (dailyMode && dailyDifficulty) {
+  const rec = bumpStreakFor(dailyDifficulty); // updates v2 key
+  setStreaks(s => ({ ...s, [dailyDifficulty]: rec }));
+
+  // 🔓 unlock both global and per-diff streaks from the current count
+  const streakNew = unlockStreaksFor(dailyDifficulty);
+  if (streakNew.length) setAchievementToasts(q => [...q, ...streakNew]);
+}
+
 
 const unlocked = evaluateAndUnlockAchievements(event);
 if (unlocked.length) {
@@ -1797,13 +1814,9 @@ if (unlocked?.length && window.gtag) {
 }, [
   currentPath, optimalPath,
   difficulty, startArea, targetArea,
-  dailyDate, dailyMode, dailyDifficulty,
-  bumpStreakFor, tallyEdgeUsage, saveStreakRecord
-  // NOTE: removed setDailyStreak from deps (no longer used)
+  dailyMode, dailyDifficulty,
+  bumpStreakFor, tallyEdgeUsage
 ]);
-
-
-
 
 useEffect(() => {
   if (gameState !== 'menu' && !hasFitRef.current) {
