@@ -1,10 +1,16 @@
-import { readJSON, GAME_HISTORY_KEY } from './storageUtils';
+import { readJSON, writeJSON } from './storageUtils'; // adjust path
+import { GAME_HISTORY_KEY } from '../PostcodePursuit';        // or inline the string
 
-// Check if the last N games were "perfect" (no mistakes, optimal path, etc.)
+export function addGameToHistory(event, { onPersist } = {}) {
+  const db = readJSON(GAME_HISTORY_KEY, { games: [] });
+  db.games.push(event);
+  writeJSON(GAME_HISTORY_KEY, db);
+  onPersist?.();
+  return { totalGames: db.games.length, totalWins: db.games.filter(g => g.won).length };
+}
+
 export function lastNGamesArePerfect(n) {
-  const history = readJSON(GAME_HISTORY_KEY, []);
-  if (!Array.isArray(history) || history.length < n) return false;
-
-  const recent = history.slice(-n);
-  return recent.every(g => g.perfect === true);
+  const db = readJSON(GAME_HISTORY_KEY, { games: [] });
+  const recent = db.games.slice(-n);
+  return recent.length === n && recent.every(g => g.perfect === true);
 }

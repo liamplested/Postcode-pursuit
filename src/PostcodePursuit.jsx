@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useId} from 'react';
+import React, { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, ZoomIn, ZoomOut, Scan} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { postcodeAreas, ferryLinks, bridgeLinks } from './postcodeAreas';
@@ -16,6 +16,17 @@ import * as Daily from './dailyManager';
   logAchievementsToGA,
   unlockStreaksFor
 } from './achievements.js';
+
+
+import './firebase'
+import useCloudSync from './hooks/useCloudSync';
+import {addGameToHistory} from './utils/historyUtils.js';
+import AuthButton from './components/AuthButton';
+import { recordLifetimeMove } from './utils/lifetimeMeta';
+
+
+import { auth } from './firebase';
+console.log('UID:', auth.currentUser?.uid);
 
 // ---- Module-level constants -------------------------------------------------
 // Define the World
@@ -46,6 +57,9 @@ export const USED_BRIDGES_KEY = 'pp_used_bridges_v1';
 export const VISITED_KEY      = 'pp_visited_areas_v1';
 export const GAME_HISTORY_KEY = 'pp_history_v2';
 export const ACHIEVEMENTS_KEY = 'pp_achievements_v1';
+export const META_KEY         = 'pp_meta_v1';
+
+
 
 let _confettiPromise;
 
@@ -62,6 +76,64 @@ function prefersReducedMotion() {
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
   );
 }
+
+// --- Streak helpers (v2) ---  (place above the first effect that uses them)
+const DIFFS = ['easy','normal','hard','master'];
+const STREAK_KEY_V2 = (d) => `pp_daily_streak_v2_${d}`;
+
+function readStreakV2(diff) {
+  try { return JSON.parse(localStorage.getItem(STREAK_KEY_V2(diff)) || 'null'); }
+  catch { return null; }
+}
+function saveStreakV2(diff, count, lastWinDate) {
+  localStorage.setItem(STREAK_KEY_V2(diff), JSON.stringify({ count, lastWinDate }));
+}
+
+function readStreaksAll() {
+  const out = {};
+  for (const d of DIFFS) {
+    const rec = readStreakV2(d);
+    if (rec && Number.isFinite(+rec.count)) out[d] = { count: +rec.count, lastWinDate: rec.lastWinDate || null };
+  }
+  // legacy v1 fallback for easy only
+  if (!out.easy) {
+    try {
+      const legacy = JSON.parse(localStorage.getItem('pp_daily_streak_v1') || 'null');
+      if (legacy && Number.isFinite(+legacy.count)) {
+        out.easy = { count: +legacy.count, lastWinDate: legacy.lastWinDate || null };
+      }
+    } catch {}
+  }
+  return out;
+}
+
+function writeStreaksAll(streaks) {
+  if (!streaks) return;
+  for (const d of DIFFS) {
+    const rec = streaks[d];
+    if (rec && Number.isFinite(+rec.count) && rec.lastWinDate) {
+      saveStreakV2(d, +rec.count, rec.lastWinDate);
+    }
+  }
+}
+
+
+function getLocalSnapshot() {
+  return {
+    version: 1,
+    achievements: readJSON(ACHIEVEMENTS_KEY, {}),
+    history:     readJSON(GAME_HISTORY_KEY, { games: [] }),
+    streaks:     readStreaksAll() || {},              // <-- per-difficulty
+    meta:        readJSON(META_KEY, {}) || {}
+  };
+}
+function writeLocalSnapshot(s) {
+  if (s.achievements) writeJSON(ACHIEVEMENTS_KEY, s.achievements);
+  if (s.history)      writeJSON(GAME_HISTORY_KEY, s.history);
+  if (s.streaks)      writeStreaksAll(s.streaks); // <-- per-difficulty
+  if (s.meta != null) writeJSON(META_KEY, s.meta);
+}
+
 
 async function fireVictoryConfetti() {
   if (prefersReducedMotion()) return;
@@ -168,18 +240,23 @@ export function pathHasSequence(path, seq) {
   return false;
 }
 
-
-export function addGameToHistory(event){
-  const db = readJSON(GAME_HISTORY_KEY, { games: [] });
-  db.games.push(event);
-  writeJSON(GAME_HISTORY_KEY, db);
-  return {
-    totalGames: db.games.length,
-    totalWins: db.games.filter(g=>g.won).length,
-  };
+function readMeta() {
+  try { return JSON.parse(localStorage.getItem(META_KEY) || '{}'); }
+  catch { return {}; }
 }
 
-// put this near the top of the file
+export function getLifetimeVisitedCount() {
+  const meta = readMeta();
+  // Prefer explicit counter if present
+  if (Number.isFinite(meta?.visitedCount)) return meta.visitedCount;
+  if (Number.isFinite(meta?.counters?.visitedCount)) return meta.counters.visitedCount;
+  // Fallback: distinct list in meta (if you kept it)
+  if (Array.isArray(meta?.visitedAreas)) return new Set(meta.visitedAreas).size;
+  // Final fallback to local per-device set
+  return getVisitedCount();
+}
+
+// Touch device - Mobiles
 function useIsTouchDevice() {
   const [isTouch, setIsTouch] = React.useState(false);
 
@@ -221,42 +298,56 @@ function MobileCodeScroller({
   getNeighbors,
   currentPath,
   allCodes,
-  showNeighborsToggle = false,   // 👈 hidden by default
+  showNeighborsToggle = false,
 }) {
-  // keep both modes available in code
-  const [mode, setMode] = React.useState(showNeighborsToggle ? 'neighbors' : 'letter');
-  const [letter, setLetter] = React.useState('A');
+  const [mode, setMode] = React.useState(showNeighborsToggle ? 'neighbors' : 'search');
+  const [query, setQuery] = React.useState('');
 
-  // pre-group for perf (optional but nice with many codes)
-  const grouped = React.useMemo(() => {
-    const m = new Map();
-    for (const c of allCodes) {
-      const L = (c?.[0] || '').toUpperCase();
-      if (!m.has(L)) m.set(L, []);
-      m.get(L).push(c);
-    }
-    return m;
-  }, [allCodes]);
+  // Normalize + sort once
+  const normCodes = React.useMemo(
+    () => Array.from(new Set(allCodes.map(c => String(c).toUpperCase()))).sort(),
+    [allCodes]
+  );
 
+  // Build neighbours, excluding already visited
   const neighborOptions = React.useMemo(() => {
     if (!current) return [];
     return getNeighbors(current).filter(n => !currentPath.includes(n));
   }, [current, getNeighbors, currentPath]);
 
-  const letterOptions = React.useMemo(() => {
-    return grouped.get(letter) ?? [];
-  }, [grouped, letter]);
+  // Prefix-buffer helpers
+  const pushLetter = (ch) => {
+    const L = String(ch || '').toUpperCase();
+    if (!/^[A-Z]$/.test(L)) return;
+    setQuery(q => (q + L).slice(0, 2)); // cap at 2 letters
+  };
+  const backspace = () => setQuery(q => q.slice(0, -1));
+  const clearQuery = () => setQuery('');
 
-  const options = mode === 'neighbors' ? neighborOptions : letterOptions;
+  // Filtered results (exact → prefix → contains) for search mode
+  const searchOptions = React.useMemo(() => {
+    const q = query.trim().toUpperCase();
+    if (!q) return [];
+    const exact    = normCodes.filter(c => c === q);
+    const starts   = normCodes.filter(c => c.startsWith(q) && c !== q);
+    const contains = normCodes.filter(c => !c.startsWith(q) && c.includes(q));
+    return [...exact, ...starts, ...contains];
+  }, [normCodes, query]);
+
+  const options = mode === 'neighbors' ? neighborOptions : searchOptions;
+
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
   return (
     <div className="select-none">
-      {/* Header / mode (toggle hidden unless enabled) */}
+      {/* Header */}
       <div className="flex items-center justify-between px-3 pb-1">
         <div className="text-xs opacity-80">
           {mode === 'neighbors'
             ? 'Neighbours'
-            : <>Postcodes starting with <b>{letter}</b>:</>}
+            : query
+              ? <>Typing: <b>{query}</b></>
+              : 'Type a code (1–2 letters)…'}
         </div>
 
         {showNeighborsToggle && (
@@ -271,68 +362,109 @@ function MobileCodeScroller({
             </button>
             <button
               type="button"
-              className={`badge ${mode === 'letter' ? 'badge-blue' : 'badge-gray'}`}
-              onClick={() => setMode('letter')}
-              aria-pressed={mode === 'letter'}
+              className={`badge ${mode !== 'neighbors' ? 'badge-blue' : 'badge-gray'}`}
+              onClick={() => setMode('search')}
+              aria-pressed={mode !== 'neighbors'}
             >
-              A–Z
+              Search
             </button>
           </div>
         )}
       </div>
 
-      {/* A–Z row (always visible since we’re in letter mode by default) */}
-      {mode === 'letter' && (
-        <div
-          className="flex overflow-x-auto gap-1 px-3 pb-2 snap-x snap-mandatory"
-          role="tablist"
-          aria-label="Choose first letter"
-          style={{ scrollbarGutter: 'stable both-edges' }}
-        >
-          {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(L => (
+      {/* On-screen keypad — now using your btn classes */}
+      {mode !== 'neighbors' && (
+        <div className="mx-3 mb-3 p-2 rounded-lg bg-slate-900/10">
+          {alphabet.map(L => (
             <button
               key={L}
               type="button"
-              role="tab"
-              aria-selected={L === letter}
-              className={`badge ${L === letter ? 'badge-blue' : 'badge-gray'} snap-start`}
-              onClick={() => setLetter(L)}
+              onClick={() => pushLetter(L)}
+              className="btn btn-white text-sm"
+              aria-label={`Type ${L}`}
             >
               {L}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={backspace}
+            className="btn btn-white col-span-2 text-sm"
+          >
+            Backspace
+          </button>
+          <button
+            type="button"
+            onClick={clearQuery}
+            className="btn btn-white col-span-2 text-sm"
+          >
+            Clear
+          </button>
         </div>
       )}
 
-      {/* Scrollable chip list */}
-      <div
-        className="flex overflow-x-auto gap-2 px-3 pb-3 snap-x snap-mandatory"
-        role="listbox"
-        aria-label={mode === 'neighbors' ? 'Available neighbours' : 'Available postcodes'}
-      >
-        {options.length ? (
-          options.map(code => (
-            <button
-              key={code}
-              type="button"
-              role="option"
-              aria-selected={false}
-              className="badge badge-select hover:brightness-95 snap-start"
-              onClick={() => onPick(code)}
-              aria-label={`Select ${code}`}
-            >
-              {code}
-            </button>
-          ))
-        ) : (
-          <span className="text-xs opacity-70 px-3">
-            {mode === 'neighbors' ? 'No unvisited neighbours' : 'No postcodes for this letter'}
-          </span>
-        )}
-      </div>
+      {/* Results scroller — hidden until user typed at least 1 letter */}
+      {mode === 'neighbors' ? (
+        <div
+          className="flex overflow-x-auto gap-2 px-3 pb-3 snap-x snap-mandatory"
+          role="listbox"
+          aria-label="Available neighbours"
+          style={{ scrollbarGutter: 'stable both-edges' }}
+        >
+          {neighborOptions.length ? (
+            neighborOptions.map(code => (
+              <button
+                key={code}
+                type="button"
+                role="option"
+                aria-selected={false}
+                className="btn btn-green hover:brightness-95 snap-start"
+                onClick={() => onPick?.(code)}
+                aria-label={`Select ${code}`}
+              >
+                {code}
+              </button>
+            ))
+          ) : (
+            <span className="text-xs opacity-70 px-3">No unvisited neighbours</span>
+          )}
+        </div>
+      ) : query.length > 0 ? (
+        <div
+          className="flex overflow-x-auto gap-2 px-3 pb-3 snap-x snap-mandatory"
+          role="listbox"
+          aria-label="Matching postcodes"
+          style={{ scrollbarGutter: 'stable both-edges' }}
+        >
+          {options.length ? (
+            options.map(code => (
+              <button
+                key={code}
+                type="button"
+                role="option"
+                aria-selected={false}
+                className={`btn btn-green hover:brightness-95 snap-start ${
+                  code === query ? 'ring-1 ring-indigo-500 font-semibold' : ''
+                }`}
+                onClick={() => {
+                  onPick?.(code);
+                  clearQuery();
+                }}
+                aria-label={`Select ${code}`}
+              >
+                {code}
+              </button>
+            ))
+          ) : (
+            <span className="text-xs opacity-70 px-3">No matches</span>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
+
+
 
 
 
@@ -382,6 +514,8 @@ function Modal({ open, onClose, title, children }) {
 }
 
 
+
+
 export default function PostcodePursuit() {
 // ------------------- STATE & REFS (unchanged from your file) --------------
 const [gameState, setGameState] = useState('menu');
@@ -405,9 +539,11 @@ const [showOptimal, setShowOptimal] = useState(false);
 const [dailyMode, setDailyMode] = useState(false);
 const [dailyDate, setDailyDate] = useState(null);             // 'YYYY-MM-DD' (UTC)
 
+
   const [victoryOpen, setVictoryOpen] = useState(false);
 
 const ONBOARDING_KEY = 'pp:onboardingComplete:v1';
+
 
 const isActiveRound = () => gameState === 'playing' && !gameWon;
 
@@ -439,7 +575,6 @@ function golfPhrase(moves, par) {
   if (d === 0) return `level par`;
   return `${d} over par (${name})`;
 }
-
 
 const [dailyPar, setDailyPar] = useState(null);
 
@@ -477,6 +612,16 @@ const edgeType = (a, b) => {
   if (bridgeAdj.get(a)?.has(b)) return 'bridge';
   return 'land';
 };
+
+
+
+const { user, queueSave, saveNow } = useCloudSync(getLocalSnapshot, writeLocalSnapshot);
+
+// One helper for everywhere you persist
+const onPersist = React.useCallback((immediate = false) => {
+  if (!user) return;
+  return immediate ? saveNow() : queueSave();
+}, [user, queueSave, saveNow]);
 
 // -------- Daily Challenge setup --------
 
@@ -519,6 +664,9 @@ const parLine = (dailyMode && Number.isFinite(dailyPar))
   : null;
 
 
+const parFor = (optimalMoves, diff) =>
+  Math.max(1, Math.ceil(optimalMoves * (diff === 'master' ? 1.0 : 1.5)));
+
 useEffect(() => {
   if (!burgerOpen) return;
   // wait a tick for portal render
@@ -558,8 +706,9 @@ useEffect(() => { setBurgerOpen(false); }, [gameState, showAbout, showTutorial, 
 
 // --- Daily streak (UTC) ---
 
-// --- Streak helpers (v2) ---  (place above the first effect that uses them)
-const STREAK_KEY_V2 = (d) => `pp_daily_streak_v2_${d}`;
+
+
+
 
 const readStreakRecord = React.useCallback((diff) => {
   try { return JSON.parse(localStorage.getItem(STREAK_KEY_V2(diff)) || 'null'); }
@@ -580,9 +729,12 @@ const bumpStreakFor = React.useCallback((diff) => {
   } else if (rec.lastWinDate && daysBetweenUTC(rec.lastWinDate, today) === 1) {
     next = rec.count + 1;                   // extend
   }
-  saveStreakRecord(diff, next, today);
+
+  saveStreakRecord(diff, next, today);      // <-- local write
+  onPersist?.(true);                            // <-- cloud sync trigger
+
   return next;
-}, [readStreakRecord, saveStreakRecord]);
+}, [readStreakRecord, saveStreakRecord, onPersist]);
 
 const readStreak = React.useCallback((diff) => {
   const rec = readStreakRecord(diff);
@@ -746,17 +898,16 @@ function startOrResumeDaily(difficulty) {
             );
 
     addVisited([start]);
+    recordLifetimeMove({ nextCode: snap.startArea }, { onPersist });
     setDailyMode(true);
     setDailyDate(snap.date);
     setDailyDifficulty(difficulty);
-
+            requestAnimationFrame(() => focusStartAndTarget(snap.startArea, snap.targetArea));
     setHintsUsed(snap.hintsUsed ?? 0);
     setStartArea(snap.startArea);
     setTargetArea(snap.targetArea);
     setCurrentPath(Array.isArray(snap.currentPath) && snap.currentPath.length ? snap.currentPath : [snap.startArea]);
     setGuesses(Array.isArray(snap.guesses) ? snap.guesses : []);
-/*     setOptimalPath(Array.isArray(snap.optimalPath) ? snap.optimalPath
-                    : Daily.findShortestPathDet(snap.startArea, snap.targetArea, getNeighbors)); */
     setShowOptimal(!!snap.showOptimal);
     setElapsedMs(snap.elapsedMs || 0);
 
@@ -783,7 +934,6 @@ setFreeChoice(null);
   setDailyDifficulty(difficulty);
   setHintsUsed(0);
   setShowHints(false);
-
   abandonIfActive('daily_start');
   setStartArea(start);
   setTargetArea(target);
@@ -791,6 +941,7 @@ setFreeChoice(null);
   setGuesses([]);
   setGameWon(false);
   setOptimalPath(path);
+  setDailyPar(parFor(Math.max(0, path.length - 1), difficulty));
   setGameState('playing');
   gameStartRef.current = performance.now();
   setElapsedMs(0);
@@ -798,6 +949,7 @@ setFreeChoice(null);
   setShowOptimal(false);
 
   addVisited([start]);
+  recordLifetimeMove({ nextCode: snap.startArea }, { onPersist });
 
   requestAnimationFrame(() => focusStartAndTarget(start, target));
 }
@@ -892,12 +1044,17 @@ useEffect(() => {
 const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
 
 
-  const { reset, zoomIn, zoomOut } = useSvgPan(svgRef, gRef, {
+  const { reset, zoomIn, zoomOut, panTo } = useSvgPan(svgRef, gRef, {
     enabled: isMapInteractive,
     min: MIN_SCALE,
     max: MAX_SCALE,
     onChange: ({ scale }) => setScaleForLabels(scale),
   });
+
+  const centerOn = useCallback((code) => {
+  const pt = getCenter(code);
+  if (pt) panTo(pt, { duration: 350 }); // tweak duration if you like
+}, [panTo, getCenter]);
 
  const fitToContent = useCallback((padding = 0.92) => {
    const g = contentRef.current;
@@ -919,9 +1076,6 @@ const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
     reset({ scale: fitScale, x: newTx, y: newTy });
     hasFitRef.current = true;
   }, [reset]);
-
-
-
 
 // ---------- Helpers ----------
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -1456,7 +1610,7 @@ const giveUpNow = useCallback(() => {
     startArea,
     endArea: targetArea,
   };
-  addGameToHistory(event);
+addGameToHistory(event, { onPersist: () => onPersist(true)});
 
   // optional: analytics
   window.gtag?.('event', 'game_gave_up', {
@@ -1475,7 +1629,7 @@ const giveUpNow = useCallback(() => {
   roundIdRef.current = null;
 }, [
   guesses, optimalPath, currentPath, startArea, targetArea,
-  dailyMode, difficulty
+  dailyMode, difficulty, onPersist
 ]);
 
 
@@ -1723,6 +1877,8 @@ function computeStats(){
 
 
 
+
+
 const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
 
@@ -1781,7 +1937,10 @@ if (unlocked.length) {
     dailyMode,
     ferryCount: event.ferryCount,
     bridgeCount: event.bridgeCount,
-  });
+  }
+)
+
+;
 }
 
 
@@ -2186,29 +2345,22 @@ const makeGuess = useCallback((area) => {
   const viaFerry  = ferryAdj.get(currentLocation)?.has(area) || false;
   const viaBridge = !!bridgeAdj.get(currentLocation)?.has(area);
 
-  setGuesses((prev) => [
-  ...prev,
-  { area, valid: isValidMove, alreadyVisited, viaFerry, viaBridge }
-  ]);
-  
+  setGuesses(prev => [...prev, { area, valid: isValidMove, alreadyVisited, viaFerry, viaBridge }]);
 
-if (!isValidMove || (alreadyVisited && !revisitAllowed)) {
-  setFlashAreas((prev) => [...prev, area]);
-  setTimeout(() => {
-    setFlashAreas((prev) => prev.filter((a) => a !== area));
-  }, 400);
+  if (!isValidMove || (alreadyVisited && !revisitAllowed)) {
+    setFlashAreas(prev => [...prev, area]);
+    setTimeout(() => setFlashAreas(prev => prev.filter(a => a !== area)), 400);
 
-  // NEW: reasoned feedback
-  if (!isValidMove) {
-    showError(`${area} isn’t adjacent to ${currentLocation}`);
-  } else if (alreadyVisited && !revisitAllowed) {
-    showError(`You've already visited ${area} in this game. Revisiting is not allowed in ${difficulty} difficulty`);
+    if (!isValidMove)        showError(`${area} isn’t adjacent to ${currentLocation}`);
+    else if (alreadyVisited) showError(`You've already visited ${area} in this game. Revisiting is not allowed in ${difficulty} difficulty`);
+    return;
   }
 
+  // ✅ NEW: log lifetime stats for this valid move
+  const moveType = viaFerry ? 'ferry' : viaBridge ? 'bridge' : 'land';
+  recordLifetimeMove({ nextCode: area, type: moveType }, { onPersist });
 
-
-  return;
-}
+  // existing meta-edge tracking / achievements
   if (viaFerry) {
     if (addUsedFerryEdge(currentLocation, area)) {
       const newly = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
@@ -2222,21 +2374,23 @@ if (!isValidMove || (alreadyVisited && !revisitAllowed)) {
     }
   }
 
-  // mark newly visited
+  // mark newly visited (game-local)
   if (addVisited([area])) {
     const newly = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
     if (newly.length) setAchievementToasts(q => [...q, ...newly]);
-
-    
   }
 
-const newPath = [...currentPath, area];
-setCurrentPath(newPath);
+  const newPath = [...currentPath, area];
+  setCurrentPath(newPath);
 
-if (area === targetArea) {
-  finishGame(newPath);  // <-- pass final path so last edge is counted
-}
-}, [getNeighbors, gameWon, currentPath, targetArea, finishGame, ferryAdj, bridgeAdj, difficulty, showError]);
+  if (area === targetArea) {
+    finishGame(newPath); // last hop already counted above
+  }
+}, [
+  getNeighbors, gameWon, currentPath, targetArea, finishGame,
+  ferryAdj, bridgeAdj, difficulty, showError,
+  onPersist,
+]);
 
 // const isFerryEdge  = (a,b) => ferryAdj.get(a)?.has(b)  || false;
 // const isBridgeEdge = (a,b) => bridgeAdj.get(a)?.has(b) || false;
@@ -2562,50 +2716,54 @@ const renderControls = () => (
   <div ref={controlsRef} className="top-0 z-20 w-full">
     <div
       className="glass mx-auto relative"   // <- ensure positioned ancestor
-      style={{ width: '96%', maxWidth: '600px', overflowX: 'auto', overflowY: 'auto', borderRadius: 10, maxHeight: '1000px',   WebkitOverflowScrolling: 'touch',
+      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'auto', borderRadius: 10, maxHeight: '1000px',   WebkitOverflowScrolling: 'touch',
     paddingBottom: 'env(safe-area-inset-bottom, 12px)'}}
     >
 
-<div class = "grid-container">
-<div><button
-type="button"
-className="btn btn-primary px-3 py-1 text-sm"
-onClick={backToMenu}
-aria-label="Back to menu"
-title="Back to menu (Esc)"
->
-←
-</button>
-</div>
-<div>
-        <span>
-          Travel from <span className="text-indigo-200">{startArea || '—'}</span> to{' '} 
-          <span className="text-indigo-200">{targetArea || '—'}     {dailyMode && Number.isFinite(dailyPar) && (
+<div className="grid-container">
+  <div>
+    <button
+      type="button"
+      className="btn btn-primary px-3 py-1 text-sm"
+      onClick={backToMenu}
+      aria-label="Back to menu"
+      title="Back to menu (Esc)"
+    >
+      ←
+    </button>
+  </div>
 
-      <span >
-        - par {dailyPar}
+  {/* force small, tight centre text */}
+  <div className="text-center leading-tight text-[clamp(11px,2.6vw,13px)]">
+    <span className="whitespace-nowrap">
+      Travel from <span className="text-indigo-200">{startArea || '—'}</span> to{' '}
+      <span className="text-indigo-200">
+        {targetArea || '—'}
+        {dailyMode && Number.isFinite(dailyPar) && (
+          <div><span className="badge badge-gray ml-2 inline-flex items-center !text-[11px] !leading-tight !py-0.5 !px-2 align-middle">
+            <span className="mr-1 align-[-0.1em]">⛳</span>
+            Par {dailyPar}
+          </span></div>
+        )}
       </span>
+    </span>
+  </div>
 
-  )}</span>
-        </span>
-
-</div>
-<div>
-          <button
-          ref={burgerButtonRef}
-          type="button"
-          className="btn btn-primary inline-flex w-auto items-center gap-2"
-          aria-haspopup="menu"
-          aria-expanded={burgerOpen ? 'true' : 'false'}
-          aria-label="Open menu"
-          onClick={() => setBurgerOpen(o => !o)}
-        >
-          <Menu className="w-4 h-4" />
-          
-        </button>
+  <div>
+    <button
+      ref={burgerButtonRef}
+      type="button"
+      className="btn btn-primary inline-flex w-auto items-center gap-2"
+      aria-haspopup="menu"
+      aria-expanded={burgerOpen ? 'true' : 'false'}
+      aria-label="Open menu"
+      onClick={() => setBurgerOpen(o => !o)}
+    >
+      <Menu className="w-4 h-4" />
+    </button>
+  </div>
 </div>
 
-</div>
 
       {/* Burger menu portal (slide-in, overlays everything) */}
 {burgerOpen && createPortal(
@@ -2638,6 +2796,9 @@ title="Back to menu (Esc)"
         listStyle: 'none'
       }}
     >
+<li className="mt-2">
+  <AuthButton size="btn-sm" />
+</li>
       <li>
         <button
           role="menuitem"
@@ -2775,11 +2936,11 @@ title="Back to menu (Esc)"
             aria-label="Submit postcode"
             style={{
               position: 'absolute',
-              top: '50%',
+              top: '48%',
               right: 8,
               transform: 'translateY(-50%)',
-              width: 48,
-              height: 48,
+              width: 35,
+              height: 35,
               padding: 0,
               lineHeight: 1,
               display: 'grid',
@@ -2795,7 +2956,49 @@ title="Back to menu (Esc)"
       </div>
     )}
 
-    {/* Keep your "Last entry" chips exactly as before */}
+
+  </div>
+)}
+
+
+
+
+{/* Journey + inline actions */}
+<div className="px-3 pb-2">
+  {/* Row: badges + (Undo, Hint) OR trophy + optimal toggle */}
+  <div className="flex flex-wrap items-center gap-2">
+    <div className="badges flex flex-wrap items-center gap-2">
+  <span className="text-slate-200/90">Journey:</span>
+  {currentPath.map((code, i) => {
+    const type = i > 0 ? edgeType(currentPath[i - 1], code) : null;
+    const base =
+      code === targetArea ? 'badge-green'
+      : i === currentPath.length - 1 ? 'badge-blue'
+      : 'badge-gray';
+    const title =
+      i === 0 ? 'Start'
+      : type === 'ferry' ? 'Ferry crossing'
+      : type === 'bridge' ? 'Bridge/tunnel'
+      : 'Land border';
+
+    return (
+      <button
+        key={i}
+        type="button"
+        onClick={() => centerOn(code)}
+        className={`badge ${base} inline-flex items-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2`}
+        title={title}
+        aria-label={`Center map on ${code} (${title})`}
+      >
+        <span style={{ marginRight: 6 }}>{i === 0 ? 'Start' : i}:</span>
+        {code}
+        {type === 'ferry' && <Ship className="w-3 h-3 ml-1" aria-hidden="true" />}
+        {type === 'bridge' && <Route className="w-3 h-3 ml-1" aria-hidden="true" />}
+      </button>
+    );
+  })}
+</div>
+<div>    {/* Last Entry */}
     {guesses.length > 0 && (
       <div className="flex flex-wrap gap-1 text-xs mt-3 justify-center">
         Last entry:&nbsp;
@@ -2816,40 +3019,7 @@ title="Back to menu (Esc)"
           </span>
         ))}
       </div>
-    )}
-  </div>
-)}
-
-
-
-
-{/* Journey + inline actions */}
-<div className="px-3 pb-2">
-  {/* Row: badges + (Undo, Hint) OR trophy + optimal toggle */}
-  <div className="flex flex-wrap items-center gap-2">
-    <div className="badges flex flex-wrap items-center gap-2">
-      <span className="text-slate-200/90">Journey:</span>
-{currentPath.map((code, i) => {
-  const type = i > 0 ? edgeType(currentPath[i-1], code) : null;
-  return (
-    <span
-      key={i}
-      className={`badge ${
-        code === targetArea ? 'badge-green'
-        : i === currentPath.length - 1 ? 'badge-blue'
-        : 'badge-gray'
-      }`}
-      title={i === 0 ? 'Start' : type === 'ferry' ? 'Ferry crossing' : type === 'bridge' ? 'Bridge/tunnel' : 'Land border'}
-    >
-      <span style={{ marginRight: 6 }}>{i === 0 ? 'Start' : i}:</span>
-      {code}
-      {type === 'ferry' && <Ship className="w-3 h-3 ml-1" aria-label="Ferry" />}
-      {type === 'bridge' && <Route className="w-3 h-3 ml-1" aria-label="Bridge/tunnel" />}
-    </span>
-  );
-})}
-    </div>
-
+    )}</div>
     
 
     {/* Actions on the right */}
@@ -3116,11 +3286,16 @@ function handleDailyChoice(diff) {
 
 const renderMenu = () => (
   <div className="max-w-2xl mx-auto p-8 glass glass--slate text-center mt-8 relative">
+    
     <MapPin className="w-16 h-16 mx-auto text-indigo-600 mb-4" />
     <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Postcode Pursuit</h1>
     <p className="text-slate-600 mb-6">
       Navigate between UK postcode areas by following their geographical connections!
     </p>
+        <div className="absolute top-2 right-2 flex items-center gap-2">
+<AuthButton size="btn-sm" />
+      </div>
+
 
     {/* Three big CTAs */}
     <div className="mx-autoflex flex-col sm:flex-row items-stretch justify-center gap-3 mb-6 mx-auto w-full sm:w-auto ">
@@ -3711,11 +3886,11 @@ if (route === 'stats') {
 }
 if (route === 'achievements') {
   return (
-    
     <AchievementsPage
+      key={statsVersion}                // force re-mount after resets/merges
       onBack={() => navigate('')}
       achievements={achievements}
-      visitedCount={getVisitedCount()}
+      visitedCount={getLifetimeVisitedCount()}   // ← lifetime, cloud-merged
       totalAreas={Object.keys(postcodeAreas).length}
     />
   );
@@ -3723,6 +3898,7 @@ if (route === 'achievements') {
 
 return (
   <>
+
     <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
       {gameState === 'menu' ? renderMenu() : renderGameBoard()}
     </div>

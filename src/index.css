@@ -229,8 +229,6 @@
 
   .btn-menu { background-color: #0400ff; color: white; }
   .btn-menu:hover { background-color: #4338ca; }
-
-
   
   .btn-hollowgreen { background-color: #ffffff; color: green; border: 2px solid green }
   .btn-hollowgreen:hover { background-color: green; color:#ffffff }
@@ -250,6 +248,9 @@
 /* Master (yours, but both states pass) */
 .btn-purple { background-color:#9333ea; color:#fff; border:2px solid #7e22ce; }
 .btn-purple:hover { background-color:#7e22ce; }
+
+.btn-white { background-color:#ffffff; color:#000000; border:2px solid #766e7c83; }
+.btn-white:hover { background-color:#b3b3b3; }
 
 /* Strong, visible focus for all buttons (meets 3:1 vs surroundings) */
 .btn-green:focus-visible,
@@ -453,12 +454,17 @@
 
 @keyframes nudge {
   0%,100% { transform: translateX(0); }
-  20% { transform: translateX(-2px); }
-  40% { transform: translateX(2px); }
-  60% { transform: translateX(-1px); }
-  80% { transform: translateX(1px); }
+  10% { transform: translateX(-50px); }
+  20% { transform: translateX(50px); }
+  30% { transform: translateX(-50px); }
+  40% { transform: translateX(50px); }
+  50% { transform: translateX(-50px); }
+  60% { transform: translateX(50px); }
+  70% { transform: translateX(-50px); }
+  90% { transform: translateX(50px); }
+
 }
-.animate-shake { animation: nudge .8s ease-in-out; }
+.animate-shake { animation: nudge 5s ease-in-out; }
 
 /* Whole-area blue pulse for the current step */
 @keyframes areaPulseBlue {
@@ -480,28 +486,25 @@
 .pp-pulse-wrap {
   position: relative;
 }
-
-
-
 .pp-pulse-wrap::after {
   content: "";
   position: absolute;
   inset: 5px;                 /* outside the input’s border */
-  border-radius: 45px;         /* match your input’s rounded-2xl */
+  border-radius: 90px;         /* match your input’s rounded-2xl */
   box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.45); /* indigo-ish glow */
-  animation: ppPulseShadow 7s ease-in-out infinite;
+  animation: ppPulseShadow 5s ease-in-out infinite;
   pointer-events: none;        /* don’t block clicks */
 }
 
 @keyframes pop { 
-  0% { transform: scale(0.8); opacity: 0 }
-  60% { transform: scale(1.02); opacity: 1 }
-  100% { transform: scale(1); opacity: 1 }
+  0% { transform: scale(0.1); opacity: 0 }
+  60% { transform: scale(0.1); opacity: 1 }
+  100% { transform: scale(0.1); opacity: 1 }
 }
 
 @keyframes ppPulseShadow {
   0%   { box-shadow: 0 0 0 0   rgba(26, 53, 141, 0.45); }
-  70%  { box-shadow: 0 0 0 14px rgba(93, 170, 221, 0.637); }
+  70%  { box-shadow: 0 0 0 5px rgba(93, 170, 221, 0.637); }
   100% { box-shadow: 0 0 0 0   rgb(255, 255, 255); }
 }
 
@@ -1020,6 +1023,6 @@ tile-section div {
   color: #ffffff;
   font-weight: bold;
   padding: 5px;
-  font-size: 25px;
+  font-size: 30px;
   text-align: center;
 }

@@ -158,16 +158,23 @@ function AchCardLocked({ a }) {
   );
 }
 
+function readMeta() {
+  try { return JSON.parse(localStorage.getItem('pp_meta_v1') || '{}'); }
+  catch { return {}; }
+}
 
 export default function AchievementsPage({
   achievements = [],
-  visitedCount = 0,
+  visitedCount: visitedCountProp,
   totalAreas = 0,
   onBack,
 }) {
   const unlockedMap = readAchievementsMap();
+    const meta = React.useMemo(() => readMeta(), []);
   const unlockedIds = new Set(Object.keys(unlockedMap));
-
+const visitedCount =
+    Number.isFinite(visitedCountProp) ? visitedCountProp
+    : (meta.visitedCount ?? Object.keys(meta.visitedAreas || {}).length ?? 0);
   const isHiddenLocked = (a) => !!a.hidden || HIDDEN_BONUS_IDS.has(a.id);
 
   // Split & sort

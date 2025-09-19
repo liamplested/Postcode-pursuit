@@ -215,11 +215,56 @@ export default function useSvgPan(
     [apply]
   );
 
+// NEW: pan so world point (px,py) lands at viewport center
+const panTo = useCallback((point, { duration = 350 } = {}) => {
+  if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') return;
+  const svg = svgRef.current;
+  if (!svg) return;
+
+  const k = s.current.scale;
+
+  // SVG coords under the viewport center (accounts for viewBox, CSS size, etc.)
+  const rect = svg.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top  + rect.height / 2;
+  const { x: U, y: V } = getSVGPoint(cx, cy); // <-- SVG coords (not world)
+
+  // We want: k*px + x = U   and   k*py + y = V
+  const target = {
+    x: U - k * point.x,
+    y: V - k * point.y,
+  };
+
+  if (!duration || duration <= 0) {
+    s.current.x = target.x;
+    s.current.y = target.y;
+    apply();
+    return;
+  }
+
+  // animate
+  const start = { x: s.current.x, y: s.current.y };
+  const ease = (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t);
+  const t0 = performance.now();
+
+  const tick = (now) => {
+    const t = Math.min(1, (now - t0) / duration);
+    const e = ease(t);
+    s.current.x = start.x + (target.x - start.x) * e;
+    s.current.y = start.y + (target.y - start.y) * e;
+    apply();
+    if (t < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}, [apply, getSVGPoint, svgRef]);
+
+
   return {
     reset,
     zoomIn: (factor = 1.25) => zoomTo(s.current.scale * factor),
     zoomOut: (factor = 1.25) => zoomTo(s.current.scale / factor),
     zoomTo,
+    panTo,
     getState: () => ({
       x: s.current.x,
       y: s.current.y,
@@ -227,3 +272,4 @@ export default function useSvgPan(
     }),
   };
 }
+
