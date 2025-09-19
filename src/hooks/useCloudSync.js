@@ -5,7 +5,21 @@ import { db, ts } from '../firebase';
 import { doc, getDoc, setDoc  } from 'firebase/firestore';
 import React from 'react';
 
+const todayUTC = () => new Date().toISOString().slice(0,10);
+const daysBetweenUTC = (a, b) =>
+  Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
 
+function normalizeStreaks(merged) {
+  const out = { ...merged, streaks: { ...(merged.streaks || {}) } };
+  const today = todayUTC();
+  for (const d of DIFFS) {
+    const rec = out.streaks[d];
+    if (rec?.lastWinDate && daysBetweenUTC(rec.lastWinDate, today) >= 2) {
+      out.streaks[d] = { ...rec, count: 0 }; // reset if missed ≥ 1 full day
+    }
+  }
+  return out;
+}
 
 function pruneUndefinedDeep(value) {
   if (value === undefined) return undefined;          // signal to caller to drop
@@ -140,22 +154,34 @@ export default function useCloudSync(getLocalSnapshot, writeLocalSnapshot) {
   React.useEffect(() => { writeSnapRef.current = writeLocalSnapshot; }, [writeLocalSnapshot]);
 
   // merge on sign-in
-  React.useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    (async () => {
-      setSyncing(true);
+React.useEffect(() => {
+  if (!user) return;
+  let cancelled = false;
+  (async () => {
+    setSyncing(true);
+    try {
       const local = getSnapRef.current();
       const cloud = await loadCloud(user.uid);
       if (cancelled) return;
-      const merged = mergeCloudWithLocal(cloud, local);  
-      await saveCloud(user.uid, merged);                  
-      if (cancelled) return;
-      writeSnapRef.current(merged);
-      setSyncing(false);
-    })();
-    return () => { cancelled = true; };
-  }, [user]);
+
+      const merged0 = mergeCloudWithLocal(cloud, local);
+      const merged  = normalizeStreaks(merged0);      // 👈 reset if stale
+
+      // Only write if changed in Firestore
+      if (JSON.stringify(merged) !== JSON.stringify(cloud)) {
+        await saveCloud(user.uid, merged);
+        if (cancelled) return;
+      }
+
+      writeSnapRef.current(merged);                    // keep local in sync
+    } catch (e) {
+      console.error('[cloud merge] failed:', e);
+    } finally {
+      if (!cancelled) setSyncing(false);
+    }
+  })();
+  return () => { cancelled = true; };
+}, [user]);
 
   // queued save
   const queueSave = React.useCallback(() => {

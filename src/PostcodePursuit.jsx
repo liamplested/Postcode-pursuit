@@ -467,8 +467,6 @@ function MobileCodeScroller({
 
 
 
-
-
 function Modal({ open, onClose, title, children }) {
   if (!open) return null;
   return createPortal(
@@ -954,6 +952,25 @@ setFreeChoice(null);
   requestAnimationFrame(() => focusStartAndTarget(start, target));
 }
 
+React.useEffect(() => {
+  const today = new Date().toISOString().slice(0,10);
+  const diffs = ['easy','normal','hard','master'];
+  let changed = false;
+  for (const d of diffs) {
+    const key = `pp_daily_streak_v2_${d}`;
+    const rec = JSON.parse(localStorage.getItem(key) || 'null');
+    if (rec?.lastWinDate) {
+      const diff = Math.round((Date.parse(today + 'T00:00:00Z') - Date.parse(rec.lastWinDate + 'T00:00:00Z'))/86400000);
+      if (diff >= 2 && (rec.count || 0) !== 0) {
+        localStorage.setItem(key, JSON.stringify({ ...rec, count: 0 }));
+        changed = true;
+      }
+    }
+  }
+  // if signed in, push immediately
+  if (changed && user) onPersist?.(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []); // run once
 
 useEffect(() => {
   if (!dailyMode || !dailyDate || !dailyDifficulty) return;
@@ -2797,7 +2814,7 @@ const renderControls = () => (
       }}
     >
 <li className="mt-2">
-  <AuthButton size="btn-sm" />
+  <AuthButton variant="label" />
 </li>
       <li>
         <button
@@ -3341,8 +3358,8 @@ const renderMenu = () => (
       <thead>
         <tr className="text-slate-600">
           <th className="text-left py-2">Difficulty</th>
-          <th className="text-left py-2"></th>
-          <th className="text-right py-2">Streak</th>
+          <th className="text-left py-2">Streak</th>
+          <th className="text-right py-2"></th>
         </tr>
       </thead>
       <tbody>
@@ -3352,10 +3369,7 @@ const renderMenu = () => (
               {DIFF_LABELS[d] ?? d}
             </td>
             <td>
-              <span aria-hidden="true">{renderStreak(streaks[d])}</span>
-            </td>
-            <td className="py-2 text-right">
-              {streaks?.[d] > 0 ? (
+                            {streaks?.[d] > 0 ? (
                 <span className="inline-flex items-center gap-2">
                   
                   
@@ -3364,6 +3378,10 @@ const renderMenu = () => (
               ) : (
                 <span className="text-slate-500">—</span>
               )}
+             
+            </td>
+            <td className="py-2 text-right">
+ <span aria-hidden="true">{renderStreak(streaks[d])}</span>
             </td>
           </tr>
         ))}

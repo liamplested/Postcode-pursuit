@@ -12,8 +12,6 @@ const getJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || '
 const HISTORY_KEY = 'pp_history_v2';
 const VISITED_KEY = 'pp_visited_areas_v1';
 
-
-
 function buildHistoryIfMissing(h) {
   if (h && h.totalGames != null && h.totalWins != null) return h;
   const db = readJSON(HISTORY_KEY, { games: [] });
