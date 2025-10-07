@@ -1,96 +1,59 @@
-import React, { useCallback } from 'react';
+// src/components/AuthButton.jsx
+import React, { useCallback, useState } from 'react';
 import useAuth from '../hooks/useAuth';
-import { LogIn, LogOut, UserCircle } from 'lucide-react';
+import { LogIn, LogOut, Mail } from 'lucide-react';
+import EmailAuthDialog from './EmailAuthDialog';
 
-export default function AuthButton({
-  variant = 'pill',          // 'pill' | 'avatar' | 'label' (label = small text only)
-  className = '',
-  sizeSignedOut = 'btn-sm',  // unchanged for logged-out CTA
-  nameBreakpoint = 'md',     // when to show the name (md, lg, xl)
-}) {
-  const { user, loading, signIn, signOut } = useAuth();
+export default function AuthButton() {
+  const { user, loading, isSigningIn, signInGoogle, signOut } = useAuth();
+  const [showEmail, setShowEmail] = useState(false);
 
-  const handleSignIn = useCallback(async () => {
-    try { await signIn(); } catch { /* silent */ }
-  }, [signIn]);
-
-  const handleSignOut = useCallback(async () => {
-    try { await signOut(); } catch { /* silent */ }
-  }, [signOut]);
+  const handleGoogle = useCallback(async () => { await signInGoogle(); }, [signInGoogle]);
 
   if (loading) return null;
 
-  if (!user) {
+  if (user) {
     return (
-      <button
-        type="button"
-        onClick={handleSignIn}
-        className={`btn btn-green ${sizeSignedOut} inline-flex items-center gap-2 ${className}`}
-        title="Sign in with Google"
-        aria-label="Sign in with Google"
-      >
-        <LogIn className="w-4 h-4" aria-hidden="true" />
-        <span>Sign in</span>
+      <button type="button" onClick={signOut} className="btn btn-white btn-xs h-8 px-2 inline-flex items-center gap-1" title="Sign out">
+        {user.photoURL && <img src={user.photoURL} alt="" className="w-4 h-4 rounded-full" />}
+        <span className="hidden md:inline max-w-[9rem] truncate text-xs">{user.displayName || 'Signed in'}</span>
+        <LogOut className="w-3 h-3" />
       </button>
     );
   }
 
-  const name = user.displayName || 'Signed in';
-  const Name = () => (
-    <span
-      className={`hidden ${nameBreakpoint}:inline max-w-[8rem] truncate align-middle text-xs`}
-    >
-      {name}
-    </span>
-  );
-
-  // ultra-compact avatar-only chip
-  if (variant === 'avatar') {
-    return (
-      <button
-        type="button"
-        onClick={handleSignOut}
-        className={`btn btn-white btn-xs p-1 rounded-full inline-flex items-center ${className}`}
-        title={`Sign out (${name})`}
-        aria-label={`Sign out (${name})`}
-      >
-        {user.photoURL
-          ? <img src={user.photoURL} alt="" className="w-5 h-5 rounded-full" />
-          : <UserCircle className="w-5 h-5" aria-hidden="true" />}
-      </button>
-    );
-  }
-
-  // tiny text label + chevron (no avatar)
-  if (variant === 'label') {
-    return (
-      <button
-        type="button"
-        onClick={handleSignOut}
-        className={`btn btn-white btn-2xs px-2 py-1 inline-flex items-center gap-1 ${className}`}
-        title={`Sign out (${name})`}
-        aria-label={`Sign out (${name})`}
-      >
-        <Name />
-        <LogOut className="w-3 h-3" aria-hidden="true" />
-      </button>
-    );
-  }
-
-  // default: pill with small avatar + small name + small icon
   return (
-    <button
-      type="button"
-      onClick={handleSignOut}
-      className={`btn btn-white btn-xs h-8 px-2 inline-flex items-center gap-1 ${className}`}
-      title={`Sign out (${name})`}
-      aria-label={`Sign out (${name})`}
-    >
-      {user.photoURL
-        ? <img src={user.photoURL} alt="" className="w-4 h-4 rounded-full" />
-        : <UserCircle className="w-4 h-4" aria-hidden="true" />}
-      <Name />
-      <LogOut className="w-3 h-3" aria-hidden="true" />
-    </button>
+    <>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleGoogle}
+          disabled={isSigningIn}
+          className={`btn btn-green btn-sm inline-flex items-center gap-2 ${isSigningIn ? 'opacity-60 pointer-events-none' : ''}`}
+          title="Sign in with Google"
+        >
+          <LogIn className="w-4 h-4" />
+          <span>Sign in with Google</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowEmail(true)}
+          className="btn btn-white btn-sm inline-flex items-center gap-2"
+          title="Sign in with Email"
+        >
+          <Mail className="w-4 h-4" />
+          <span>Sign in with Email</span>
+        </button>
+      </div>
+
+      {showEmail && (
+        <div className="fixed inset-0 bg-black/30 grid place-items-center z-50" onClick={() => setShowEmail(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <EmailAuthDialog onClose={() => setShowEmail(false)} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

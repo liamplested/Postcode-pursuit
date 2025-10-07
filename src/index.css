@@ -1026,3 +1026,32 @@ tile-section div {
   font-size: 30px;
   text-align: center;
 }
+
+@media (max-width: 768px) {
+  .grid-container { row-gap: 6px; }
+  .grid-container .text-center { margin-top: 2px; margin-bottom: 2px; }
+}
+
+/* Map block heights: desktop default + mobile-friendly */
+.pp-map-slot > .pp-map-inner > .glass,
+.pp-map-slot > .glass {
+  /* desktop/tablet: up to your current size */
+  height: clamp(340px, 50vh, 600px);
+}
+
+/* Phones (portrait and small screens) — slightly shorter to reduce scrolling */
+@media (max-width: 768px) {
+  .pp-map-slot > .pp-map-inner > .glass,
+  .pp-map-slot > .glass {
+    /* use svh to avoid mobile browser chrome jumps */
+    height: clamp(300px, 44svh, 560px);
+  }
+}
+
+/* Very small devices */
+@media (max-width: 380px) {
+  .pp-map-slot > .pp-map-inner > .glass,
+  .pp-map-slot > .glass {
+    height: clamp(280px, 42svh, 520px);
+  }
+}

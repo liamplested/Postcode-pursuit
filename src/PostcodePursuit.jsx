@@ -210,6 +210,44 @@ export function getCoverageMeta(ferries = ferryLinks, bridges = bridgeLinks) {
   };
 }
 
+const EMPTY_BUCKET = () => ({
+  games: 0, under: 0, equal: 0, over: 0,
+  sumDelta: 0,            // sum of (moves - par)
+  bestDelta: null,        // most negative delta (best against par), null until first game
+});
+
+export function normalizeParStats(ps) {
+  const byDiff = {};
+  for (const d of DIFFS) byDiff[d] = { ...EMPTY_BUCKET(), ...(ps?.byDiff?.[d] || {}) };
+  const totals = { ...EMPTY_BUCKET(), ...(ps?.totals || {}) };
+  return { byDiff, totals };
+}
+
+// Merge a + b (sum counts & sums; take best (min) delta)
+export function mergeParStats(a, b) {
+  const A = normalizeParStats(a), B = normalizeParStats(b);
+  const out = normalizeParStats({});
+  for (const d of DIFFS) {
+    const x = A.byDiff[d], y = B.byDiff[d], o = out.byDiff[d];
+    o.games     = x.games + y.games;
+    o.under     = x.under + y.under;
+    o.equal     = x.equal + y.equal;
+    o.over      = x.over + y.over;
+    o.sumDelta  = x.sumDelta + y.sumDelta;
+    o.bestDelta = [x.bestDelta, y.bestDelta].filter(v => v !== null && v !== undefined)
+                  .reduce((m, v) => (m === null ? v : Math.min(m, v)), null);
+  }
+  const t = out.totals, ta = A.totals, tb = B.totals;
+  t.games     = ta.games + tb.games;
+  t.under     = ta.under + tb.under;
+  t.equal     = ta.equal + tb.equal;
+  t.over      = ta.over + tb.over;
+  t.sumDelta  = ta.sumDelta + tb.sumDelta;
+  t.bestDelta = [ta.bestDelta, tb.bestDelta].filter(v => v !== null && v !== undefined)
+                .reduce((m, v) => (m === null ? v : Math.min(m, v)), null);
+  return out;
+}
+
 // ---- visited areas ----
 export function readVisited() {
   try { return new Set(JSON.parse(localStorage.getItem(VISITED_KEY) || '[]')); }
@@ -663,7 +701,7 @@ const parLine = (dailyMode && Number.isFinite(dailyPar))
 
 
 const parFor = (optimalMoves, diff) =>
-  Math.max(1, Math.ceil(optimalMoves * (diff === 'master' ? 1.0 : 1.5)));
+  Math.max(1, Math.ceil(optimalMoves * (diff === 'master' ? 1.5 : 1.5)));
 
 useEffect(() => {
   if (!burgerOpen) return;
@@ -761,7 +799,7 @@ const navigate = useCallback((r) => {
   window.location.hash = r ? `#/${r}` : '#/';
 }, []);
 
-const [setDailyStreak] = useState(() => loadDailyStreak()?.count || 0);
+const [, setDailyStreak] = useState(() => loadDailyStreak()?.count || 0);
 
 useEffect(() => {
   const s = loadDailyStreak();
@@ -1000,6 +1038,7 @@ useEffect(() => {
   hintsUsed, optimalPath, elapsedMs, gameWon,
   showOptimal, victoryOpen, dailyPar
 ]);
+
 
 
 // ------------------- HELPERS, EFFECTS, CALLBACKS --------------------------
@@ -2502,9 +2541,9 @@ const renderMap = () => (
   <div 
     className="glass mx-auto relative" 
     style={{ 
-      width: '100%', 
+      width: '98%', 
       maxWidth: '600px', 
-      height: '600px', 
+      height: 'clamp(320px, 50vh, 600px)',
       overflow: 'hidden', 
       borderRadius: 16 
     }}
@@ -2882,9 +2921,9 @@ const renderControls = () => (
   document.body
 )}
 
-      <div className="absolute inset-0 grid place-items-center">
-        {renderMap()}
-      </div>
+<div className="pp-map-slot my-2">
+  {renderMap()}
+</div>
 
 
 {/* Middle: BIG centered selection box with inline submit arrow */}
