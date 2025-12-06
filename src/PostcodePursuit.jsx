@@ -591,7 +591,7 @@ const [consentResolved, setConsentResolved] = useState(
 const canClickAreas = difficulty === 'easy';
 
 // --- Soft Par helpers (Daily only) ---
-const parForOptimal = (optimalMoves) => Math.max(1, Math.ceil(optimalMoves * 1.5));
+const parForOptimal = (optimalMoves) => Math.max(1, Math.ceil(optimalMoves * 1.25));
 const parDelta = (moves, par) => moves - par; // negative = under par
 function golfLabel(delta) {
   if (delta <= -3) return 'albatross';
@@ -910,42 +910,38 @@ function startOrResumeDaily(difficulty) {
   if (difficulty === 'master') { setShowOutlines(false); setShowLabels(false); setMasterMode(true);  }
   setDifficulty(difficulty);
 
-  // Resume if today’s snapshot exists for this difficulty
-
-  // Fresh daily
-  const { start, target, path } =
-    Daily.generateTodayDaily(difficulty, postcodeAreas, getNeighbors, boundsByDifficulty);
-
-
+  // --- 1) Try to RESUME today’s daily if a snapshot exists ---
   if (snap && snap.date === today) {
+    const resolvedOptimal =
+      Array.isArray(snap.optimalPath) && snap.optimalPath.length
+        ? snap.optimalPath
+        : Daily.findShortestPathDet(snap.startArea, snap.targetArea, getNeighbors);
 
-        const resolvedOptimal =
-          Array.isArray(snap.optimalPath) && snap.optimalPath.length
-            ? snap.optimalPath
-            : Daily.findShortestPathDet(snap.startArea, snap.targetArea, getNeighbors);
+    setOptimalPath(resolvedOptimal);
+    setDailyPar(
+      Number.isFinite(snap.par)
+        ? snap.par
+        : parForOptimal(Math.max(0, resolvedOptimal.length - 1))
+    );
 
-            setOptimalPath(resolvedOptimal);
-            setDailyPar(
-             Number.isFinite(snap.par) ? snap.par : parForOptimal(Math.max(0, resolvedOptimal.length - 1))
-            );
-
-    addVisited([start]);
-    recordLifetimeMove({ nextCode: snap.startArea }, { onPersist });
     setDailyMode(true);
     setDailyDate(snap.date);
     setDailyDifficulty(difficulty);
-            requestAnimationFrame(() => focusStartAndTarget(snap.startArea, snap.targetArea));
     setHintsUsed(snap.hintsUsed ?? 0);
     setStartArea(snap.startArea);
     setTargetArea(snap.targetArea);
-    setCurrentPath(Array.isArray(snap.currentPath) && snap.currentPath.length ? snap.currentPath : [snap.startArea]);
+    setCurrentPath(
+      Array.isArray(snap.currentPath) && snap.currentPath.length
+        ? snap.currentPath
+        : [snap.startArea]
+    );
     setGuesses(Array.isArray(snap.guesses) ? snap.guesses : []);
     setShowOptimal(!!snap.showOptimal);
     setElapsedMs(snap.elapsedMs || 0);
 
     if (snap.gameWon) {
       setGameWon(true);
-      setVictoryOpen(true);     // show Share immediately
+      setVictoryOpen(true);          // show Share immediately
       setGameState('gameWon');
       gameStartRef.current = null;
     } else {
@@ -953,13 +949,25 @@ function startOrResumeDaily(difficulty) {
       setVictoryOpen(!!snap.victoryOpen);
       setGameState('playing');
       gameStartRef.current = performance.now() - (snap.elapsedMs || 0);
-      requestAnimationFrame(() => focusStartAndTarget(snap.startArea, snap.targetArea));
     }
-    return;
+
+    requestAnimationFrame(() =>
+      focusStartAndTarget(snap.startArea, snap.targetArea)
+    );
+    return; // ✅ we’re done – no fresh daily needed
   }
 
-setDailyChoice(null);
-setFreeChoice(null);
+  // --- 2) Otherwise, start a FRESH daily for today ---
+  setDailyChoice(null);
+  setFreeChoice(null);
+
+  const { start, target, path } =
+    Daily.generateTodayDaily(
+      difficulty,
+      postcodeAreas,
+      getNeighbors,
+      boundsByDifficulty
+    );
 
   setDailyMode(true);
   setDailyDate(today);
@@ -967,6 +975,7 @@ setFreeChoice(null);
   setHintsUsed(0);
   setShowHints(false);
   abandonIfActive('daily_start');
+
   setStartArea(start);
   setTargetArea(target);
   setCurrentPath([start]);
@@ -980,11 +989,13 @@ setFreeChoice(null);
   setVictoryOpen(false);
   setShowOptimal(false);
 
+  // ✅ log coverage + lifetime move for the *fresh* daily only
   addVisited([start]);
-  recordLifetimeMove({ nextCode: snap.startArea }, { onPersist });
+  recordLifetimeMove({ nextCode: start }, { onPersist });
 
   requestAnimationFrame(() => focusStartAndTarget(start, target));
 }
+
 
 React.useEffect(() => {
   const today = new Date().toISOString().slice(0,10);
@@ -4113,6 +4124,9 @@ return (
 
 
             <button onClick={() => setVictoryOpen(false)} className="btn btn-primary glass">Close</button>
+            <div>    <a className="btn btn-neutral mt-2" href="https://forms.gle/Hf6fgRzBSnnZCqYJ6">
+      Send Feedback
+    </a></div>
           </div>
         </div>
       </div>,
