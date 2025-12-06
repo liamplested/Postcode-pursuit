@@ -63,12 +63,11 @@ export default function App() {
 
 return (
   <BrowserRouter>
-<div className="min-h-screen bg-slate-100 text-slate-800">
+<div className="app-root">
   <ConsentManager measurementId={MEASUREMENT_ID} policyUrl="/privacy" />
   <RouteChangeTracker />
 
-      {/* hard cap the whole app at 600px */}
-  <div className="mx-auto w-full max-w-[600px] px-4">
+  <div className="app-shell">
     <Routes>
       <Route path="/" element={<PostcodePursuit />} />
       <Route path="/settings" element={<Settings />} />

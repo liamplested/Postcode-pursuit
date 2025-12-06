@@ -12,16 +12,39 @@ export default function AuthButton() {
 
   if (loading) return null;
 
+  // ✅ Logged-in: make this a compact chip instead of a full "btn"
   if (user) {
     return (
-      <button type="button" onClick={signOut} className="btn btn-white btn-xs h-8 px-2 inline-flex items-center gap-1" title="Sign out">
-        {user.photoURL && <img src={user.photoURL} alt="" className="w-4 h-4 rounded-full" />}
-        <span className="hidden md:inline max-w-[9rem] truncate text-xs">{user.displayName || 'Signed in'}</span>
-        <LogOut className="w-3 h-3" />
+      <button
+        type="button"
+        onClick={signOut}
+        title="Sign out"
+        className="
+        glass glass--black
+          inline-flex items-center gap-1 rounded-full
+          
+          px-2 py-1
+          text-[11px] leading-tight
+          shadow-sm hover:bg-white transition
+          max-w-[9rem]
+        "
+      >
+        {user.photoURL && (
+          <img
+            src={user.photoURL}
+            alt=""
+            className="!w-6 !h-6 rounded-full object-cover"
+          />
+        )}<br/>
+        <span className="truncate">
+          {user.displayName || 'Signed in'}
+        </span>
+        <LogOut className="w-3 h-3 shrink-0" />
       </button>
     );
   }
 
+  // Logged-out state unchanged
   return (
     <>
       <div className="flex items-center gap-2">
@@ -29,7 +52,9 @@ export default function AuthButton() {
           type="button"
           onClick={handleGoogle}
           disabled={isSigningIn}
-          className={`btn btn-green btn-sm inline-flex items-center gap-2 ${isSigningIn ? 'opacity-60 pointer-events-none' : ''}`}
+          className={`btn btn-green btn-sm inline-flex items-center gap-2 ${
+            isSigningIn ? 'opacity-60 pointer-events-none' : ''
+          }`}
           title="Sign in with Google"
         >
           <LogIn className="w-4 h-4" />
@@ -48,7 +73,10 @@ export default function AuthButton() {
       </div>
 
       {showEmail && (
-        <div className="fixed inset-0 bg-black/30 grid place-items-center z-50" onClick={() => setShowEmail(false)}>
+        <div
+          className="fixed inset-0 bg-black/30 grid place-items-center z-50"
+          onClick={() => setShowEmail(false)}
+        >
           <div onClick={(e) => e.stopPropagation()}>
             <EmailAuthDialog onClose={() => setShowEmail(false)} />
           </div>

@@ -1,5 +1,3 @@
-
-
 import useAuth from './useAuth';
 import { db, ts } from '../firebase';
 import { doc, getDoc, setDoc  } from 'firebase/firestore';
@@ -108,7 +106,26 @@ function mergeCloudWithLocal(cloud, local) {
   }
 
   // history: concat + de-dupe by a stable key
-  const keyOf = (g) => JSON.stringify([g.start, g.target, g.date, g.won, g.moves]);
+  const keyOf = (g) => {
+    if (!g) return 'null';
+
+    // 1️⃣ Prefer explicit unique id if present (new records)
+    if (g.id) return g.id;
+
+    // 2️⃣ Fallback for legacy records without an id
+    const start = g.startArea ?? g.start ?? '';
+    const end   = g.endArea   ?? g.target ?? '';
+    const date  = g.dateISO   ?? g.date   ?? '';
+    const mode  = g.mode      ?? '';
+    const diff  = g.difficulty ?? '';
+    const moves = typeof g.moves === 'number'
+      ? g.moves
+      : (g.guesses ?? 0);
+    const won   = !!g.won;
+
+    return JSON.stringify([start, end, date, mode, diff, won, moves]);
+  };
+
   const seen = new Set();
   const games = [...(cloud.history?.games || []), ...(local.history?.games || [])]
     .filter((g) => {
@@ -154,34 +171,34 @@ export default function useCloudSync(getLocalSnapshot, writeLocalSnapshot) {
   React.useEffect(() => { writeSnapRef.current = writeLocalSnapshot; }, [writeLocalSnapshot]);
 
   // merge on sign-in
-React.useEffect(() => {
-  if (!user) return;
-  let cancelled = false;
-  (async () => {
-    setSyncing(true);
-    try {
-      const local = getSnapRef.current();
-      const cloud = await loadCloud(user.uid);
-      if (cancelled) return;
-
-      const merged0 = mergeCloudWithLocal(cloud, local);
-      const merged  = normalizeStreaks(merged0);      // 👈 reset if stale
-
-      // Only write if changed in Firestore
-      if (JSON.stringify(merged) !== JSON.stringify(cloud)) {
-        await saveCloud(user.uid, merged);
+  React.useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      setSyncing(true);
+      try {
+        const local = getSnapRef.current();
+        const cloud = await loadCloud(user.uid);
         if (cancelled) return;
-      }
 
-      writeSnapRef.current(merged);                    // keep local in sync
-    } catch (e) {
-      console.error('[cloud merge] failed:', e);
-    } finally {
-      if (!cancelled) setSyncing(false);
-    }
-  })();
-  return () => { cancelled = true; };
-}, [user]);
+        const merged0 = mergeCloudWithLocal(cloud, local);
+        const merged  = normalizeStreaks(merged0);      // 👈 reset if stale
+
+        // Only write if changed in Firestore
+        if (JSON.stringify(merged) !== JSON.stringify(cloud)) {
+          await saveCloud(user.uid, merged);
+          if (cancelled) return;
+        }
+
+        writeSnapRef.current(merged);                    // keep local in sync
+      } catch (e) {
+        console.error('[cloud merge] failed:', e);
+      } finally {
+        if (!cancelled) setSyncing(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
 
   // queued save
   const queueSave = React.useCallback(() => {
@@ -202,4 +219,3 @@ React.useEffect(() => {
 
   return { user, syncing, queueSave, saveNow };
 }
-

@@ -742,10 +742,6 @@ useEffect(() => { setBurgerOpen(false); }, [gameState, showAbout, showTutorial, 
 
 // --- Daily streak (UTC) ---
 
-
-
-
-
 const readStreakRecord = React.useCallback((diff) => {
   try { return JSON.parse(localStorage.getItem(STREAK_KEY_V2(diff)) || 'null'); }
   catch { return null; }
@@ -2483,6 +2479,14 @@ const resetView = useCallback(() => {
   });
 }, [startArea, targetArea, focusStartAndTarget, fitToContent]);
 
+React.useEffect(() => {
+  // Only auto-focus for daily games
+  if (!dailyMode) return;
+  if (!startArea || !targetArea) return;
+
+  // Use the same logic as the "Reset view" button
+  resetView();
+}, [dailyMode, startArea, targetArea, resetView]);
 
 
 
@@ -2538,14 +2542,14 @@ const resetView = useCallback(() => {
 
   // ---------- Map ----------
 const renderMap = () => (
-  <div 
-    className="glass mx-auto relative" 
-    style={{ 
-      width: '98%', 
-      maxWidth: '600px', 
-      height: 'clamp(320px, 50vh, 600px)',
-      overflow: 'hidden', 
-      borderRadius: 16 
+  <div
+    className="glass mx-auto relative"
+    style={{
+      width: '99%',
+      maxWidth: '900px',                     // matches the bigger shell
+      height: 'clamp(340px, 70vh, 800px)',   // taller on desktop, still OK on mobile
+      overflow: 'hidden',
+      borderRadius: 16,
     }}
   >
     {/* Zoom overlay, top-left */}
@@ -3320,7 +3324,7 @@ useEffect(() => {
 // ---------- GameBoard ----------
 
 const renderGameBoard = () => (
-  <div className="mx-auto w-full max-w-[600px] px-4">
+  <div className="pp-board">
     {renderControls()}
   </div>
 );

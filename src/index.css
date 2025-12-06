@@ -1055,3 +1055,47 @@ tile-section div {
     height: clamp(280px, 42svh, 520px);
   }
 }
+
+
+/* Overall page background + centering */
+.app-root {
+  min-height: 100vh;
+  background: #04395e;          /* or whatever dark blue you’re using */
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Main game “card” width */
+.app-shell {
+  width: 100%;
+  padding: 1rem;
+  max-width: 480px;             /* phones + small tablets */
+}
+
+/* Tablet */
+@media (min-width: 768px) {
+  .app-shell {
+    max-width: 640px;
+  }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .app-shell {
+    max-width: 900px;           /* makes the game noticeably bigger */
+  }
+}
+
+/* Big monitors */
+@media (min-width: 1440px) {
+  .app-shell {
+    max-width: 1000px;
+  }
+}
+
+.pp-board {
+  width: 100%;
+  margin: 0 auto;
+}
