@@ -13,7 +13,7 @@ function initGA(id) {
   // Load GA script
   const s = document.createElement('script');
   s.async = true;
-  s.src = `https://www.googletagmanager.com/gtag/js?id=${id}`;
+  s.src = `https://www.googletagmanager.com/gtag/js?id=G-9N7KBCD3G3`;
   document.head.appendChild(s);
 
   // Bootstrap gtag
@@ -27,7 +27,7 @@ function initGA(id) {
     allow_google_signals: false,
   });
 }
-const MEASUREMENT_ID = "G-P2WQF106TG";
+const MEASUREMENT_ID = "G-9N7KBCD3G3";
 
 function RouteChangeTracker() {
   const location = useLocation();
