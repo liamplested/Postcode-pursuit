@@ -1227,8 +1227,11 @@ const relax   = lerp(1.00,  1.40, Math.pow(r, 0.70)); // gentle zoom-out for big
 const containerRef = React.useRef(null);
 
 
-  function parInfo({ moves, optimal, parMoves }) {
-  const par = Number.isFinite(parMoves) ? parMoves : Math.max(1, Math.ceil(optimal * 1.5));
+function parInfo({ moves, optimal, parMoves }) {
+  const par = Number.isFinite(parMoves)
+    ? parMoves
+    : Math.max(1, Math.ceil(optimal * 1.5));
+
   const delta = moves - par;
 
   const label =
@@ -1243,6 +1246,13 @@ const containerRef = React.useRef(null);
   return { par, delta, label };
 }
 
+// Emoji for each step type in the final route
+const MOVE_ICON = {
+  land:   '🟩',
+  bridge: '🟦',
+  ferry:  '🟪',
+};
+
 const buildShareText = () => {
   const guessesCount = Math.max(0, currentPath.length - 1);
   const optimal = Math.max(0, (optimalPath?.length || 1) - 1);
@@ -1254,13 +1264,29 @@ const buildShareText = () => {
     ? `Postcode Pursuit — Daily ${dailyDate} (${dailyDifficulty} difficulty)`
     : `Postcode Pursuit`;
 
-  let text = `${header}\n`;
-  if (!dailyMode) text += `${startArea} → ${targetArea}\n`;
+  // Build a tile row from the *actual path* (start → target)
+  let routeTiles = '';
+  if (currentPath && currentPath.length > 1) {
+    for (let i = 1; i < currentPath.length; i += 1) {
+      const prev = currentPath[i - 1];
+      const curr = currentPath[i];
+      const t = edgeType(prev, curr);          // 'land' | 'bridge' | 'ferry'
+      routeTiles += MOVE_ICON[t] ?? '⬜';
+    }
+  }
 
-  text += `Moves: ${guessesCount}`;
-  if (optimal) text += ` (optimal ${optimal})\n`;
-  text += `Par ${par} : ${label}\n`;
-  if (dailyMode) text += ` · Hints used: ${hintsUsed}/${MAX_DAILY_HINTS}`;
+  let text = `${header}\n`;
+
+  // Always show the route headline
+  if (startArea && targetArea) {
+    text += `${startArea} → ${targetArea}\n`;
+  }
+
+  // Summary line
+  text += `${guessesCount} moves`;
+  if (optimal) text += ` (optimal ${optimal})`;
+  if (Number.isFinite(par)) text += ` · Par ${par} — ${label}`;
+  if (dailyMode) text += ` · Hints: ${hintsUsed}/${MAX_DAILY_HINTS}`;
   if (time) text += ` · Time: ${time}`;
 
   if (dailyMode && dailyDifficulty) {
@@ -1268,9 +1294,16 @@ const buildShareText = () => {
     if (streak > 0) text += ` · ${DIFF_LABELS[dailyDifficulty]} streak: ${streak}`;
   }
 
+  // Tile row + legend
+  if (routeTiles) {
+    text += `\nRoute: ${routeTiles}\n`;
+    text += `Key: 🟩 land · 🟦 bridge/tunnel · 🟪 ferry`;
+  }
+
   text += `\npostcode-pursuit.co.uk`;
   return text;
 };
+
 
 
 
