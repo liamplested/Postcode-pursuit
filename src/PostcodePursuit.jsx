@@ -3421,7 +3421,7 @@ const renderMenu = () => (
 
 
 
- <button className="lrgbtn btn-neutral" onClick={() => setShowAbout(true)}><InfoIcon className="w-4 h-4" />About</button>
+ <button className="lrgbtn btn-neutral" onClick={() => setShowAbout(true)}><InfoIcon className="w-4 h-4" />About  / Feedback</button>
     </div>
 {/* Daily streaks summary */}
 {Object.values(streaks).some(n => (Number(n) || 0) > 0) && (
@@ -3891,7 +3891,7 @@ const renderMenu = () => (
   <p className="mb-0">
     Feedback is welcome!
     <br />
-    <a className="btn btn-neutral mt-2" href="mailto:plestedl@gmail.com?subject=Postcode%20Pursuit%20Feedback">
+    <a className="btn btn-neutral mt-2" href="https://forms.gle/Hf6fgRzBSnnZCqYJ6">
       Send Feedback
     </a>
   </p>
