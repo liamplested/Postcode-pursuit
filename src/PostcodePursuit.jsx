@@ -3902,7 +3902,7 @@ const renderMenu = () => (
   <p className="mb-0">
     Feedback is welcome!
     <br />
-    <a className="btn btn-neutral mt-2" href="https://forms.gle/Hf6fgRzBSnnZCqYJ6">
+    <a className="btn btn-primary mt-2" href="https://forms.gle/Hf6fgRzBSnnZCqYJ6">
       Send Feedback
     </a>
   </p>
@@ -4124,7 +4124,7 @@ return (
 
 
             <button onClick={() => setVictoryOpen(false)} className="btn btn-primary glass">Close</button>
-            <div>    <a className="btn btn-neutral mt-2" href="https://forms.gle/Hf6fgRzBSnnZCqYJ6">
+            <div>    <a className="btn btn-primary mt-2" href="https://forms.gle/Hf6fgRzBSnnZCqYJ6">
       Send Feedback
     </a></div>
           </div>
