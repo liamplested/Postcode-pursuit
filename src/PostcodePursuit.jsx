@@ -1804,7 +1804,7 @@ const focusStartAndTarget = React.useCallback((startCode, targetCode, pad = 0.2)
 
 
 const COLORS = {
-  baseFill:    '#66b860', // slate-200
+  baseFill:    '#52974eff', // slate-200
   baseStroke:  '#454f5eff', // slate-400
   startFill:   '#60abb8ff', startStroke: '#1e40af',
   currentFill: '#1d4ed8', currentStroke:'#ffffffff',
@@ -2587,7 +2587,7 @@ React.useEffect(() => {
   // ---------- Map ----------
 const renderMap = () => (
   <div
-    className="glass mx-auto relative"
+    className="glass glass--white mx-auto relative"
     style={{
       width: '99%',
       maxWidth: '900px',                     // matches the bigger shell
@@ -3620,7 +3620,7 @@ const renderMenu = () => (
 
             <div className="mt-3 flex gap-2 justify-center">
               <button
-                className="button-shiny green w-full max-w-[20rem]"
+                className="button-shiny blue w-full max-w-[20rem]"
                 onClick={() => {
                   startOrResumeDaily(dailyChoice);
                   setShowDailyChooser(false);
@@ -3633,7 +3633,7 @@ const renderMenu = () => (
                   fontSize: '2rem', // Smaller text
                 }}
               >
-                Play game
+                Play Game ▶️
               </button>
             </div>
           </div>
@@ -3781,11 +3781,11 @@ const renderMenu = () => (
   <div className="inner">
     <div className="mt-4 p-3 rounded-xl bg-white/75 text-slate-900">
       <div className="font-semibold">{freeChoice && DIFF_LABELS[freeChoice]}</div>
-      <p className="text-sm mt-1">{freeChoice && DIFF_DESCRIPTIONS[freeChoice]}</p>
+      <p className="text-sm mt-1 font-bold">{freeChoice && DIFF_DESCRIPTIONS[freeChoice]}</p>
 
       <div className="mt-3 flex gap-2 justify-center">
         <button
-          className="button-shiny green w-full max-w-[20rem]"
+          className="button-shiny blue w-full max-w-[20rem]"
           onClick={() => {
             startWithDifficulty(freeChoice);
             setShowFreePlayChooser(false);
@@ -3798,7 +3798,7 @@ const renderMenu = () => (
                   fontSize: '2rem', // Smaller text
                 }}
         >
-          Play game
+          Play Game
         </button>
       </div>
     </div>

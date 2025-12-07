@@ -283,7 +283,7 @@ onSkip(); // or onComplete()
 
 
         <div className="text-xs text-slate-500 hidden sm:block">
-          Tip: You can replay this later.
+          Tip: You can replay this tutorial later, by clicking the "How to Play" button on the Home Screen, or in the game menu.
         </div>
       </div>
       

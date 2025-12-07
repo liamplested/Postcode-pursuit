@@ -57,7 +57,9 @@
             padding: 0 16px;
             flex: 1;
         }
-
+a:visited {
+  color: inherit;
+}
 /* --------------------------------------
    Base: fonts + global styles
 --------------------------------------- */
@@ -337,7 +339,7 @@
 
 /* Neutral/white glass */
 .glass--white {
-  --glass-bg: rgba(255, 255, 255, 0.5);
+  --glass-bg: rgb(230, 230, 230,0.7);
   --glass-fallback-bg: rgba(255, 255, 255, 0.85);
   --glass-border: rgba(255, 255, 255, 0.50);
   --glass-fg: #0f172a;
@@ -988,6 +990,14 @@ tile-section div {
 
 .button-shiny.green {
 	background: rgba(0, 151, 0, 1);
+	
+	background-repeat: no-repeat;
+	background-size: 110% 120%;
+	background-position: center center;
+}
+
+.button-shiny.blue {
+	background: rgb(0, 63, 180);
 	
 	background-repeat: no-repeat;
 	background-size: 110% 120%;

@@ -25,7 +25,7 @@ export default function Settings() {
           <button className="btn btn-primary" onClick={openConsent}>
             Manage cookies
           </button>
-          <a className="btn btn-neutral" href="/privacy">
+          <a className="btn btn-purple" href="/privacy">
             Privacy Policy
           </a>
 <Link to="/" className="btn btn-primary">

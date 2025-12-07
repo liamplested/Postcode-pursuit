@@ -101,7 +101,7 @@ export default function PrivacyPolicy() {
       </p>
 
       <div className="not-prose mt-6 flex gap-3">
-        <Link to="/settings" className="btn btn-white">Settings</Link>
+        <Link to="/settings" className="btn btn-purple">Settings</Link>
         <Link to="/" className="btn btn-primary">Return to Menu</Link>
       </div>
     </div>
