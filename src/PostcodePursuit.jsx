@@ -17,6 +17,10 @@ import * as Daily from './dailyManager';
   unlockStreaksFor
 } from './achievements.js';
 
+import ToastShell from './components/toast/ToastShell';
+import AchievementToast from './components/toast/AchievementToast';
+import ErrorToast from './components/toast/ErrorToast';
+import TipToast from './components/toast/TipToast';
 
 import './firebase'
 import useCloudSync from './hooks/useCloudSync';
@@ -564,6 +568,7 @@ const [gameWon, setGameWon] = useState(false);
 const [optimalPath, setOptimalPath] = useState([]);
 const [achievementToasts, setAchievementToasts] = useState([]);
 const [showHints, setShowHints] = useState(false);
+const [journeyExpanded, setJourneyExpanded] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
 
 const [showOutlines, setShowOutlines] = useState(true);
@@ -638,6 +643,7 @@ const contentRef = useRef(null);
 const didAutoFitRef = useRef(false);
 const hasFitRef = useRef(false);
 const controlsRef = useRef(null);
+const journeyRailRef = useRef(null);
 
 
 //Toggle for Master Mode
@@ -1729,38 +1735,6 @@ addGameToHistory(event, { onPersist: () => onPersist(true)});
 ]);
 
 
-
-function Toast({ open, onClose, action, children }) {
-  if (!open) return null;
-  return createPortal(
-    <div
-      role="status"
-      aria-live="polite"
-      style={{
-        position: 'fixed',
-        left: '50%',
-        bottom: 16,
-        transform: 'translateX(-50%)',
-        zIndex: 2147483000,
-      }}
-    >
-      <div className="glass glass- rounded-xl shadow-lg px-3 py-2 flex items-start gap-2 max-w-[92vw] w-[520px]">
-        <div className="text-sm flex-1">{children}</div>
-        {action && (
-          <button type="button" className="btn btn-success" onClick={action.onClick}>
-            {action.label}
-          </button>
-        )}
-        <button type="button" className="btn btn-neutral" onClick={onClose} aria-label="Dismiss">
-          Dismiss
-        </button>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-
   // ---------- STATE CLASSES (Option A) ----------
 const focusStartAndTarget = React.useCallback((startCode, targetCode, pad = 0.2) => {
   const A = getCenter(startCode);
@@ -1803,13 +1777,27 @@ const focusStartAndTarget = React.useCallback((startCode, targetCode, pad = 0.2)
 
 
 
-const COLORS = {
+/* const COLORS = {
   baseFill:    '#52974eff', // slate-200
   baseStroke:  '#454f5eff', // slate-400
   startFill:   '#60abb8ff', startStroke: '#1e40af',
   currentFill: '#1d4ed8', currentStroke:'#ffffffff',
   visitedFill: '#bae6fd', visitedStroke:'#424c5cff',
   targetFill:  '#FDE68A', targetStroke:'#b45309',
+}; */
+
+
+const COLORS = {
+  baseFill:    '#94A3B8',
+  baseStroke:  '#475569',
+  startFill:   '#2A9D8F',
+  startStroke: '#0F766E',
+  currentFill: '#2563EB',
+  currentStroke:'#FFFFFF',
+  visitedFill: '#00fa3eff',
+  visitedStroke:'#64748B',
+  targetFill:  '#F59E0B',
+  targetStroke:'#92400E',
 };
 
   const currentArea = currentPath[currentPath.length - 1] || null;
@@ -1968,6 +1956,7 @@ function computeStats(){
     bestTime: wins.length ? Math.min(...wins.map(x=>x.durationMs)) : null,
     avgVsPar: avgVsPar(g), // overall
     byDiff,
+    winCount: wins.length,
   };
 }
 
@@ -2587,11 +2576,10 @@ React.useEffect(() => {
   // ---------- Map ----------
 const renderMap = () => (
   <div
-    className="glass glass--white mx-auto relative"
+    className="pp-map-canvas glass glass--map mx-auto relative"
     style={{
       width: '99%',
-      maxWidth: '900px',                     // matches the bigger shell
-      height: 'clamp(340px, 70vh, 800px)',   // taller on desktop, still OK on mobile
+      maxWidth: '900px',
       overflow: 'hidden',
       borderRadius: 16,
     }}
@@ -2814,114 +2802,136 @@ const renderMap = () => (
 
 
   
+
   // ---------- Controls / UI ----------
 
+useEffect(() => {
+  setJourneyExpanded(false);
+}, [startArea, targetArea, dailyDate, gameState]);
+
+useEffect(() => {
+  const el = journeyRailRef.current;
+  if (!el) return;
+  try {
+    el.scrollTo({ left: el.scrollWidth, behavior: 'smooth' });
+  } catch {
+    el.scrollLeft = el.scrollWidth;
+  }
+}, [currentPath, journeyExpanded]);
+
+const getVisibleJourneyItems = useCallback(() => {
+  const path = currentPath || [];
+  const len = path.length;
+
+  if (journeyExpanded || len <= 6) {
+    return path.map((code, i) => ({ type: 'step', code, index: i }));
+  }
+
+  const items = [];
+  items.push({ type: 'step', code: path[0], index: 0 });
+  items.push({ type: 'ellipsis' });
+
+  const tailStart = Math.max(1, len - 5);
+  for (let i = tailStart; i < len; i++) {
+    items.push({ type: 'step', code: path[i], index: i });
+  }
+
+  return items;
+}, [currentPath, journeyExpanded]);
+
 const renderControls = () => (
-  <div ref={controlsRef} className="top-0 z-20 w-full">
+  <div ref={controlsRef} className="pp-controls-layer top-0 z-20 w-full">
     <div
-      className="glass mx-auto relative"   // <- ensure positioned ancestor
-      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'auto', borderRadius: 10, maxHeight: '1000px',   WebkitOverflowScrolling: 'touch',
-    paddingBottom: 'env(safe-area-inset-bottom, 12px)'}}
+      className="pp-top-overlay glass glass--slate mx-auto relative"
+      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'visible', borderRadius: 10, WebkitOverflowScrolling: 'touch' }}
     >
+      <div className="grid-container">
+        <div>
+          <button
+            type="button"
+            className="btn btn-primary px-3 py-1 text-sm"
+            onClick={backToMenu}
+            aria-label="Back to menu"
+            title="Back to menu (Esc)"
+          >
+            ←
+          </button>
+        </div>
 
-<div className="grid-container">
-  <div>
-    <button
-      type="button"
-      className="btn btn-primary px-3 py-1 text-sm"
-      onClick={backToMenu}
-      aria-label="Back to menu"
-      title="Back to menu (Esc)"
-    >
-      ←
-    </button>
-  </div>
+        <div className="text-center leading-tight text-[clamp(11px,2.6vw,13px)]">
+          <span className="whitespace-nowrap">
+            Travel from <span className="text-indigo-200">{startArea || '—'}</span> to{' '}
+            <span className="text-indigo-200">{targetArea || '—'}</span>
+            {dailyMode && Number.isFinite(dailyPar) && (
+              <span className="badge badge-gray ml-2 inline-flex items-center !text-[11px] !leading-tight !py-0.5 !px-2 align-middle">
+                <span className="mr-1 align-[-0.1em]">⛳</span>
+                Par {dailyPar}
+              </span>
+            )}
+          </span>
+        </div>
 
-  {/* force small, tight centre text */}
-  <div className="text-center leading-tight text-[clamp(11px,2.6vw,13px)]">
-    <span className="whitespace-nowrap">
-      Travel from <span className="text-indigo-200">{startArea || '—'}</span> to{' '}
-      <span className="text-indigo-200">
-        {targetArea || '—'}
-        {dailyMode && Number.isFinite(dailyPar) && (
-          <div><span className="badge badge-gray ml-2 inline-flex items-center !text-[11px] !leading-tight !py-0.5 !px-2 align-middle">
-            <span className="mr-1 align-[-0.1em]">⛳</span>
-            Par {dailyPar}
-          </span></div>
-        )}
-      </span>
-    </span>
-  </div>
+        <div>
+          <button
+            ref={burgerButtonRef}
+            type="button"
+            className="btn btn-primary inline-flex w-auto items-center gap-2"
+            aria-haspopup="menu"
+            aria-expanded={burgerOpen ? 'true' : 'false'}
+            aria-label="Open menu"
+            onClick={() => setBurgerOpen(o => !o)}
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
 
-  <div>
-    <button
-      ref={burgerButtonRef}
-      type="button"
-      className="btn btn-primary inline-flex w-auto items-center gap-2"
-      aria-haspopup="menu"
-      aria-expanded={burgerOpen ? 'true' : 'false'}
-      aria-label="Open menu"
-      onClick={() => setBurgerOpen(o => !o)}
-    >
-      <Menu className="w-4 h-4" />
-    </button>
-  </div>
-</div>
-
-
-      {/* Burger menu portal (slide-in, overlays everything) */}
-{burgerOpen && createPortal(
+      {burgerOpen && createPortal(
   <div
     id="pp-burger-menu"
     role="menu"
     aria-orientation="vertical"
-        className={[
-          "glass rounded-xl shadow-lg p-2",
-          "transition duration-150 ease-out",
-          "transform will-change-transform will-change-opacity",
-          menuAnimClass
-          ].join(" ")}
+    className={[
+      'glass rounded-xl shadow-lg p-2',
+      'transition duration-150 ease-out',
+      'transform will-change-transform will-change-opacity',
+      menuAnimClass,
+    ].join(' ')}
     style={{
       position: 'fixed',
-      top: burgerPos.top ,
+      top: burgerPos.top,
       left: burgerPos.left + 60,
-      width: Math.min(burgerPos.width * 0.8, 180), // Smaller width
+      width: Math.min(burgerPos.width * 0.8, 180),
       zIndex: 2147483000,
-      willChange: 'transform, opacity'
+      willChange: 'transform, opacity',
     }}
   >
     <ul
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 10, // Reduced gap
+        gap: 10,
         margin: 8,
         padding: 0,
-        listStyle: 'none'
+        listStyle: 'none',
       }}
     >
-<li className="mt-2">
-  <AuthButton variant="label" />
-</li>
+      <li className="mt-2">
+        <AuthButton variant="label" />
+      </li>
       <li>
         <button
           role="menuitem"
           onClick={dailyMode ? undefined : () => { fireReroll?.('new_game_button'); startNewGame(); setBurgerOpen(false); }}
           disabled={dailyMode}
           aria-disabled={dailyMode}
-          className={`btn btn-primary`}
-          style={{ 
-            display: 'block', 
-            width: '90%', 
-            padding: '0.3rem 1rem', // Smaller padding
-            fontSize: '0.8rem', // Smaller text
-          }}
+          className="btn btn-primary"
+          style={{ display: 'block', width: '90%', padding: '0.3rem 1rem', fontSize: '0.8rem' }}
           title={dailyMode ? 'Unavailable during Daily Challenge' : 'Start a new random game'}
         >
           New Game
         </button>
       </li>
-
       <li>
         <button
           role="menuitem"
@@ -2936,307 +2946,346 @@ const renderControls = () => (
           disabled={dailyMode}
           aria-disabled={dailyMode}
           className="btn btn-warn"
-          style={{ 
-            display: 'block', 
-            width: '90%', 
-            padding: '0.3rem 0.1rem', 
-            fontSize: '0.8rem',
-          }}
+          style={{ display: 'block', width: '90%', padding: '0.3rem 0.1rem', fontSize: '0.8rem' }}
           title={dailyMode ? 'Unavailable during Daily Challenge' : 'Restart this round'}
         >
           Restart
         </button>
       </li>
-
       <li>
         <button
           role="menuitem"
           onClick={() => { localStorage.removeItem(ONBOARDING_KEY); setShowTutorial(true); setBurgerOpen(false); }}
           className="btn btn-neutral"
-          style={{ 
-            display: 'block', 
-            width: '90%', 
-            padding: '0.3rem 0.1rem', 
-            fontSize: '0.8rem',
-          }}
+          style={{ display: 'block', width: '90%', padding: '0.3rem 0.1rem', fontSize: '0.8rem' }}
           title="Replay the tutorial"
         >
           How to Play
         </button>
       </li>
+
+      <li>
+        <a
+          role="menuitem"
+          href="/settings"
+          onClick={() => setBurgerOpen(false)}
+          className="btn btn-neutral"
+          style={{
+            display: 'block',
+            width: '90%',
+            padding: '0.3rem 0.1rem',
+            fontSize: '0.8rem',
+            textDecoration: 'none',
+            textAlign: 'center',
+          }}
+          title="Open settings"
+        >
+          Settings
+        </a>
+      </li>
+
+      <li>
+        <a
+          role="menuitem"
+          href="/privacy"
+          onClick={() => setBurgerOpen(false)}
+          className="btn btn-neutral"
+          style={{
+            display: 'block',
+            width: '90%',
+            padding: '0.3rem 0.1rem',
+            fontSize: '0.8rem',
+            textDecoration: 'none',
+            textAlign: 'center',
+          }}
+          title="Open privacy information"
+        >
+          Privacy
+        </a>
+      </li>
     </ul>
   </div>,
   document.body
 )}
-
-<div className="pp-map-slot my-2">
-  {renderMap()}
-</div>
-
-
-{/* Middle: BIG centered selection box with inline submit arrow */}
-
-
-{!gameWon && (
-  <div className="px-3 pb-3 pt-2">
-    {isTouch ? (
-      // 🚀 Mobile: persistent horizontal scroller (no keyboard)
-<MobileCodeScroller
-  current={currentPath[currentPath.length - 1]}
-  onPick={(code) => {
-    makeGuess(code);
-    requestAnimationFrame(() => {
-      zoomToArea(code, {
-        containerEl: containerRef.current,
-        getWorldCenter,
-        getPanZoom: () => ({ scale: 1, tx: 0, ty: 0 }),
-        setPanZoom: ({ scale, tx, ty }) => reset({ scale, x: tx, y: ty })
-      });
-    });
-  }}
-  getNeighbors={getNeighbors}
-  currentPath={currentPath}
-  allCodes={allPostcodeOptions}
-/>
-    ) : (
-      // 🖥️ Desktop/Laptop: keep your existing input UI
-      <div className="w-full">
-        <div
-          style={{ position: 'relative', textAlign: 'center', width: 'fit-content', margin: '0 auto' }}
-          className={shouldPulse ? 'pp-pulse-wrap' : undefined}
-        >
-          <input
-            ref={inputRef}
-            list="pp-codelist"
-            type="text"
-            className="rounded-2xl border border-slate-300 text-center shadow-md focus:ring-4 focus:ring-indigo-400 focus:outline-none"
-            onInput={handleSelectorInput}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleInputSubmit(e.currentTarget); }}
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
-            inputMode="text"
-            enterKeyHint="go"
-            aria-label="Select or enter a postcode"
-            style={{
-              width: 200,
-              height: 20,
-              fontSize: 28,
-              padding: '16px 64px 16px 20px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-              display: 'inline-block',
-              margin: '0 auto',
-              borderRadius: 45
-            }}
-          />
-          <datalist id="pp-codelist">
-            {allPostcodeOptions.map(code => <option key={code} value={code} />)}
-          </datalist>
-          <button
-            type="button"
-            onClick={() => inputRef.current && handleInputSubmit(inputRef.current)}
-            className="btn btn-hollowgreen rounded-xl shadow"
-            aria-label="Submit postcode"
-            style={{
-              position: 'absolute',
-              top: '48%',
-              right: 8,
-              transform: 'translateY(-50%)',
-              width: 35,
-              height: 35,
-              padding: 0,
-              lineHeight: 1,
-              display: 'grid',
-              placeItems: 'center',
-              zIndex: 1,
-              borderRadius: 45
-              
-            }}
-          >
-            <ArrowRight className="w-6 h-6" />
-          </button>
-        </div>
-      </div>
-    )}
-
-
-  </div>
-)}
-
-
-
-
-{/* Journey + inline actions */}
-<div className="px-3 pb-2">
-  {/* Row: badges + (Undo, Hint) OR trophy + optimal toggle */}
-  <div className="flex flex-wrap items-center gap-2">
-    <div className="badges flex flex-wrap items-center gap-2">
-  <span className="text-slate-200/90">Journey:</span>
-  {currentPath.map((code, i) => {
-    const type = i > 0 ? edgeType(currentPath[i - 1], code) : null;
-    const base =
-      code === targetArea ? 'badge-green'
-      : i === currentPath.length - 1 ? 'badge-blue'
-      : 'badge-gray';
-    const title =
-      i === 0 ? 'Start'
-      : type === 'ferry' ? 'Ferry crossing'
-      : type === 'bridge' ? 'Bridge/tunnel'
-      : 'Land border';
-
-    return (
-      <button
-        key={i}
-        type="button"
-        onClick={() => centerOn(code)}
-        className={`badge ${base} inline-flex items-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2`}
-        title={title}
-        aria-label={`Center map on ${code} (${title})`}
-      >
-        <span style={{ marginRight: 6 }}>{i === 0 ? 'Start' : i}:</span>
-        {code}
-        {type === 'ferry' && <Ship className="w-3 h-3 ml-1" aria-hidden="true" />}
-        {type === 'bridge' && <Route className="w-3 h-3 ml-1" aria-hidden="true" />}
-      </button>
-    );
-  })}
-</div>
-<div>    {/* Last Entry */}
-    {guesses.length > 0 && (
-      <div className="flex flex-wrap gap-1 text-xs mt-3 justify-center">
-        Last entry:&nbsp;
-        {guesses.slice(-1).map((g, i) => (
-          <span
-            key={i}
-            className={`px-2 py-1 rounded ${
-              g.valid && !g.alreadyVisited
-                ? 'bg-emerald-100 text-emerald-800'
-                : g.alreadyVisited
-                  ? 'bg-amber-100 text-amber-800'
-                  : 'bg-rose-100 text-rose-800'
-            }`}
-          >
-            {g.area}
-            {g.valid && !g.alreadyVisited && g.viaFerry  ? ' (ferry)'  : ''}
-            {g.valid && !g.alreadyVisited && g.viaBridge ? ' (bridge)' : ''}
-          </span>
-        ))}
-      </div>
-    )}</div>
-    
-
-    {/* Actions on the right */}
-    <div className="ml-auto flex items-center gap-2">
-      {!gameWon && !masterMode && (
-        <button
-          onClick={undoLastMove}
-          disabled={currentPath.length <= 1}
-          aria-disabled={currentPath.length <= 1}
-          title="Undo last move (Ctrl/Cmd+Z)"
-          className={`btn btn-neutral ${currentPath.length <= 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-          Undo
-        </button>
-      )}
-
-
-{!gameWon && (
-  <button
-    className="btn btn-warn"
-    onClick={() => setGiveUpOpen(true)}
-    title="End this game as a loss"
-  >
-    Give up
-  </button>
-)}
-
-{giveUpOpen && createPortal(
-  <div
-    style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(0,0,0,0.6)',
-      zIndex: 2147483647,              // same as victory modal
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'flex-start',
-      paddingTop: '10vh',
-      padding: '10vh 16px 16px'
-    }}
-    onClick={() => setGiveUpOpen(false)} // click backdrop to close
-  >
-    <div
-      className="glass p-5 rounded-2xl shadow-xl text-center"
-      style={{
-        maxWidth: 520,
-        width: '92vw',
-        maxHeight: '80vh',
-        overflowY: 'auto'
-      }}
-      onClick={(e) => e.stopPropagation()} // keep clicks inside
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="giveup-title"
-    >
-      <h2 id="giveup-title" className="text-xl font-semibold mb-2">Give up?</h2>
-      <p className="mb-4">
-        This will record a <b>loss</b> for this {dailyMode ? 'Daily' : 'Free Play'} game.<br/>
-        Current route: <b>{Math.max(0, currentPath.length - 1)}</b> moves
-        {optimalPath.length > 0 && <> · Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
-      </p>
-      <div className="flex gap-2 justify-center">
-        <button onClick={giveUpNow} className="btn btn-warn glass">Give up</button>
-        <button onClick={() => setGiveUpOpen(false)} className="btn btn-neutral glass">Cancel</button>
-      </div>
     </div>
-  </div>,
-  document.body
-)}
 
+    <div className="pp-controls-spacer" aria-hidden="true" />
 
+    <div
+      className="pp-bottom-overlay glass glass--slate mx-auto"
+      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'auto', borderRadius: 10, maxHeight: '1000px', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
+    >
       {!gameWon && (
-        <button
-          className="btn btn-success"
-          onClick={toggleHints}
-          disabled={dailyMode && hintsUsed >= MAX_DAILY_HINTS && !showHints}
-          title={dailyMode ? `Hints left: ${Math.max(0, MAX_DAILY_HINTS - hintsUsed)}` : 'Show possible neighbours'}
-        >
-          {dailyMode
-            ? (showHints ? 'Hide hints' : `Hint (${Math.max(0, MAX_DAILY_HINTS - hintsUsed)} left)`)
-            : (showHints ? 'Hide hints' : 'Hint')}
-        </button>
+        <div className="px-3 pb-3 pt-2">
+          {isTouch ? (
+            <MobileCodeScroller
+              current={currentPath[currentPath.length - 1]}
+              onPick={(code) => {
+                makeGuess(code);
+                requestAnimationFrame(() => {
+                  zoomToArea(code, {
+                    containerEl: containerRef.current,
+                    getWorldCenter,
+                    getPanZoom: () => ({ scale: 1, tx: 0, ty: 0 }),
+                    setPanZoom: ({ scale, tx, ty }) => reset({ scale, x: tx, y: ty }),
+                  });
+                });
+              }}
+              getNeighbors={getNeighbors}
+              currentPath={currentPath}
+              allCodes={allPostcodeOptions}
+            />
+          ) : (
+            <div className="w-full">
+              <div
+                style={{ position: 'relative', textAlign: 'center', width: 'fit-content', margin: '0 auto' }}
+                className={shouldPulse ? 'pp-pulse-wrap' : undefined}
+              >
+                <input
+                  ref={inputRef}
+                  list="pp-codelist"
+                  type="text"
+                  className="rounded-2xl border border-slate-300 text-center shadow-md focus:ring-4 focus:ring-indigo-400 focus:outline-none"
+                  onInput={handleSelectorInput}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleInputSubmit(e.currentTarget); }}
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  inputMode="text"
+                  enterKeyHint="go"
+                  aria-label="Select or enter a postcode"
+                  style={{
+                    width: 200,
+                    height: 20,
+                    fontSize: 28,
+                    padding: '16px 64px 16px 20px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    display: 'inline-block',
+                    margin: '0 auto',
+                    borderRadius: 45,
+                  }}
+                />
+                <datalist id="pp-codelist">
+                  {allPostcodeOptions.map(code => <option key={code} value={code} />)}
+                </datalist>
+                <button
+                  type="button"
+                  onClick={() => inputRef.current && handleInputSubmit(inputRef.current)}
+                  className="btn btn-hollowgreen rounded-xl shadow"
+                  aria-label="Submit postcode"
+                  style={{
+                    position: 'absolute',
+                    top: '48%',
+                    right: 8,
+                    transform: 'translateY(-50%)',
+                    width: 35,
+                    height: 35,
+                    padding: 0,
+                    lineHeight: 1,
+                    display: 'grid',
+                    placeItems: 'center',
+                    zIndex: 1,
+                    borderRadius: 45,
+                  }}
+                >
+                  <ArrowRight className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      {gameWon && (
-        <>
-          {/* Trophy chip */}
-          <div className="inline-flex items-center gap-2 px-2 py-1 rounded border border-emerald-300 bg-emerald-100 text-emerald-900">
-            <Trophy className="w-4 h-4" />
-            <span>
-              Completed in <b>{Math.max(0, currentPath.length - 1)}</b>
-              {optimalPath.length > 0 && <> · Optimal <b>{Math.max(0, optimalPath.length - 1)}</b></>}
-            </span>
+      <div className="px-3 pb-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            ref={journeyRailRef}
+            className="journey-rail flex items-center gap-2 overflow-x-auto whitespace-nowrap"
+          >
+            <span className="text-slate-200/90 shrink-0">Journey:</span>
+            {getVisibleJourneyItems().map((item, railIdx) => {
+              if (item.type === 'ellipsis') {
+                return (
+                  <button
+                    key={`ellipsis-${railIdx}`}
+                    type="button"
+                    onClick={() => setJourneyExpanded(true)}
+                    className="badge badge-gray shrink-0"
+                    title="Show full journey"
+                    aria-label="Show full journey"
+                  >
+                    ...
+                  </button>
+                );
+              }
+
+              const { code, index: i } = item;
+              const type = i > 0 ? edgeType(currentPath[i - 1], code) : null;
+              const base =
+                code === targetArea ? 'badge-green' :
+                i === currentPath.length - 1 ? 'badge-blue' :
+                code === startArea ? 'badge-gray' :
+                type === 'ferry' ? 'badge-blue' :
+                type === 'bridge' ? 'badge-purple' :
+                'badge-gray';
+              const title =
+                i === 0 ? 'Start area' :
+                i === currentPath.length - 1 ? 'Current area' :
+                type === 'ferry' ? 'Reached by ferry' :
+                type === 'bridge' ? 'Reached by bridge/tunnel' :
+                'Land border';
+
+              return (
+                <button
+                  key={`${code}-${i}`}
+                  type="button"
+                  onClick={() => centerOn(code)}
+                  className={`badge ${base} inline-flex items-center shrink-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2`}
+                  title={title}
+                  aria-label={`Center map on ${code} (${title})`}
+                >
+                  <span style={{ marginRight: 6 }}>
+                    {i === 0 ? 'Start' : i === currentPath.length - 1 ? 'Current' : i}
+                  </span>
+                  {code}
+                  {type === 'ferry' && <Ship className="w-3 h-3 ml-1" aria-hidden="true" />}
+                  {type === 'bridge' && <Route className="w-3 h-3 ml-1" aria-hidden="true" />}
+                </button>
+              );
+            })}
+
+            {journeyExpanded && currentPath.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setJourneyExpanded(false)}
+                className="badge badge-gray shrink-0"
+                title="Collapse journey"
+                aria-label="Collapse journey"
+              >
+                Collapse
+              </button>
+            )}
           </div>
 
-          {/* Toggle optimal route */}
-          <button
-            onClick={() => setShowOptimal(v => !v)}
-            className="btn btn-purple"
-          >
-            {showOptimal ? 'Hide optimal route' : 'Show optimal route'}
-          </button>
-        </>
-      )}
-    </div>
-  </div>
+          <div>
+            {guesses.length > 0 && (
+              <div className="flex flex-wrap gap-1 text-xs mt-3 justify-center">
+                Last entry:&nbsp;
+                {guesses.slice(-1).map((g, i) => (
+                  <span
+                    key={i}
+                    className={`px-2 py-1 rounded ${
+                      g.valid && !g.alreadyVisited
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : g.alreadyVisited
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-rose-100 text-rose-800'
+                    }`}
+                  >
+                    {g.area}
+                    {g.valid && !g.alreadyVisited && g.viaFerry ? ' (ferry)' : ''}
+                    {g.valid && !g.alreadyVisited && g.viaBridge ? ' (bridge)' : ''}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
 
-  {/* Hint panel (appears under the row when toggled, only while playing) */}
-  {showHints && !gameWon && currentPath.length > 0 && (
-    <div className="mt-3">
-      <div className="badges flex flex-wrap items-center gap-2">
-        <span className="text-slate-600 mr-1">Available connections:</span>
+          <div className="ml-auto flex items-center gap-2">
+            {!gameWon && !masterMode && (
+              <button
+                onClick={undoLastMove}
+                disabled={currentPath.length <= 1}
+                aria-disabled={currentPath.length <= 1}
+                title="Undo last move (Ctrl/Cmd+Z)"
+                className={`btn btn-neutral ${currentPath.length <= 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                Undo
+              </button>
+            )}
 
+            {!gameWon && (
+              <button className="btn btn-warn" onClick={() => setGiveUpOpen(true)} title="End this game as a loss">
+                Give up
+              </button>
+            )}
+
+            {giveUpOpen && createPortal(
+              <div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(0,0,0,0.6)',
+                  zIndex: 2147483647,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'flex-start',
+                  paddingTop: '10vh',
+                  padding: '10vh 16px 16px',
+                }}
+                onClick={() => setGiveUpOpen(false)}
+              >
+                <div
+                  className="glass p-5 rounded-2xl shadow-xl text-center"
+                  style={{ maxWidth: 520, width: '92vw', maxHeight: '80vh', overflowY: 'auto' }}
+                  onClick={(e) => e.stopPropagation()}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="giveup-title"
+                >
+                  <h2 id="giveup-title" className="text-xl font-semibold mb-2">Give up?</h2>
+                  <p className="mb-4">
+                    This will record a <b>loss</b> for this {dailyMode ? 'Daily' : 'Free Play'} game.<br />
+                    Current route: <b>{Math.max(0, currentPath.length - 1)}</b> moves
+                    {optimalPath.length > 0 && <> · Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
+                  </p>
+                  <div className="flex gap-2 justify-center">
+                    <button onClick={giveUpNow} className="btn btn-warn glass">Give up</button>
+                    <button onClick={() => setGiveUpOpen(false)} className="btn btn-neutral glass">Cancel</button>
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
+
+            {!gameWon && (
+              <button
+                className="btn btn-success"
+                onClick={toggleHints}
+                disabled={dailyMode && hintsUsed >= MAX_DAILY_HINTS && !showHints}
+                title={dailyMode ? `Hints left: ${Math.max(0, MAX_DAILY_HINTS - hintsUsed)}` : 'Show possible neighbours'}
+              >
+                {dailyMode
+                  ? `Hints (${Math.max(0, MAX_DAILY_HINTS - hintsUsed)} left)`
+                  : 'Hints'}
+              </button>
+            )}
+
+            {gameWon && (
+              <>
+                <div className="inline-flex items-center gap-2 px-2 py-1 rounded border border-emerald-300 bg-emerald-100 text-emerald-900">
+                  <Trophy className="w-4 h-4" />
+                  <span>
+                    Completed in <b>{Math.max(0, currentPath.length - 1)}</b>
+                    {optimalPath.length > 0 && <> · Optimal <b>{Math.max(0, optimalPath.length - 1)}</b></>}
+                  </span>
+                </div>
+
+                <button onClick={() => setShowOptimal(v => !v)} className="btn btn-purple">
+                  {showOptimal ? 'Hide optimal route' : 'Show optimal route'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <Modal
+        open={showHints && !gameWon && currentPath.length > 0}
+        onClose={() => setShowHints(false)}
+        title="Available connections"
+      >
         {(() => {
           const current = currentPath[currentPath.length - 1];
           const options = getNeighbors(current)
@@ -3248,89 +3297,101 @@ const renderControls = () => (
             return <span className="badge badge-fail">No unvisited neighbours</span>;
           }
 
-          return options.map(({ n, d }, idx) => {
-            const best = idx === 0;
-            const className = best
-              ? "badge badge-blue hover:brightness-95"
-              : "badge badge-gray hover:brightness-95";
-            return (
-              <button
-                key={n}
-                type="button"
-                className={className}
-                onClick={() => makeGuess(n)}
-                title={Number.isFinite(d) ? `~${d} steps from target` : "No path"}
-                aria-label={Number.isFinite(d) ? `${n}, about ${d} steps from target` : `${n}, no path`}
-              >
-                {n}
-              </button>
-            );
-          });
+          return (
+            <div className="badges flex flex-wrap items-center gap-2">
+              {options.map(({ n, d }, idx) => {
+                const best = idx === 0;
+                const className = best ? 'badge badge-blue hover:brightness-95' : 'badge badge-gray hover:brightness-95';
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    className={className}
+                    onClick={() => {
+                      makeGuess(n);
+                      setShowHints(false);
+                    }}
+                    title={Number.isFinite(d) ? `~${d} steps from target` : 'No path'}
+                    aria-label={Number.isFinite(d) ? `${n}, about ${d} steps from target` : `${n}, no path`}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+          );
         })()}
+      </Modal>
 
-        <button type="button" className="btn btn-success" onClick={() => setShowHints(false)} title="Hide hints">
-          Hide
-        </button>
-      </div>
-    </div>
-  )}
+      {gameWon && showOptimal && optimalPath?.length > 0 && (
+        <div className="mt-3">
+          <div className="text-sm font-semibold mb-1">Optimal route:</div>
+          <div className="badges flex flex-wrap items-center gap-2">
+            {optimalPath.map((code, i) => (
+              <span key={i} className="badge badge-green">
+                <span style={{ marginRight: 6 }}>{i}:</span>
+                {code}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
-  {/* Optimal route badges (after completion, only when toggled on) */}
-  {gameWon && showOptimal && optimalPath?.length > 0 && (
-    <div className="mt-3">
-      <div className="text-sm font-semibold mb-1">Optimal route:</div>
-      <div className="badges flex flex-wrap items-center gap-2">
-        {optimalPath.map((code, i) => (
-          <span key={i} className="badge badge-green">
-            <span style={{ marginRight: 6 }}>{i}:</span>{code}
-          </span>
-        ))}
-      </div>
-    </div>
-  )}
-</div>
-
-
-
-      {/* Toast */}
-      <Toast
+      <ToastShell
         open={showNudge && !masterMode && !gameWon}
         onClose={dismissNudge}
-        action={{ label: 'Open tutorial', onClick: () => { setShowTutorial(true); dismissNudge(); } }}
+        width={360}
       >
-        You are in the <b>glowing Postcode area</b>. Enter a neighbouring postcode like <b>{exampleNeighbor}</b> and press <b>Enter</b>. If you're still unsure, try the tutorial.
-      </Toast>
+        <TipToast
+          title="Tip"
+          eyebrow="For newer players"
+          onClose={dismissNudge}
+          action={{
+            label: 'Open tutorial',
+            onClick: () => {
+              setShowTutorial(true);
+              dismissNudge();
+            }
+          }}
+        >
+          You are in the <b>glowing postcode area</b>. Enter a neighbouring postcode like <b>{exampleNeighbor}</b> and press <b>Enter</b>. If you're still unsure, try the tutorial.
+        </TipToast>
+      </ToastShell>
 
-<Toast open={!!errorToast} onClose={() => setErrorToast('')}>
-  {errorToast}
-</Toast>
+      <ToastShell
+        open={!!errorToast}
+        onClose={() => setErrorToast('')}
+        width={420}
+      >
+        <ErrorToast
+          message={errorToast}
+          onClose={() => setErrorToast('')}
+        />
+      </ToastShell>
 
-{achievementToasts[0] && (
-  <Toast
-    open
-    onClose={() => setAchievementToasts(q => q.slice(1))} // pop the head -> next shows
-  >
-    <div className="flex items-center gap-2">
-      <div><Trophy className="w-6 h-6 shrink-0" aria-hidden="true" /><b>Achievement unlocked</b> </div>
-      <span className="text-xl" aria-hidden>{achievementToasts[0].icon}</span>
-      <div>
-        <div className="font-semibold">{achievementToasts[0].name}</div>
-        <div className="text-xs opacity-80">{achievementToasts[0].description}</div>
-      </div>
-    </div>
-  </Toast>
-)}
-
-
+      {achievementToasts[0] && (
+        <ToastShell
+          open
+          onClose={() => setAchievementToasts(q => q.slice(1))}
+          width={420}
+        >
+          <AchievementToast
+            icon={achievementToasts[0].icon}
+            title={achievementToasts[0].name}
+            description={achievementToasts[0].description}
+            onClose={() => setAchievementToasts(q => q.slice(1))}
+          />
+        </ToastShell>
+      )}
+      
     </div>
   </div>
 );
 
-
 useEffect(() => {
   const overlayOpen =
     showDailyChooser || showFreePlayChooser ||
-    victoryOpen || giveUpOpen || showAbout ||
+    victoryOpen || giveUpOpen || showAbout || showHints ||
     leaveConfirmOpen || showTutorial;
 
   const shouldLock = overlayOpen
@@ -3359,7 +3420,7 @@ useEffect(() => {
 }, [
   gameState,
   showDailyChooser, showFreePlayChooser,
-  victoryOpen, giveUpOpen, showAbout, leaveConfirmOpen, showTutorial
+  victoryOpen, giveUpOpen, showAbout, showHints, leaveConfirmOpen, showTutorial
 ]);
 
 
@@ -3369,6 +3430,7 @@ useEffect(() => {
 
 const renderGameBoard = () => (
   <div className="pp-board">
+    {renderMap()}
     {renderControls()}
   </div>
 );
@@ -4004,7 +4066,7 @@ if (route === 'achievements') {
 return (
   <>
 
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
+    <div className="min-h-[100dvh] w-full overflow-hidden bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
       {gameState === 'menu' ? renderMenu() : renderGameBoard()}
     </div>
 

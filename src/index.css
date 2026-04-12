@@ -70,14 +70,13 @@ a:visited {
 
   body {
     background-color: #04395e; /* Eastern blue */
-    height: auto;
+    height: 100%;
     min-height: 100%;
     color: #f5f5f5; /* Slate-800 */
     line-height: 1.2;
-  display: grid;
-  place-items: start center;
-    overflow-y: auto;        /* re-enable vertical scroll */
-  overflow-x: hidden;      /* keep sideways jitters out */
+    margin: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
   /* justify-content: center; */
   /* align-content: center; */
   }
@@ -148,6 +147,13 @@ a:visited {
   color: #0f172a; /* darker text on light-ish glass */
 }
 
+.glass--map {
+  --glass-bg: rgba(17, 73, 158, 0.5);
+  --glass-fallback-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.50);
+  color: #0f172a; /* darker text on light-ish glass */
+}
+
 .glass--emerald {
   --glass-bg: rgba(16, 185, 129, 0.18);    /* tailwind emerald-500-ish */
   --glass-fallback-bg: rgba(16, 185, 129, 0.28);
@@ -155,7 +161,7 @@ a:visited {
 }
 
 .glass--slate {
-  --glass-bg: rgba(100, 116, 139, 0.20);   /* slate-ish */
+  --glass-bg: rgba(49, 57, 68, 0.705);   /* slate-ish */
   --glass-fallback-bg: rgba(100, 116, 139, 0.35);
   --glass-border: rgba(148, 163, 184, 0.45);
 }
@@ -165,11 +171,6 @@ a:visited {
   --glass-fallback-bg: rgba(2, 6, 23, 0.60);
   --glass-border: rgba(148, 163, 184, 0.25);
 }
-
-
-
-
-
 
 
   /* Base button styling */
@@ -1068,44 +1069,122 @@ tile-section div {
 
 
 /* Overall page background + centering */
-.app-root {
-  min-height: 100vh;
-  background: #04395e;          /* or whatever dark blue you’re using */
-  color: #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+html, body, #root {
+  height: 100%;
 }
 
-/* Main game “card” width */
+/* Overall page background + app sizing */
+.app-root {
+  min-height: 100dvh;
+  background: #04395e;
+  color: #e2e8f0;
+}
+
+/* Main app wrapper */
 .app-shell {
   width: 100%;
-  padding: 1rem;
-  max-width: 480px;             /* phones + small tablets */
-}
-
-/* Tablet */
-@media (min-width: 768px) {
-  .app-shell {
-    max-width: 640px;
-  }
-}
-
-/* Desktop */
-@media (min-width: 1024px) {
-  .app-shell {
-    max-width: 900px;           /* makes the game noticeably bigger */
-  }
-}
-
-/* Big monitors */
-@media (min-width: 1440px) {
-  .app-shell {
-    max-width: 1000px;
-  }
+  min-height: 100dvh;
+  padding: 0;
+  max-width: none;
 }
 
 .pp-board {
+  position: relative;
   width: 100%;
+  height: 100%;
+  min-height: 100%;
   margin: 0 auto;
+  overflow: hidden;
+}
+
+.pp-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+}
+
+.pp-controls-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+}
+
+.pp-top-overlay,
+.pp-bottom-overlay {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100% - 16px), 720px);
+  pointer-events: auto;
+}
+
+.pp-top-overlay {
+  top: max(8px, env(safe-area-inset-top, 8px));
+}
+
+.pp-bottom-overlay {
+  bottom: max(8px, env(safe-area-inset-bottom, 8px));
+  max-height: min(38dvh, 340px);
+}
+
+.pp-controls-spacer {
+  display: none;
+}
+
+.journey-rail {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.journey-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.journey-rail > * {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 768px) {
+  html, body, #root {
+    overflow: hidden;
+  }
+
+  .pp-board {
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .pp-bottom-overlay {
+    max-height: min(42dvh, 360px);
+  }
+
+  .pp-map-canvas > .absolute.top-2.left-2 {
+    top: auto;
+    left: auto;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    z-index: 26;
+    flex-direction: column;
+  }
+}
+
+@media (min-width: 769px) {
+  .pp-board {
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
+  }
+
+  .pp-top-overlay {
+    top: 16px;
+  }
+
+  .pp-bottom-overlay {
+    bottom: 16px;
+    max-height: min(32dvh, 320px);
+  }
 }

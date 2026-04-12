@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import ConsentManager from "./components/ConsentManager";
 import PostcodePursuit from "./PostcodePursuit";
 import Settings from "./pages/Settings";
@@ -73,12 +73,6 @@ return (
       <Route path="/settings" element={<Settings />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
     </Routes>
-
-         <footer className="text-center text-xs text-slate-500 py-4">
-          <Link className="underline mx-2" to="/settings">Settings</Link>
-          <span>·</span>
-          <Link className="underline mx-2" to="/privacy">Privacy</Link>
-        </footer>
       </div>
     </div>
   </BrowserRouter>

@@ -138,7 +138,10 @@ export default function StatsPage({
               <div className="stat-label">Total games</div>
               <div className="stat-value">{viewStats.totalGames}</div>
             </div>
-
+<div className="glass-tile">
+  <div className="stat-label">Win count</div>
+  <div className="stat-value">{viewStats.winCount}</div>
+</div>
             <div className="glass-tile">
               <div className="stat-label">Win rate</div>
               <div className="stat-value">{viewStats.winRate}%</div>

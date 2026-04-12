@@ -4,7 +4,7 @@ import { lastNGamesArePerfect } from './utils/historyUtils';
 import { readJSON } from './utils/storageUtils';
 import { ACHIEVEMENTS_KEY, writeJSON, canonEdge} from './PostcodePursuit';
 
-const ACH_MAP_KEY = 'pp_achievements_v1';                 // map used by pages
+const ACH_MAP_KEY = 'pp_achievements_v2';                 // map used by pages
 const STREAK_KEY_V2 = (d) => `pp_daily_streak_v2_${d}`;   // per-difficulty
 
 const getJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
@@ -84,8 +84,8 @@ export const achievements = [
     check: (e) => e.won && (e.bridgeCount ?? 0) >= 2 },
 
   { id: 'centurion',   name: 'Die-hard',     icon:'💯', tier:'legendary',
-    description: 'Play 100 games',
-    check: (_e,h) => (h.totalGames ?? 0) >= 100 },
+    description: 'Win 100 games',
+    check: (_e,h) => (h.totalWins ?? 0) >= 100 },
 
   { id: 'visit_25', name: 'Explorer: 25%', icon:'🧭', tier:'bronze',
     description: 'Visit 25% of all postcode areas',
@@ -410,8 +410,8 @@ export const evaluateAndUnlockMetaAchievements = (...args) =>
 // ---- Evaluators ----
 export function evaluateAndUnlockAchievements(
   event,
-  history = { totalGames: 0, totalWins: 0 },
-  meta = {}
+  history = null,
+  meta = null
 ) {
   // ✅ ensure we have real history/meta when not provided
   history = buildHistoryIfMissing(history);
