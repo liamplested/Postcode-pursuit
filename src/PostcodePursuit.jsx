@@ -2967,7 +2967,7 @@ const renderControls = () => (
       <li>
         <a
           role="menuitem"
-          href="/settings"
+          href="#/settings"
           onClick={() => setBurgerOpen(false)}
           className="btn btn-neutral"
           style={{
@@ -2987,7 +2987,7 @@ const renderControls = () => (
       <li>
         <a
           role="menuitem"
-          href="/privacy"
+          href="#/privacy"
           onClick={() => setBurgerOpen(false)}
           className="btn btn-neutral"
           style={{

@@ -1149,7 +1149,7 @@ html, body, #root {
 
 @media (max-width: 768px) {
   html, body, #root {
-    overflow: hidden;
+    overflow-x: hidden;
   }
 
   .pp-board {
