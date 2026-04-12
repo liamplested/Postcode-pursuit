@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useId } from 'react';
-import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, ZoomIn, ZoomOut, Scan} from 'lucide-react';
+import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, ZoomIn, ZoomOut, Scan, Eye, Settings2} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { postcodeAreas, ferryLinks, bridgeLinks } from './postcodeAreas';
 import useSvgPan from './hooks/useSvgPan';
@@ -8,6 +8,8 @@ import * as Daily from './dailyManager';
 
  import StatsPage from './pages/StatsPage.jsx';
  import AchievementsPage from './pages/AchievementsPage.jsx';
+import Settings from './pages/Settings.jsx';
+import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 
  import { 
   achievements,
@@ -30,6 +32,7 @@ import { recordLifetimeMove } from './utils/lifetimeMeta';
 
 
 import { auth } from './firebase';
+
 console.log('UID:', auth.currentUser?.uid);
 
 // ---- Module-level constants -------------------------------------------------
@@ -2965,10 +2968,12 @@ const renderControls = () => (
       </li>
 
       <li>
-        <a
+        <button 
           role="menuitem"
-          href="#/settings"
-          onClick={() => setBurgerOpen(false)}
+          onClick={() => {
+  navigate('settings');
+  setBurgerOpen(false);
+}}
           className="btn btn-neutral"
           style={{
             display: 'block',
@@ -2981,14 +2986,16 @@ const renderControls = () => (
           title="Open settings"
         >
           Settings
-        </a>
+        </button>
       </li>
 
       <li>
-        <a
+        <button 
           role="menuitem"
-          href="#/privacy"
-          onClick={() => setBurgerOpen(false)}
+          onClick={() => {
+  navigate('privacy');
+  setBurgerOpen(false);
+}}
           className="btn btn-neutral"
           style={{
             display: 'block',
@@ -3001,7 +3008,7 @@ const renderControls = () => (
           title="Open privacy information"
         >
           Privacy
-        </a>
+        </button>
       </li>
     </ul>
   </div>,
@@ -3548,6 +3555,14 @@ const renderMenu = () => (
   <Medal className="w-4 h-4" /> Achievements
 </button>
 
+<button className="lrgbtn btn-neutral ml-2" onClick={() => navigate('settings')}>
+  <Settings2 className="w-4 h-4" /> Settings
+</button>
+
+<button className="lrgbtn btn-neutral ml-2" onClick={() => navigate('privacy')}>
+  <Eye className="w-4 h-4" /> Privacy Policy
+</button>
+
     {/* --- Daily chooser modal --- */}
 {showDailyChooser && createPortal(
   <div
@@ -4062,6 +4077,24 @@ if (route === 'achievements') {
     />
   );
 }
+
+if (route === 'settings') {
+  return (
+    <Settings
+      onBack={() => navigate('')}
+    />
+  );
+}
+
+if (route === 'privacy') {
+  return (
+    <PrivacyPolicy
+      onBack={() => navigate('')}
+    />
+  );
+}
+
+
 
 return (
   <>
