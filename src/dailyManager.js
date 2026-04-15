@@ -102,7 +102,7 @@ export function generateTodayDaily(difficulty, postcodeAreas, getNeighbors, boun
 export const dailyStatus = (difficulty) => {
   const snap = loadSnapshot(difficulty);
   const today = todayUTC();
-  if (snap && snap.date === today) return snap.gameWon ? 'View result' : 'Continue';
+  if (snap && snap.date === today) return (snap.gameWon || snap.gaveUp || snap.roundOver) ? 'View result' : 'Continue';
   return 'Start';
 };
 

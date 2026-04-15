@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useId } from 'react';
-import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, ZoomIn, ZoomOut, Scan, Eye, Settings2} from 'lucide-react';
+import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, Eye, Settings2} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { postcodeAreas, ferryLinks, bridgeLinks } from './postcodeAreas';
 import useSvgPan from './hooks/useSvgPan';
@@ -40,7 +40,7 @@ console.log('UID:', auth.currentUser?.uid);
 const WORLD = { x: 0, y: 0, width: 15000, height: 17500 }; // <- your existing values
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 30;
-const ZOOM_STEP = 1.25; // button zoom factor
+//const ZOOM_STEP = 1.25; // button zoom factor
 
 // Daily helpers
 const DAILY_STREAK_KEY = 'pp_daily_streak_v1'; // {count:number, lastWinDate:'YYYY-MM-DD'}
@@ -383,6 +383,18 @@ function MobileCodeScroller({
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
+  const railLabel =
+    mode === 'neighbors'
+      ? 'Available neighbours'
+      : query.length > 0
+        ? 'Matching postcodes'
+        : 'Suggested postcodes';
+
+  const railContent =
+    mode === 'neighbors'
+      ? (neighborOptions.length ? neighborOptions : null)
+      : (query.length > 0 ? options : null);
+
   return (
     <div className="select-none">
       {/* Header */}
@@ -419,7 +431,7 @@ function MobileCodeScroller({
 
       {/* On-screen keypad — now using your btn classes */}
       {mode !== 'neighbors' && (
-        <div className="mx-3 mb-3 p-2 rounded-lg bg-slate-900/10">
+        <div className="mx-3 mb-2 p-2 rounded-lg bg-slate-900/10">
           {alphabet.map(L => (
             <button
               key={L}
@@ -448,63 +460,41 @@ function MobileCodeScroller({
         </div>
       )}
 
-      {/* Results scroller — hidden until user typed at least 1 letter */}
-      {mode === 'neighbors' ? (
-        <div
-          className="flex overflow-x-auto gap-2 px-3 pb-3 snap-x snap-mandatory"
-          role="listbox"
-          aria-label="Available neighbours"
-          style={{ scrollbarGutter: 'stable both-edges' }}
-        >
-          {neighborOptions.length ? (
-            neighborOptions.map(code => (
-              <button
-                key={code}
-                type="button"
-                role="option"
-                aria-selected={false}
-                className="btn btn-green hover:brightness-95 snap-start"
-                onClick={() => onPick?.(code)}
-                aria-label={`Select ${code}`}
-              >
-                {code}
-              </button>
-            ))
-          ) : (
-            <span className="text-xs opacity-70 px-3">No unvisited neighbours</span>
-          )}
-        </div>
-      ) : query.length > 0 ? (
-        <div
-          className="flex overflow-x-auto gap-2 px-3 pb-3 snap-x snap-mandatory"
-          role="listbox"
-          aria-label="Matching postcodes"
-          style={{ scrollbarGutter: 'stable both-edges' }}
-        >
-          {options.length ? (
-            options.map(code => (
-              <button
-                key={code}
-                type="button"
-                role="option"
-                aria-selected={false}
-                className={`btn btn-green hover:brightness-95 snap-start ${
-                  code === query ? 'ring-1 ring-indigo-500 font-semibold' : ''
-                }`}
-                onClick={() => {
-                  onPick?.(code);
-                  clearQuery();
-                }}
-                aria-label={`Select ${code}`}
-              >
-                {code}
-              </button>
-            ))
-          ) : (
-            <span className="text-xs opacity-70 px-3">No matches</span>
-          )}
-        </div>
-      ) : null}
+      {/* Fixed-height option rail so the controls panel doesn't jump */}
+      <div
+        className="pp-mobile-option-rail mx-3 mb-3"
+        role="listbox"
+        aria-label={railLabel}
+      >
+        {railContent ? (
+          railContent.map(code => (
+            <button
+              key={code}
+              type="button"
+              role="option"
+              aria-selected={false}
+              className={`btn btn-green hover:brightness-95 pp-mobile-option-chip ${
+                mode !== 'neighbors' && code === query ? 'ring-1 ring-indigo-500 font-semibold' : ''
+              }`}
+              onClick={() => {
+                onPick?.(code);
+                if (mode !== 'neighbors') clearQuery();
+              }}
+              aria-label={`Select ${code}`}
+            >
+              {code}
+            </button>
+          ))
+        ) : (
+          <span className="pp-mobile-option-empty">
+            {mode === 'neighbors'
+              ? 'No unvisited neighbours'
+              : query.length > 0
+                ? 'No matches'
+                : 'Matching postcode options will appear here'}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -571,6 +561,7 @@ const [gameWon, setGameWon] = useState(false);
 const [optimalPath, setOptimalPath] = useState([]);
 const [achievementToasts, setAchievementToasts] = useState([]);
 const [showHints, setShowHints] = useState(false);
+const [dailyGaveUp, setDailyGaveUp] = useState(false);
 const [journeyExpanded, setJourneyExpanded] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -597,6 +588,7 @@ const [consentResolved, setConsentResolved] = useState(
 );
 
 const canClickAreas = difficulty === 'easy';
+const roundResolved = gameWon || dailyGaveUp;
 
 // --- Soft Par helpers (Daily only) ---
 const parForOptimal = (optimalMoves) => Math.max(1, Math.ceil(optimalMoves * 1.25));
@@ -849,6 +841,7 @@ const resetDailyFlags = React.useCallback(() => {
   setDailyDifficulty(null);
   setHintsUsed(0);
   setShowHints(false);
+  setDailyGaveUp(false);
 }, []);
 
 
@@ -945,20 +938,26 @@ function startOrResumeDaily(difficulty) {
         : [snap.startArea]
     );
     setGuesses(Array.isArray(snap.guesses) ? snap.guesses : []);
-    setShowOptimal(!!snap.showOptimal);
+    setShowOptimal(!!snap.showOptimal || !!snap.gaveUp || !!snap.roundOver);
     setElapsedMs(snap.elapsedMs || 0);
 
-    if (snap.gameWon) {
-      setGameWon(true);
-      setVictoryOpen(true);          // show Share immediately
-      setGameState('gameWon');
-      gameStartRef.current = null;
-    } else {
-      setGameWon(false);
-      setVictoryOpen(!!snap.victoryOpen);
-      setGameState('playing');
-      gameStartRef.current = performance.now() - (snap.elapsedMs || 0);
-    }
+if (snap.gameWon) {
+  setGameWon(true);
+  setVictoryOpen(true);
+  setGameState('gameWon');
+  gameStartRef.current = null;
+} else if (snap.gaveUp || snap.roundOver) {
+  setGameWon(false);
+  setShowOptimal(true);
+  setVictoryOpen(false);
+  setGameState('gameOver');
+  gameStartRef.current = null;
+} else {
+  setGameWon(false);
+  setVictoryOpen(!!snap.victoryOpen);
+  setGameState('playing');
+  gameStartRef.current = performance.now() - (snap.elapsedMs || 0);
+}
 
     requestAnimationFrame(() =>
       focusStartAndTarget(snap.startArea, snap.targetArea)
@@ -990,6 +989,7 @@ function startOrResumeDaily(difficulty) {
   setCurrentPath([start]);
   setGuesses([]);
   setGameWon(false);
+  setDailyGaveUp(false);
   setOptimalPath(path);
   setDailyPar(parFor(Math.max(0, path.length - 1), difficulty));
   setGameState('playing');
@@ -1044,6 +1044,8 @@ useEffect(() => {
     optimalPath,
     elapsedMs: Math.floor(elapsedSoFar),
     gameWon,
+    gaveUp: dailyGaveUp,
+    roundOver: gameWon || dailyGaveUp,
     showOptimal,
     victoryOpen,
     par: dailyPar
@@ -1051,7 +1053,7 @@ useEffect(() => {
 }, [
   dailyMode, dailyDate, dailyDifficulty,
   startArea, targetArea, currentPath, guesses,
-  hintsUsed, optimalPath, elapsedMs, gameWon,
+  hintsUsed, optimalPath, elapsedMs, gameWon, dailyGaveUp,
   showOptimal, victoryOpen, dailyPar
 ]);
 
@@ -1116,7 +1118,7 @@ useEffect(() => {
 const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
 
 
-  const { reset, zoomIn, zoomOut, panTo } = useSvgPan(svgRef, gRef, {
+  const { reset, panTo } = useSvgPan(svgRef, gRef, {
     enabled: isMapInteractive,
     min: MIN_SCALE,
     max: MAX_SCALE,
@@ -1703,7 +1705,7 @@ const giveUpNow = useCallback(() => {
     dateISO: new Date().toISOString(),
     mode: dailyMode ? 'daily' : 'free',
     difficulty,
-    won: false,                                        // 👈 LOSS
+    won: false,
     moves: Math.max(0, currentPath.length - 1),
     durationMs: ms,
     usedFerry: ferryCount > 0,
@@ -1715,9 +1717,8 @@ const giveUpNow = useCallback(() => {
     startArea,
     endArea: targetArea,
   };
-addGameToHistory(event, { onPersist: () => onPersist(true)});
+  addGameToHistory(event, { onPersist: () => onPersist(true) });
 
-  // optional: analytics
   window.gtag?.('event', 'game_gave_up', {
     difficulty,
     start_postcode: startArea,
@@ -1727,14 +1728,47 @@ addGameToHistory(event, { onPersist: () => onPersist(true)});
     round_id: roundIdRef.current || undefined,
   });
 
-  // close + go back
   setGiveUpOpen(false);
   setVictoryOpen(false);
+  setShowHints(false);
+  gameStartRef.current = null;
+
+  if (dailyMode && dailyDifficulty && dailyDate) {
+    setGameWon(false);
+    setDailyGaveUp(true);
+    setShowOptimal(true);
+
+    Daily.saveSnapshot(dailyDifficulty, {
+      date: dailyDate,
+      difficulty: dailyDifficulty,
+      startArea,
+      targetArea,
+      currentPath,
+      guesses,
+      hintsUsed,
+      optimalPath,
+      elapsedMs: Math.floor(ms),
+      gameWon: false,
+      gaveUp: true,
+      roundOver: true,
+      showOptimal: true,
+      victoryOpen: false,
+      par: dailyPar,
+      
+    });
+
+
+    
+    setGameState('dailyLost');
+    roundIdRef.current = null;
+    return;
+  }
+
   setGameState('menu');
   roundIdRef.current = null;
 }, [
   guesses, optimalPath, currentPath, startArea, targetArea,
-  dailyMode, difficulty, onPersist
+  dailyMode, dailyDifficulty, dailyDate, dailyPar, hintsUsed, difficulty, onPersist
 ]);
 
 
@@ -1810,7 +1844,7 @@ const getAreaStyle = (code) => {
   // Flags
   const isStart   = code === startArea;
   const isTarget  = code === targetArea;
-  const isCurrent = currentArea && code === currentArea && !isStart;
+  const isCurrent = currentArea && code === currentArea && !isStart && !roundResolved;
   const isVisited = currentPath.includes(code);
   const isFlashing = flashAreas.includes(code);
 
@@ -2405,6 +2439,7 @@ const startNewGame = () => {
   setCurrentPath([start]);
   setGuesses([]);
   setGameWon(false);
+  setDailyGaveUp(false);
   addVisited([start]);
 
   setOptimalPath(path);              // we already have it
@@ -2420,7 +2455,7 @@ const startNewGame = () => {
 
 // const minStepsByMode = { easy: 3, normal: 4, hard: 5, master: 6 };
 const makeGuess = useCallback((area) => {
-  if (gameWon) return;
+  if (gameWon || dailyGaveUp) return;
 
   setErrorToast(prev => (prev ? '' : prev));
   setShowHints(false);
@@ -2477,7 +2512,7 @@ const makeGuess = useCallback((area) => {
 }, [
   getNeighbors, gameWon, currentPath, targetArea, finishGame,
   ferryAdj, bridgeAdj, difficulty, showError,
-  onPersist,
+  onPersist, dailyGaveUp
 ]);
 
 // const isFerryEdge  = (a,b) => ferryAdj.get(a)?.has(b)  || false;
@@ -2587,12 +2622,12 @@ const renderMap = () => (
       borderRadius: 16,
     }}
   >
-    {/* Zoom overlay, top-left */}
-    <div className="absolute top-2 left-2 z-10 flex gap-2">
+    
+{/*     <div className="absolute top-2 left-2 z-10 flex gap-2">
       <button onClick={() => zoomOut(ZOOM_STEP)} className="smlbtn" title="Zoom out"><ZoomOut className="w-2 h-2" /></button>
       <button onClick={() => zoomIn(ZOOM_STEP)}  className="smlbtn" title="Zoom in"><ZoomIn className="w-2 h-2" /></button>
       <button onClick={resetView} className="smlbtn" title="Reset view to Start & Target"><Scan className="w-2 h-2" /></button>
-    </div>
+    </div> */}
 
     <svg
       ref={svgRef}
@@ -3022,7 +3057,7 @@ const renderControls = () => (
       className="pp-bottom-overlay glass glass--slate mx-auto"
       style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'auto', borderRadius: 10, maxHeight: '1000px', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
     >
-      {!gameWon && (
+      {!roundResolved && (
         <div className="px-3 pb-3 pt-2">
           {isTouch ? (
             <MobileCodeScroller
@@ -3200,7 +3235,7 @@ const renderControls = () => (
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            {!gameWon && !masterMode && (
+            {!roundResolved && !masterMode && (
               <button
                 onClick={undoLastMove}
                 disabled={currentPath.length <= 1}
@@ -3212,7 +3247,7 @@ const renderControls = () => (
               </button>
             )}
 
-            {!gameWon && (
+            {!roundResolved && (
               <button className="btn btn-warn" onClick={() => setGiveUpOpen(true)} title="End this game as a loss">
                 Give up
               </button>
@@ -3243,7 +3278,7 @@ const renderControls = () => (
                 >
                   <h2 id="giveup-title" className="text-xl font-semibold mb-2">Give up?</h2>
                   <p className="mb-4">
-                    This will record a <b>loss</b> for this {dailyMode ? 'Daily' : 'Free Play'} game.<br />
+                    This will record a <b>loss</b> for this {dailyMode ? 'Daily' : 'Free Play'} game{dailyMode ? ' and reveal the optimal path' : ''}.<br />
                     Current route: <b>{Math.max(0, currentPath.length - 1)}</b> moves
                     {optimalPath.length > 0 && <> · Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
                   </p>
@@ -3256,7 +3291,7 @@ const renderControls = () => (
               document.body
             )}
 
-            {!gameWon && (
+            {!roundResolved && (
               <button
                 className="btn btn-success"
                 onClick={toggleHints}
@@ -3269,12 +3304,12 @@ const renderControls = () => (
               </button>
             )}
 
-            {gameWon && (
+            {roundResolved && (
               <>
                 <div className="inline-flex items-center gap-2 px-2 py-1 rounded border border-emerald-300 bg-emerald-100 text-emerald-900">
                   <Trophy className="w-4 h-4" />
                   <span>
-                    Completed in <b>{Math.max(0, currentPath.length - 1)}</b>
+                    {gameWon ? <>Completed in <b>{Math.max(0, currentPath.length - 1)}</b></> : <>Gave up after <b>{Math.max(0, currentPath.length - 1)}</b></>}
                     {optimalPath.length > 0 && <> · Optimal <b>{Math.max(0, optimalPath.length - 1)}</b></>}
                   </span>
                 </div>
@@ -3289,7 +3324,7 @@ const renderControls = () => (
       </div>
 
       <Modal
-        open={showHints && !gameWon && currentPath.length > 0}
+        open={showHints && !roundResolved && currentPath.length > 0}
         onClose={() => setShowHints(false)}
         title="Available connections"
       >
@@ -3330,7 +3365,7 @@ const renderControls = () => (
         })()}
       </Modal>
 
-      {gameWon && showOptimal && optimalPath?.length > 0 && (
+      {(roundResolved && showOptimal && optimalPath?.length > 0) && (
         <div className="mt-3">
           <div className="text-sm font-semibold mb-1">Optimal route:</div>
           <div className="badges flex flex-wrap items-center gap-2">
@@ -3345,7 +3380,7 @@ const renderControls = () => (
       )}
 
       <ToastShell
-        open={showNudge && !masterMode && !gameWon}
+        open={showNudge && !masterMode && !roundResolved}
         onClose={dismissNudge}
         width={360}
       >
@@ -4099,8 +4134,12 @@ if (route === 'privacy') {
 return (
   <>
 
-    <div className="min-h-[100dvh] w-full overflow-hidden bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
-      {gameState === 'menu' ? renderMenu() : renderGameBoard()}
+    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
+      {gameState === 'menu' ? renderMenu() : (
+        <div className="pp-game-screen">
+          {renderGameBoard()}
+        </div>
+      )}
     </div>
 
     <OnboardingTutorial

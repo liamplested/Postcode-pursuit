@@ -147,13 +147,6 @@ a:visited {
   color: #0f172a; /* darker text on light-ish glass */
 }
 
-.glass--map {
-  --glass-bg: rgba(17, 73, 158, 0.5);
-  --glass-fallback-bg: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(255, 255, 255, 0.50);
-  color: #0f172a; /* darker text on light-ish glass */
-}
-
 .glass--emerald {
   --glass-bg: rgba(16, 185, 129, 0.18);    /* tailwind emerald-500-ish */
   --glass-fallback-bg: rgba(16, 185, 129, 0.28);
@@ -161,7 +154,7 @@ a:visited {
 }
 
 .glass--slate {
-  --glass-bg: rgba(49, 57, 68, 0.705);   /* slate-ish */
+  --glass-bg: rgba(52, 58, 66, 0.493);   /* slate-ish */
   --glass-fallback-bg: rgba(100, 116, 139, 0.35);
   --glass-border: rgba(148, 163, 184, 0.45);
 }
@@ -171,6 +164,11 @@ a:visited {
   --glass-fallback-bg: rgba(2, 6, 23, 0.60);
   --glass-border: rgba(148, 163, 184, 0.25);
 }
+
+
+
+
+
 
 
   /* Base button styling */
@@ -1147,15 +1145,22 @@ html, body, #root {
   flex: 0 0 auto;
 }
 
+/* Gameplay-only viewport lock so menu/stats/achievements/settings/privacy can scroll normally */
+.pp-game-screen {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.pp-game-screen .pp-board {
+  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
+}
+
 @media (max-width: 768px) {
   html, body, #root {
     overflow-x: hidden;
-  }
-
-  .pp-board {
-    height: 100dvh;
-    min-height: 100dvh;
-    max-height: 100dvh;
+    overflow-y: auto;
   }
 
   .pp-bottom-overlay {
@@ -1173,12 +1178,6 @@ html, body, #root {
 }
 
 @media (min-width: 769px) {
-  .pp-board {
-    height: 100dvh;
-    min-height: 100dvh;
-    max-height: 100dvh;
-  }
-
   .pp-top-overlay {
     top: 16px;
   }
@@ -1187,4 +1186,41 @@ html, body, #root {
     bottom: 16px;
     max-height: min(32dvh, 320px);
   }
+}
+
+
+/* Mobile postcode option rail: fixed-height single-line scroller */
+.pp-mobile-option-rail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+  mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+}
+
+.pp-mobile-option-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.pp-mobile-option-rail > * {
+  flex: 0 0 auto;
+}
+
+.pp-mobile-option-chip {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  margin: 0;
+}
+
+.pp-mobile-option-empty {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  opacity: 0.75;
+  padding: 0 4px;
 }
