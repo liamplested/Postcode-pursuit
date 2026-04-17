@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback, useId } from 'react';
-import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, Eye, Settings2} from 'lucide-react';
+import { Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, Eye, Settings2, ArrowBigLeft} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { postcodeAreas, ferryLinks, bridgeLinks } from './postcodeAreas';
 import useSvgPan from './hooks/useSvgPan';
 import OnboardingTutorial from './components/OnboardingTutorial';
 import * as Daily from './dailyManager';
+
 
  import StatsPage from './pages/StatsPage.jsx';
  import AchievementsPage from './pages/AchievementsPage.jsx';
@@ -396,7 +397,8 @@ function MobileCodeScroller({
       : (query.length > 0 ? options : null);
 
   return (
-    <div className="select-none">
+    <div className="glass glass--white p-5 rounded-0xl shadow-xl text-left">
+      
       {/* Header */}
       <div className="flex items-center justify-between px-3 pb-1">
         <div className="text-xs opacity-80">
@@ -442,7 +444,7 @@ function MobileCodeScroller({
             >
               {L}
             </button>
-          ))}
+          ))}<br />
           <button
             type="button"
             onClick={backspace}
@@ -1825,13 +1827,13 @@ const focusStartAndTarget = React.useCallback((startCode, targetCode, pad = 0.2)
 
 
 const COLORS = {
-  baseFill:    '#94A3B8',
-  baseStroke:  '#475569',
-  startFill:   '#2A9D8F',
+  baseFill:    '#ecded6ff',
+  baseStroke:  '#2e3744ff',
+  startFill:   '#1a6e65ff',
   startStroke: '#0F766E',
   currentFill: '#2563EB',
   currentStroke:'#FFFFFF',
-  visitedFill: '#00fa3eff',
+  visitedFill: '#04bd32ff',
   visitedStroke:'#64748B',
   targetFill:  '#F59E0B',
   targetStroke:'#92400E',
@@ -1861,9 +1863,10 @@ const getAreaStyle = (code) => {
   // 🔴 Invalid/duplicate guess flash overrides everything for 400ms
 if (isFlashing) {
   return {
-    fill: 'url(#pp-invalid-stripes)',   // texture (not color)
-    stroke: '#000',                     // high-contrast border
-    strokeWidth: 4.5,                   // clearly thicker than normal
+    fill: '#a50707ff',                 // red flash for invalid/duplicate guess
+    color: '#fff',   // texture (not color)
+    stroke: '#e3e637ff',                     // high-contrast border
+    strokeWidth: 5,                   // clearly thicker than normal
     strokeDasharray: '6 4',             // hint via line style
   };
 }
@@ -2178,7 +2181,7 @@ function Callout({ code, label, color, getCenter, scale }) {
   if (!c) return null;
 
   // 👇 tweak this multiplier until you’re happy (e.g. 1.6 → 2.2)
-  const CALLOUT_MULT = 10;
+  const CALLOUT_MULT = 7;
    const CAP = {
     stroke: 0.1,
     dot: 14,
@@ -2189,7 +2192,7 @@ function Callout({ code, label, color, getCenter, scale }) {
     radius: 18,
     font: 24,
     notch: 18,
-    offset: 1,                   // max distance from centroid to bubble center
+    offset: 10,                   // max distance from centroid to bubble center
   };
   const spx = makeSpx(scale, CALLOUT_MULT);
 
@@ -2472,7 +2475,7 @@ const makeGuess = useCallback((area) => {
 
   if (!isValidMove || (alreadyVisited && !revisitAllowed)) {
     setFlashAreas(prev => [...prev, area]);
-    setTimeout(() => setFlashAreas(prev => prev.filter(a => a !== area)), 400);
+    setTimeout(() => setFlashAreas(prev => prev.filter(a => a !== area)), 500);
 
     if (!isValidMove)        showError(`${area} isn’t adjacent to ${currentLocation}`);
     else if (alreadyVisited) showError(`You've already visited ${area} in this game. Revisiting is not allowed in ${difficulty} difficulty`);
@@ -2810,7 +2813,7 @@ const renderMap = () => (
     <Callout
       code={startArea}
       label={`Start: ${startArea}`}
-      color="#10b981"
+      color="#167903ff"
       getCenter={getCenter}
       scale={scaleForLabels || 1}
     />
@@ -2819,7 +2822,7 @@ const renderMap = () => (
     <Callout
       code={targetArea}
       label={`Target: ${targetArea}`}
-      color="#9333ea"
+      color="#da5903ff"
       getCenter={getCenter}
       scale={scaleForLabels || 1}
     />
@@ -2880,8 +2883,8 @@ const getVisibleJourneyItems = useCallback(() => {
 const renderControls = () => (
   <div ref={controlsRef} className="pp-controls-layer top-0 z-20 w-full">
     <div
-      className="pp-top-overlay glass glass--slate mx-auto relative"
-      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'visible', borderRadius: 10, WebkitOverflowScrolling: 'touch' }}
+      className="pp-top-overlay glass glass--white mx-auto relative"
+      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}
     >
       <div className="grid-container">
         <div>
@@ -2892,15 +2895,15 @@ const renderControls = () => (
             aria-label="Back to menu"
             title="Back to menu (Esc)"
           >
-            ←
+            <ArrowBigLeft w-4 h-4 />
           </button>
         </div>
 
         <div className="text-center leading-tight text-[clamp(11px,2.6vw,13px)]">
           <span className="whitespace-nowrap">
-            Travel from <span className="text-indigo-200">{startArea || '—'}</span> to{' '}
-            <span className="text-indigo-200">{targetArea || '—'}</span>
-            {dailyMode && Number.isFinite(dailyPar) && (
+            Travel from<br /> <span className="text-indigo-200">{startArea || '—'}</span> → {' '}
+            <span className="text-indigo-200">{targetArea || '—'}</span><br />
+            {dailyMode && Number.isFinite(dailyPar) && (  
               <span className="badge badge-gray ml-2 inline-flex items-center !text-[11px] !leading-tight !py-0.5 !px-2 align-middle">
                 <span className="mr-1 align-[-0.1em]">⛳</span>
                 Par {dailyPar}
@@ -3054,8 +3057,8 @@ const renderControls = () => (
     <div className="pp-controls-spacer" aria-hidden="true" />
 
     <div
-      className="pp-bottom-overlay glass glass--slate mx-auto"
-      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'auto', borderRadius: 10, maxHeight: '1000px', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
+      className="pp-bottom-overlay mx-auto"
+      style={{ width: '100%', maxWidth: '630px', overflowX: 'auto', overflowY: 'auto', maxHeight: '1000px', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
     >
       {!roundResolved && (
         <div className="px-3 pb-3 pt-2">
@@ -3087,6 +3090,7 @@ const renderControls = () => (
                   ref={inputRef}
                   list="pp-codelist"
                   type="text"
+                  placeholder='Enter a Postcode'
                   className="rounded-2xl border border-slate-300 text-center shadow-md focus:ring-4 focus:ring-indigo-400 focus:outline-none"
                   onInput={handleSelectorInput}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleInputSubmit(e.currentTarget); }}
@@ -3097,11 +3101,11 @@ const renderControls = () => (
                   enterKeyHint="go"
                   aria-label="Select or enter a postcode"
                   style={{
-                    width: 200,
+                    width: 400,
                     height: 20,
                     fontSize: 28,
                     padding: '16px 64px 16px 20px',
-                    textTransform: 'uppercase',
+                    
                     letterSpacing: '0.04em',
                     display: 'inline-block',
                     margin: '0 auto',
@@ -3139,7 +3143,7 @@ const renderControls = () => (
         </div>
       )}
 
-      <div className="px-3 pb-2">
+      <div className="glass glass--white px-3 pb-2">
         <div className="flex flex-wrap items-center gap-2">
           <div
             ref={journeyRailRef}
@@ -3167,10 +3171,10 @@ const renderControls = () => (
               const base =
                 code === targetArea ? 'badge-green' :
                 i === currentPath.length - 1 ? 'badge-blue' :
-                code === startArea ? 'badge-gray' :
-                type === 'ferry' ? 'badge-blue' :
-                type === 'bridge' ? 'badge-purple' :
-                'badge-gray';
+                code === startArea ? 'badge-green' :
+                type === 'ferry' ? 'badge-green' :
+                type === 'bridge' ? 'badge-green' :
+                'badge-green';
               const title =
                 i === 0 ? 'Start area' :
                 i === currentPath.length - 1 ? 'Current area' :
@@ -3201,7 +3205,7 @@ const renderControls = () => (
               <button
                 type="button"
                 onClick={() => setJourneyExpanded(false)}
-                className="badge badge-gray shrink-0"
+                className="badge badge-green shrink-0"
                 title="Collapse journey"
                 aria-label="Collapse journey"
               >
@@ -3370,7 +3374,7 @@ const renderControls = () => (
           <div className="text-sm font-semibold mb-1">Optimal route:</div>
           <div className="badges flex flex-wrap items-center gap-2">
             {optimalPath.map((code, i) => (
-              <span key={i} className="badge badge-green">
+              <span key={i} className="badge badge-best">
                 <span style={{ marginRight: 6 }}>{i}:</span>
                 {code}
               </span>
@@ -3396,7 +3400,7 @@ const renderControls = () => (
             }
           }}
         >
-          You are in the <b>glowing postcode area</b>. Enter a neighbouring postcode like <b>{exampleNeighbor}</b> and press <b>Enter</b>. If you're still unsure, try the tutorial.
+          You are in the <b>glowing postcode area</b>. Enter and select a neighbouring postcode area like <b>{exampleNeighbor}</b>. If you're still unsure, try the tutorial.
         </TipToast>
       </ToastShell>
 
@@ -3495,11 +3499,9 @@ function handleDailyChoice(diff) {
 const renderMenu = () => (
   <div className="max-w-2xl mx-auto p-8 glass glass--slate text-center mt-8 relative">
     
-    <MapPin className="w-16 h-16 mx-auto text-indigo-600 mb-4" />
+    
+<img src="logo192.png" alt="Postcode Pursuit logo" height="100" className="w-32 h-auto mx-auto mb-4" />
     <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Postcode Pursuit</h1>
-    <p className="text-slate-600 mb-6">
-      Navigate between UK postcode areas by following their geographical connections!
-    </p>
         <div className="absolute top-2 right-2 flex items-center gap-2">
 <AuthButton size="btn-sm" />
       </div>
@@ -3732,7 +3734,7 @@ const renderMenu = () => (
 
             <div className="mt-3 flex gap-2 justify-center">
               <button
-                className="button-shiny blue w-full max-w-[20rem]"
+                className="btn btn-primary"
                 onClick={() => {
                   startOrResumeDaily(dailyChoice);
                   setShowDailyChooser(false);
@@ -3740,12 +3742,12 @@ const renderMenu = () => (
                 }}
                 style={{ 
                   display: 'block', 
-                  width: '90%', 
-                  padding: '1rem 0.5rem', // Smaller padding
+                  width: '98%', 
+                  padding: '1rem 1rem', // Smaller padding
                   fontSize: '2rem', // Smaller text
                 }}
               >
-                Play Game ▶️
+                Play Game
               </button>
             </div>
           </div>
@@ -3897,7 +3899,7 @@ const renderMenu = () => (
 
       <div className="mt-3 flex gap-2 justify-center">
         <button
-          className="button-shiny blue w-full max-w-[20rem]"
+          className="btn btn-primary"
           onClick={() => {
             startWithDifficulty(freeChoice);
             setShowFreePlayChooser(false);
@@ -3905,8 +3907,8 @@ const renderMenu = () => (
           }}
                           style={{ 
                   display: 'block', 
-                  width: '90%', 
-                  padding: '1rem 0.5rem', // Smaller padding
+                  width: '98%', 
+                  padding: '1rem 1rem', // Smaller padding
                   fontSize: '2rem', // Smaller text
                 }}
         >
@@ -3938,88 +3940,139 @@ const renderMenu = () => (
   onClose={() => setShowAbout(false)}
   title="About Postcode Pursuit"
 >
-<div className="prose prose-slate max-w-none">
-  <p>
-    <b>Postcode Pursuit</b> is a geography-based puzzle game: travel from your <b>Start</b> postcode area
-    to the <b>Target</b> by stepping through adjacent UK postcode areas.
-    It’s inspired by the excellent{" "}
-    <a href="https://travle.earth" target="_blank" rel="noreferrer" className="text-indigo-600 underline">
-      Travle
-    </a>.
-  </p>
+  <div className="space-y-5 text-slate-800">
+    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
+      <p className="text-sm leading-6 text-slate-700">
+        <span className="font-semibold text-slate-900">Postcode Pursuit</span> is a daily UK
+        geography puzzle. Start in one postcode area and reach the{" "}
+        <span className="font-semibold text-slate-900">Target</span> by moving through adjacent
+        postcode areas. It’s inspired by{" "}
+        <a
+          href="https://travle.earth"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-700"
+        >
+          Travle
+        </a>
+        .
+      </p>
+    </section>
 
-  <h3 className="font-semibold">Connections</h3>
-  <ul className="list-disc list-inside space-y-1">
-    <li><b>Land borders</b> between postcode areas</li>
-    <li><b>Ferries</b> — dashed lines</li>
-    <li><b>Major bridges &amp; tunnels</b> — solid lines</li>
-  </ul>
+    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        How it works
+      </h3>
+      <ul className="space-y-2 text-sm leading-6 text-slate-700">
+        <li>Move between neighbouring UK postcode areas.</li>
+        <li>
+          <span className="font-medium text-slate-900">Dashed lines</span> show ferry links.
+        </li>
+        <li>
+          <span className="font-medium text-slate-900">Solid lines</span> show major bridges and
+          tunnels.
+        </li>
+        <li>Reach the target in as few moves as possible.</li>
+      </ul>
+    </section>
 
-  <h3 className="font-semibold">Game Modes</h3>
-  <ul className="list-disc list-inside space-y-1">
-    <li><b>Easy</b> — outlines and labels always visible. <b>Revisit</b> and <b>Undo</b> allowed.</li>
-    <li><b>Normal</b> — outlines on; labels on <b>Start</b> &amp; <b>Visited</b> areas. Revisit and Undo both allowed.</li>
-    <li><b>Hard</b> — no outlines or labels. <b>No revisits</b>. Undo not allowed.</li>
-    <li><b>Master</b> — only start/current/visited/target visible. No <b>revisits</b>, No <b>undo</b>.</li>
-  </ul>
+    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        Difficulty modes
+      </h3>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="text-sm font-semibold text-slate-900"><u>Easy</u></div>
+          <p className="mt-1 text-sm leading-5 text-slate-600">
+            Outlines and labels always visible. Revisits and undo allowed.
+          </p>
+        </div>
 
-  <h3 className="font-semibold">Par &amp; Scoring</h3>
-  <p>
-    Each daily puzzle has a <b>Par</b> based on the optimal number of moves.
-  </p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="text-sm font-semibold text-slate-900"><u>Normal</u></div>
+          <p className="mt-1 text-sm leading-5 text-slate-600">
+            Outlines visible; labels shown for Start and visited areas. Revisits and undo allowed.
+          </p>
+        </div>
 
-  <h3 className="font-semibold">Achievements</h3>
-  <p>
-    Unlock achievements for milestones like winning on harder modes, using ferries/bridges,
-    perfect runs (optimal number of moves), long routes, lifetime coverage, and daily streaks.
-    Some are <i>hidden</i>—you’ll discover them as you play.
-  </p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="text-sm font-semibold text-slate-900"><u>Hard</u></div>
+          <p className="mt-1 text-sm leading-5 text-slate-600">
+            No outlines or labels. No revisits. No undo.
+          </p>
+        </div>
 
-  <h3 className="font-semibold">Stats</h3>
-  <p>
-    The <b>Stats</b> page shows totals, win rate, average moves (wins), best time,
-    and average vs Par, plus a per-difficulty breakdown. You can reset data from there.
-  </p>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="text-sm font-semibold text-slate-900"><u>Master</u></div>
+          <p className="mt-1 text-sm leading-5 text-slate-600">
+            Only start, current, visited and target areas are shown. No revisits. No undo.
+          </p>
+        </div>
+      </div>
+    </section>
 
-  <h3 className="font-semibold">Daily Challenge</h3>
-  <ul className="list-disc list-inside space-y-1">
-    <li>Pick one difficulty (Easy/Normal/Hard/Master) per day.</li>
-    <li>Progress auto-saves; you can <b>resume</b> later the same day.</li>
-    <li><b>Hints:</b> up to 3 per day for each difficulty.</li>
-    <li><b>Streaks</b> are tracked per difficulty. Keep winning to build them.</li>
-    <li>Share your result from the victory screen.</li>
-  </ul>
+    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        Daily Challenge
+      </h3>
+      <ul className="space-y-2 text-sm leading-6 text-slate-700">
+        <li>Choose one difficulty each day.</li>
+        <li>Your progress is saved automatically, so you can resume later.</li>
+        <li>You get up to <span className="font-medium text-slate-900">3 hints per day</span> for each difficulty.</li>
+        <li>Streaks are tracked separately for each difficulty.</li>
+        <li>You can share your result once you finish.</li>
+      </ul>
+    </section>
 
-  <h3 className="font-semibold">How to Play</h3>
-  <ul className="list-disc list-inside space-y-1">
-    <li>Type a neighbouring postcode in the selector and press <b>Enter</b>.</li>
-    <li>Use the map controls (top-left) to zoom and reset view.</li>
-    <li>Open the menu (top-right) for New Game, Restart, Tutorial, or Back to Menu.</li>
-  </ul>
+    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        Scoring, stats and achievements
+      </h3>
+      <ul className="space-y-2 text-sm leading-6 text-slate-700">
+        <li>Each daily puzzle has a <span className="font-medium text-slate-900">Par</span> based on the optimal route.</li>
+        <li>The <span className="font-medium text-slate-900">Stats</span> page shows wins, win rate, average moves, best time and average vs Par.</li>
+        <li>Unlock achievements for harder wins, perfect routes, long journeys, ferries, bridges, coverage and streaks.</li>
+        <li>Some achievements stay hidden until you discover them.</li>
+      </ul>
+    </section>
 
-  <h3 className="font-semibold">Tips &amp; Shortcuts</h3>
-  <ul className="list-disc list-inside space-y-1">
-    <li>Hints list valid neighbours; click one to move there.</li>
-    <li>Revisiting (Easy/Normal) can help explore—moves still count.</li>
-    <li><b>Ctrl/Cmd+Z</b> to undo a move (not available in Master).</li>
-  </ul>
+    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        Controls
+      </h3>
+      <ul className="space-y-2 text-sm leading-6 text-slate-700">
+        <li>Type a neighbouring postcode area and press <span className="font-medium text-slate-900">Enter</span>.</li>
+        <li>Use the map controls to zoom or reset the view.</li>
+        <li>Open the menu for New Game, Restart, Tutorial and more.</li>
+        <li><span className="font-medium text-slate-900">Ctrl/Cmd + Z</span> undoes a move where undo is available.</li>
+      </ul>
+    </section>
 
-  <h3 className="font-semibold">Privacy &amp; Data</h3>
-  <ul className="list-disc list-inside space-y-1">
-    <li>Your progress, stats, achievements, coverage, and streaks are stored <b>locally</b> in your browser.</li>
-    <li>Clearing site data or using another browser/device resets your progress.</li>
-  </ul>
+    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        Privacy & data
+      </h3>
+      <ul className="space-y-2 text-sm leading-6 text-slate-700">
+        <li>Your progress, stats, achievements, coverage and streaks are stored locally in your browser.</li>
+        <li>Clearing site data, switching browser or using another device can reset your progress.</li>
+      </ul>
+    </section>
 
-  <h3 className="font-semibold">Contact</h3>
-  <p className="mb-0">
-    Feedback is welcome!
-    <br />
-    <a className="btn btn-primary mt-2" href="https://forms.gle/Hf6fgRzBSnnZCqYJ6">
-      Send Feedback
-    </a>
-  </p>
-</div>
-
+    <section className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 shadow-sm">
+      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-indigo-700">
+        Feedback
+      </h3>
+      <p className="text-sm leading-6 text-slate-700">
+        Got feedback, spotted a bug, or have an idea for the game?
+      </p>
+      <a
+        href="https://forms.gle/Hf6fgRzBSnnZCqYJ6"
+        className="mt-3 inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
+      >
+        Send feedback
+      </a>
+    </section>
+  </div>
 </Modal>
 
 

@@ -107,7 +107,7 @@ a:visited {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   box-shadow: 0 6px 30px rgba(0,0,0,0.08);
-  border-radius: 16px;
+  border-radius: 1px;
 }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
@@ -140,6 +140,12 @@ a:visited {
   --glass-border: rgba(255, 255, 255, 0.35);
 }
 
+.glass--clear {
+  --glass-bg: rgba(255, 255, 255, 0);
+  --glass-fallback-bg: rgba(255, 255, 255, 0);
+  --glass-border: rgba(255, 255, 255, 0);
+}
+
 .glass--white {
   --glass-bg: rgba(255, 255, 255, 0.5);
   --glass-fallback-bg: rgba(255, 255, 255, 0.85);
@@ -154,7 +160,7 @@ a:visited {
 }
 
 .glass--slate {
-  --glass-bg: rgba(52, 58, 66, 0.493);   /* slate-ish */
+  --glass-bg: rgba(32, 36, 41, 0.75);   /* slate-ish */
   --glass-fallback-bg: rgba(100, 116, 139, 0.35);
   --glass-border: rgba(148, 163, 184, 0.45);
 }
@@ -247,10 +253,10 @@ a:visited {
 .btn-orange:hover { background-color:#9a3412; }
 
 /* Master (yours, but both states pass) */
-.btn-purple { background-color:#9333ea; color:#fff; border:2px solid #7e22ce; }
+.btn-purple { background-color:#8b5cf6; color:#fff; border:2px solid #8b5cf6; }
 .btn-purple:hover { background-color:#7e22ce; }
 
-.btn-white { background-color:#ffffff; color:#000000; border:2px solid #766e7c83; }
+.btn-white { background-color:#e9d9d9; color:#000000; border:2px solid #766e7c83; }
 .btn-white:hover { background-color:#b3b3b3; }
 
 /* Strong, visible focus for all buttons (meets 3:1 vs surroundings) */
@@ -452,20 +458,30 @@ a:visited {
 .badge-blue  { background:#eff6ff; color:#1e40af; border-color:#3b82f6; }
 .badge-gray  { background:#f9fafb; color:#374151; border-color:#d1d5db; }
 .badge-fail  { background:#e93f0b; color:#374151; border-color:#ff0000; color:#ffffff}
+.badge-best  { background:#8b5cf6; color:#ffffff; border-color:#8b5cf6}
 
 @keyframes nudge {
   0%,100% { transform: translateX(0); }
   10% { transform: translateX(-50px); }
-  20% { transform: translateX(50px); }
+  20% { transform: translateX(100px); }
   30% { transform: translateX(-50px); }
-  40% { transform: translateX(50px); }
+  40% { transform: translateX(100px); }
   50% { transform: translateX(-50px); }
-  60% { transform: translateX(50px); }
+  60% { transform: translateX(100px); }
   70% { transform: translateX(-50px); }
-  90% { transform: translateX(50px); }
+  90% { transform: translateX(100px); }
+5% { transform: translateX(-50px); }
+  15% { transform: translateX(-50px); }
+  25% { transform: translateX(100px); }
+  35% { transform: translateX(-50px); }
+  45% { transform: translateX(100px); }
+  55% { transform: translateX(-50px); }
+  65% { transform: translateX(100px); }
+  75% { transform: translateX(-50px); }
+  95% { transform: translateX(100px); }
 
 }
-.animate-shake { animation: nudge 5s ease-in-out; }
+.animate-shake { animation: nudge 0.75s ease-in-out; }
 
 /* Whole-area blue pulse for the current step */
 @keyframes areaPulseBlue {
@@ -1029,8 +1045,8 @@ tile-section div {
 }
 .grid-container > div {
   background-color: #f1f1f100;
-  color: #ffffff;
-  font-weight: bold;
+  color: #232a3c;
+  font-weight: medium;
   padding: 5px;
   font-size: 30px;
   text-align: center;
