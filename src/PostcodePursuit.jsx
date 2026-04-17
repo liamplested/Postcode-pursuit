@@ -115,31 +115,62 @@ function readStreaksAll() {
   return out;
 }
 
+function emptySnapshot() {
+  return {
+    version: 1,
+    achievements: {},
+    history: { games: [] },
+    streaks: {
+      easy: { count: 0, lastWinDate: null },
+      normal: { count: 0, lastWinDate: null },
+      hard: { count: 0, lastWinDate: null },
+      master: { count: 0, lastWinDate: null },
+    },
+    meta: {},
+  };
+}
+
 function writeStreaksAll(streaks) {
-  if (!streaks) return;
+  const fallback = emptySnapshot().streaks;
   for (const d of DIFFS) {
-    const rec = streaks[d];
-    if (rec && Number.isFinite(+rec.count) && rec.lastWinDate) {
-      saveStreakV2(d, +rec.count, rec.lastWinDate);
+    const rec = streaks?.[d] ?? fallback[d];
+    const count = Number(rec?.count) || 0;
+    const lastWinDate = rec?.lastWinDate || null;
+
+    if (count > 0 && lastWinDate) {
+      saveStreakV2(d, count, lastWinDate);
+    } else {
+      localStorage.removeItem(STREAK_KEY_V2(d));
     }
   }
 }
 
 
 function getLocalSnapshot() {
+  const base = emptySnapshot();
   return {
     version: 1,
-    achievements: readJSON(ACHIEVEMENTS_KEY, {}),
-    history:     readJSON(GAME_HISTORY_KEY, { games: [] }),
-    streaks:     readStreaksAll() || {},              // <-- per-difficulty
-    meta:        readJSON(META_KEY, {}) || {}
+    achievements: readJSON(ACHIEVEMENTS_KEY, base.achievements),
+    history: readJSON(GAME_HISTORY_KEY, base.history),
+    streaks: readStreaksAll() || base.streaks,
+    meta: readJSON(META_KEY, base.meta) || base.meta,
   };
 }
 function writeLocalSnapshot(s) {
-  if (s.achievements) writeJSON(ACHIEVEMENTS_KEY, s.achievements);
-  if (s.history)      writeJSON(GAME_HISTORY_KEY, s.history);
-  if (s.streaks)      writeStreaksAll(s.streaks); // <-- per-difficulty
-  if (s.meta != null) writeJSON(META_KEY, s.meta);
+  const base = emptySnapshot();
+  const snap = {
+    ...base,
+    ...s,
+    achievements: s?.achievements ?? base.achievements,
+    history: s?.history ?? base.history,
+    streaks: s?.streaks ?? base.streaks,
+    meta: s?.meta ?? base.meta,
+  };
+
+  writeJSON(ACHIEVEMENTS_KEY, snap.achievements);
+  writeJSON(GAME_HISTORY_KEY, snap.history);
+  writeStreaksAll(snap.streaks);
+  writeJSON(META_KEY, snap.meta);
 }
 
 
@@ -1930,29 +1961,24 @@ useEffect(() => {
 const [statsVersion, setStatsVersion] = React.useState(0);
 
 const resetAllStats = React.useCallback(({ alsoResetStreaks = true } = {}) => {
-  // Gameplay history
-  localStorage.removeItem(GAME_HISTORY_KEY);
+  const cleared = emptySnapshot();
 
-  // Achievements + visited progress
-  localStorage.removeItem(ACHIEVEMENTS_KEY);
-  localStorage.removeItem(VISITED_KEY);
-
-  // Lifetime coverage caches (🚨 the missing bit)
-  localStorage.removeItem(USED_FERRIES_KEY);
-  localStorage.removeItem(USED_BRIDGES_KEY);
-
-  // Daily streaks (optional)
-  if (alsoResetStreaks) {
-    ['easy','normal','hard','master'].forEach(d =>
-      localStorage.removeItem(STREAK_KEY_V2(d))
-    );
-    localStorage.removeItem('pp_daily_streak_v1'); // legacy
+  if (!alsoResetStreaks) {
+    cleared.streaks = getLocalSnapshot().streaks;
   }
 
-  // UI updates
+  writeLocalSnapshot(cleared);
+  localStorage.removeItem(VISITED_KEY);
+  localStorage.removeItem(USED_FERRIES_KEY);
+  localStorage.removeItem(USED_BRIDGES_KEY);
+  localStorage.removeItem('pp_daily_streak_v1');
+
   setAchievementToasts([]);
+  setStreaks({ easy: 0, normal: 0, hard: 0, master: 0 });
   setStatsVersion(v => v + 1);
-}, []);
+
+  onPersist?.(true);
+}, [onPersist]);
 
 
 function computeStats(){
