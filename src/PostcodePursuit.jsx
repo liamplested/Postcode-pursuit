@@ -2042,7 +2042,7 @@ const finishGame = useCallback((finalPath) => {
     endArea: targetArea,
   };
 
-addGameToHistory(event);
+addGameToHistory(event, { onPersist: () => onPersist(true) });
 
 if (dailyMode && dailyDifficulty) {
   const rec = bumpStreakFor(dailyDifficulty); // updates v2 key
