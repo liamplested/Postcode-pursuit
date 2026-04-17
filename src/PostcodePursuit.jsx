@@ -2045,10 +2045,9 @@ const finishGame = useCallback((finalPath) => {
 addGameToHistory(event, { onPersist: () => onPersist(true) });
 
 if (dailyMode && dailyDifficulty) {
-  const rec = bumpStreakFor(dailyDifficulty); // updates v2 key
-  setStreaks(s => ({ ...s, [dailyDifficulty]: rec }));
+  const rec = bumpStreakFor(dailyDifficulty);
+  setStreaks(s => ({ ...s, [dailyDifficulty]: rec.count ?? rec }));
 
-  // 🔓 unlock both global and per-diff streaks from the current count
   const streakNew = unlockStreaksFor(dailyDifficulty);
   if (streakNew.length) setAchievementToasts(q => [...q, ...streakNew]);
 }
@@ -2099,7 +2098,7 @@ if (unlocked?.length && window.gtag) {
   currentPath, optimalPath,
   difficulty, startArea, targetArea,
   dailyMode, dailyDifficulty,
-  bumpStreakFor, tallyEdgeUsage
+  bumpStreakFor, tallyEdgeUsage, onPersist
 ]);
 
 useEffect(() => {
