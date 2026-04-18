@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useId } from 'react';
-import { Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, Eye, Settings2, ArrowBigLeft} from 'lucide-react';
+import { MapPin, Trophy, Flag, Menu, ArrowRight, BookOpen, Ship, Route, Medal, ChartColumnBig, InfoIcon, ZoomIn, ZoomOut, Scan, Eye, Settings2} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { postcodeAreas, ferryLinks, bridgeLinks } from './postcodeAreas';
 import useSvgPan from './hooks/useSvgPan';
 import OnboardingTutorial from './components/OnboardingTutorial';
 import * as Daily from './dailyManager';
-
 
  import StatsPage from './pages/StatsPage.jsx';
  import AchievementsPage from './pages/AchievementsPage.jsx';
@@ -41,7 +40,7 @@ console.log('UID:', auth.currentUser?.uid);
 const WORLD = { x: 0, y: 0, width: 15000, height: 17500 }; // <- your existing values
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 30;
-//const ZOOM_STEP = 1.25; // button zoom factor
+const ZOOM_STEP = 1.25; // button zoom factor
 
 // Daily helpers
 const DAILY_STREAK_KEY = 'pp_daily_streak_v1'; // {count:number, lastWinDate:'YYYY-MM-DD'}
@@ -97,8 +96,6 @@ function saveStreakV2(diff, count, lastWinDate) {
   localStorage.setItem(STREAK_KEY_V2(diff), JSON.stringify({ count, lastWinDate }));
 }
 
-const dailySessionKey = (d) => `pp_daily_session_v2_${d}`;
-
 function readStreaksAll() {
   const out = {};
   for (const d of DIFFS) {
@@ -117,143 +114,31 @@ function readStreaksAll() {
   return out;
 }
 
-function readDailySessionsAll() {
-  const out = {};
-  for (const d of DIFFS) {
-    try {
-      out[d] = JSON.parse(localStorage.getItem(dailySessionKey(d)) || 'null');
-    } catch {
-      out[d] = null;
-    }
-  }
-  return out;
-}
-
-function writeDailySessionsAll(sessions) {
-  for (const d of DIFFS) {
-    const snap = sessions?.[d] ?? null;
-    if (snap) {
-      localStorage.setItem(dailySessionKey(d), JSON.stringify(snap));
-    } else {
-      localStorage.removeItem(dailySessionKey(d));
-    }
-  }
-}
-
-
-function emptySnapshot() {
-  return {
-    version: 2,
-    achievements: {},
-    history: { games: [] },
-    streaks: {
-      easy:   { count: 0, lastWinDate: null },
-      normal: { count: 0, lastWinDate: null },
-      hard:   { count: 0, lastWinDate: null },
-      master: { count: 0, lastWinDate: null },
-    },
-    dailySessions: {
-      easy: null,
-      normal: null,
-      hard: null,
-      master: null,
-    },
-    meta: {
-      visitedAreas: {},
-      usedFerries: {},
-      usedBridges: {},
-      visitedCount: 0,
-      usedFerriesCount: 0,
-      usedBridgesCount: 0,
-    },
-  };
-}
-
 function writeStreaksAll(streaks) {
-  const fallback = emptySnapshot().streaks;
+  if (!streaks) return;
   for (const d of DIFFS) {
-    const rec = streaks?.[d] ?? fallback[d];
-    const count = Number(rec?.count) || 0;
-    const lastWinDate = rec?.lastWinDate || null;
-
-    if (count > 0 && lastWinDate) {
-      saveStreakV2(d, count, lastWinDate);
-    } else {
-      localStorage.removeItem(STREAK_KEY_V2(d));
+    const rec = streaks[d];
+    if (rec && Number.isFinite(+rec.count) && rec.lastWinDate) {
+      saveStreakV2(d, +rec.count, rec.lastWinDate);
     }
   }
-}
-
-function readCoverageMeta() {
-  const visited = readJSON(VISITED_KEY, {});
-  const ferries = readJSON(USED_FERRIES_KEY, []);
-  const bridges = readJSON(USED_BRIDGES_KEY, []);
-
-  const visitedAreas =
-    Array.isArray(visited)
-      ? Object.fromEntries(visited.map(x => [x, true]))
-      : (visited && typeof visited === 'object' ? visited : {});
-
-  const usedFerries = Array.isArray(ferries)
-    ? Object.fromEntries(ferries.map(x => [x, true]))
-    : (ferries && typeof ferries === 'object' ? ferries : {});
-
-  const usedBridges = Array.isArray(bridges)
-    ? Object.fromEntries(bridges.map(x => [x, true]))
-    : (bridges && typeof bridges === 'object' ? bridges : {});
-
-  return {
-    visitedAreas,
-    usedFerries,
-    usedBridges,
-    visitedCount: Object.keys(visitedAreas).length,
-    usedFerriesCount: Object.keys(usedFerries).length,
-    usedBridgesCount: Object.keys(usedBridges).length,
-  };
 }
 
 
 function getLocalSnapshot() {
-  const base = emptySnapshot();
-
-  const storedMeta = readJSON(META_KEY, base.meta) || base.meta;
-
-  const coverageMeta = readCoverageMeta();
-
   return {
-    version: base.version,
-    achievements: readJSON(ACHIEVEMENTS_KEY, base.achievements),
-    history: readJSON(GAME_HISTORY_KEY, base.history),
-    streaks: readStreaksAll() || base.streaks,
-    dailySessions: readDailySessionsAll() || base.dailySessions,
-    meta: {
-      ...storedMeta,
-      ...coverageMeta,
-    },
+    version: 1,
+    achievements: readJSON(ACHIEVEMENTS_KEY, {}),
+    history:     readJSON(GAME_HISTORY_KEY, { games: [] }),
+    streaks:     readStreaksAll() || {},              // <-- per-difficulty
+    meta:        readJSON(META_KEY, {}) || {}
   };
 }
-
-
 function writeLocalSnapshot(s) {
-  const base = emptySnapshot();
-  const snap = {
-    ...base,
-    ...s,
-    achievements: s?.achievements ?? base.achievements,
-    history: s?.history ?? base.history,
-    streaks: s?.streaks ?? base.streaks,
-    dailySessions: s?.dailySessions ?? base.dailySessions,
-    meta: { ...base.meta, ...(s?.meta || {}) },
-  };
-
-  writeJSON(ACHIEVEMENTS_KEY, snap.achievements);
-  writeJSON(GAME_HISTORY_KEY, snap.history);
-  writeStreaksAll(snap.streaks);
-  writeDailySessionsAll(snap.dailySessions);
-  writeJSON(META_KEY, snap.meta);
-  writeJSON(VISITED_KEY, snap.meta.visitedAreas || {});
-writeJSON(USED_FERRIES_KEY, Object.keys(snap.meta.usedFerries || {}));
-writeJSON(USED_BRIDGES_KEY, Object.keys(snap.meta.usedBridges || {}));
+  if (s.achievements) writeJSON(ACHIEVEMENTS_KEY, s.achievements);
+  if (s.history)      writeJSON(GAME_HISTORY_KEY, s.history);
+  if (s.streaks)      writeStreaksAll(s.streaks); // <-- per-difficulty
+  if (s.meta != null) writeJSON(META_KEY, s.meta);
 }
 
 
@@ -498,21 +383,8 @@ function MobileCodeScroller({
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
-  const railLabel =
-    mode === 'neighbors'
-      ? 'Available neighbours'
-      : query.length > 0
-        ? 'Matching postcodes'
-        : 'Suggested postcodes';
-
-  const railContent =
-    mode === 'neighbors'
-      ? (neighborOptions.length ? neighborOptions : null)
-      : (query.length > 0 ? options : null);
-
   return (
-    <div className="glass glass--white p-5 rounded-0xl shadow-xl text-left">
-      
+    <div className="select-none">
       {/* Header */}
       <div className="flex items-center justify-between px-3 pb-1">
         <div className="text-xs opacity-80">
@@ -547,7 +419,7 @@ function MobileCodeScroller({
 
       {/* On-screen keypad — now using your btn classes */}
       {mode !== 'neighbors' && (
-        <div className="mx-3 mb-2 p-2 rounded-lg bg-slate-900/10">
+        <div className="mx-3 mb-3 p-2 rounded-lg bg-slate-900/10">
           {alphabet.map(L => (
             <button
               key={L}
@@ -558,7 +430,7 @@ function MobileCodeScroller({
             >
               {L}
             </button>
-          ))}<br />
+          ))}
           <button
             type="button"
             onClick={backspace}
@@ -576,41 +448,63 @@ function MobileCodeScroller({
         </div>
       )}
 
-      {/* Fixed-height option rail so the controls panel doesn't jump */}
-      <div
-        className="pp-mobile-option-rail mx-3 mb-3"
-        role="listbox"
-        aria-label={railLabel}
-      >
-        {railContent ? (
-          railContent.map(code => (
-            <button
-              key={code}
-              type="button"
-              role="option"
-              aria-selected={false}
-              className={`btn btn-green hover:brightness-95 pp-mobile-option-chip ${
-                mode !== 'neighbors' && code === query ? 'ring-1 ring-indigo-500 font-semibold' : ''
-              }`}
-              onClick={() => {
-                onPick?.(code);
-                if (mode !== 'neighbors') clearQuery();
-              }}
-              aria-label={`Select ${code}`}
-            >
-              {code}
-            </button>
-          ))
-        ) : (
-          <span className="pp-mobile-option-empty">
-            {mode === 'neighbors'
-              ? 'No unvisited neighbours'
-              : query.length > 0
-                ? 'No matches'
-                : 'Matching postcode options will appear here'}
-          </span>
-        )}
-      </div>
+      {/* Results scroller — hidden until user typed at least 1 letter */}
+      {mode === 'neighbors' ? (
+        <div
+          className="flex overflow-x-auto gap-2 px-3 pb-3 snap-x snap-mandatory"
+          role="listbox"
+          aria-label="Available neighbours"
+          style={{ scrollbarGutter: 'stable both-edges' }}
+        >
+          {neighborOptions.length ? (
+            neighborOptions.map(code => (
+              <button
+                key={code}
+                type="button"
+                role="option"
+                aria-selected={false}
+                className="btn btn-green hover:brightness-95 snap-start"
+                onClick={() => onPick?.(code)}
+                aria-label={`Select ${code}`}
+              >
+                {code}
+              </button>
+            ))
+          ) : (
+            <span className="text-xs opacity-70 px-3">No unvisited neighbours</span>
+          )}
+        </div>
+      ) : query.length > 0 ? (
+        <div
+          className="flex overflow-x-auto gap-2 px-3 pb-3 snap-x snap-mandatory"
+          role="listbox"
+          aria-label="Matching postcodes"
+          style={{ scrollbarGutter: 'stable both-edges' }}
+        >
+          {options.length ? (
+            options.map(code => (
+              <button
+                key={code}
+                type="button"
+                role="option"
+                aria-selected={false}
+                className={`btn btn-green hover:brightness-95 snap-start ${
+                  code === query ? 'ring-1 ring-indigo-500 font-semibold' : ''
+                }`}
+                onClick={() => {
+                  onPick?.(code);
+                  clearQuery();
+                }}
+                aria-label={`Select ${code}`}
+              >
+                {code}
+              </button>
+            ))
+          ) : (
+            <span className="text-xs opacity-70 px-3">No matches</span>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -677,7 +571,6 @@ const [gameWon, setGameWon] = useState(false);
 const [optimalPath, setOptimalPath] = useState([]);
 const [achievementToasts, setAchievementToasts] = useState([]);
 const [showHints, setShowHints] = useState(false);
-const [dailyGaveUp, setDailyGaveUp] = useState(false);
 const [journeyExpanded, setJourneyExpanded] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -704,7 +597,6 @@ const [consentResolved, setConsentResolved] = useState(
 );
 
 const canClickAreas = difficulty === 'easy';
-const roundResolved = gameWon || dailyGaveUp;
 
 // --- Soft Par helpers (Daily only) ---
 const parForOptimal = (optimalMoves) => Math.max(1, Math.ceil(optimalMoves * 1.25));
@@ -785,6 +677,8 @@ const [hintsUsed, setHintsUsed] = useState(0);
 
 function todayUTC() { return new Date().toISOString().slice(0,10); } // YYYY-MM-DD
 
+const dailySessionKey = (d) => `pp_daily_session_v2_${d}`;
+
 const saveDailySessionSnapshot = React.useCallback(() => {
   if (!dailyMode || !dailyDate || !dailyDifficulty) return;
   const elapsedSoFar =
@@ -797,7 +691,6 @@ const saveDailySessionSnapshot = React.useCallback(() => {
     optimalPath, elapsedMs: Math.floor(elapsedSoFar),
     gameWon, showOptimal, victoryOpen,
     par: dailyPar,
-    savedAt: new Date().toISOString(),
   };
   localStorage.setItem(dailySessionKey(dailyDifficulty), JSON.stringify(snapshot));
 }, [
@@ -956,7 +849,6 @@ const resetDailyFlags = React.useCallback(() => {
   setDailyDifficulty(null);
   setHintsUsed(0);
   setShowHints(false);
-  setDailyGaveUp(false);
 }, []);
 
 
@@ -1053,26 +945,20 @@ function startOrResumeDaily(difficulty) {
         : [snap.startArea]
     );
     setGuesses(Array.isArray(snap.guesses) ? snap.guesses : []);
-    setShowOptimal(!!snap.showOptimal || !!snap.gaveUp || !!snap.roundOver);
+    setShowOptimal(!!snap.showOptimal);
     setElapsedMs(snap.elapsedMs || 0);
 
-if (snap.gameWon) {
-  setGameWon(true);
-  setVictoryOpen(true);
-  setGameState('gameWon');
-  gameStartRef.current = null;
-} else if (snap.gaveUp || snap.roundOver) {
-  setGameWon(false);
-  setShowOptimal(true);
-  setVictoryOpen(false);
-  setGameState('gameOver');
-  gameStartRef.current = null;
-} else {
-  setGameWon(false);
-  setVictoryOpen(!!snap.victoryOpen);
-  setGameState('playing');
-  gameStartRef.current = performance.now() - (snap.elapsedMs || 0);
-}
+    if (snap.gameWon) {
+      setGameWon(true);
+      setVictoryOpen(true);          // show Share immediately
+      setGameState('gameWon');
+      gameStartRef.current = null;
+    } else {
+      setGameWon(false);
+      setVictoryOpen(!!snap.victoryOpen);
+      setGameState('playing');
+      gameStartRef.current = performance.now() - (snap.elapsedMs || 0);
+    }
 
     requestAnimationFrame(() =>
       focusStartAndTarget(snap.startArea, snap.targetArea)
@@ -1104,7 +990,6 @@ if (snap.gameWon) {
   setCurrentPath([start]);
   setGuesses([]);
   setGameWon(false);
-  setDailyGaveUp(false);
   setOptimalPath(path);
   setDailyPar(parFor(Math.max(0, path.length - 1), difficulty));
   setGameState('playing');
@@ -1159,19 +1044,15 @@ useEffect(() => {
     optimalPath,
     elapsedMs: Math.floor(elapsedSoFar),
     gameWon,
-    gaveUp: dailyGaveUp,
-    roundOver: gameWon || dailyGaveUp,
     showOptimal,
     victoryOpen,
-    par: dailyPar,
-    savedAt: new Date().toISOString(),
+    par: dailyPar
   });
-  onPersist?.();
 }, [
   dailyMode, dailyDate, dailyDifficulty,
   startArea, targetArea, currentPath, guesses,
-  hintsUsed, optimalPath, elapsedMs, gameWon, dailyGaveUp,
-  showOptimal, victoryOpen, dailyPar, onPersist
+  hintsUsed, optimalPath, elapsedMs, gameWon,
+  showOptimal, victoryOpen, dailyPar
 ]);
 
 
@@ -1225,18 +1106,17 @@ const isRevealed = useCallback(
 useEffect(() => {
   if (!dailyMode) return;
   saveDailySessionSnapshot();
-onPersist?.();
 }, [
   dailyMode, dailyDate, dailyDifficulty,
   startArea, targetArea, currentPath, guesses,
   hintsUsed, optimalPath, elapsedMs, gameWon,
-  showOptimal, victoryOpen, saveDailySessionSnapshot, onPersist
+  showOptimal, victoryOpen, saveDailySessionSnapshot
 ]);
 
 const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
 
 
-  const { reset, panTo } = useSvgPan(svgRef, gRef, {
+  const { reset, zoomIn, zoomOut, panTo } = useSvgPan(svgRef, gRef, {
     enabled: isMapInteractive,
     min: MIN_SCALE,
     max: MAX_SCALE,
@@ -1823,7 +1703,7 @@ const giveUpNow = useCallback(() => {
     dateISO: new Date().toISOString(),
     mode: dailyMode ? 'daily' : 'free',
     difficulty,
-    won: false,
+    won: false,                                        // 👈 LOSS
     moves: Math.max(0, currentPath.length - 1),
     durationMs: ms,
     usedFerry: ferryCount > 0,
@@ -1835,8 +1715,9 @@ const giveUpNow = useCallback(() => {
     startArea,
     endArea: targetArea,
   };
-  addGameToHistory(event, { onPersist: () => onPersist(true) });
+addGameToHistory(event, { onPersist: () => onPersist(true)});
 
+  // optional: analytics
   window.gtag?.('event', 'game_gave_up', {
     difficulty,
     start_postcode: startArea,
@@ -1846,48 +1727,14 @@ const giveUpNow = useCallback(() => {
     round_id: roundIdRef.current || undefined,
   });
 
+  // close + go back
   setGiveUpOpen(false);
   setVictoryOpen(false);
-  setShowHints(false);
-  gameStartRef.current = null;
-
-  if (dailyMode && dailyDifficulty && dailyDate) {
-    setGameWon(false);
-    setDailyGaveUp(true);
-    setShowOptimal(true);
-
-    Daily.saveSnapshot(dailyDifficulty, {
-      date: dailyDate,
-      difficulty: dailyDifficulty,
-      startArea,
-      targetArea,
-      currentPath,
-      guesses,
-      hintsUsed,
-      optimalPath,
-      elapsedMs: Math.floor(ms),
-      gameWon: false,
-      gaveUp: true,
-      roundOver: true,
-      showOptimal: true,
-      victoryOpen: false,
-      par: dailyPar,
-      savedAt: new Date().toISOString(),
-    });
-    onPersist?.();
-
-
-    
-    setGameState('dailyLost');
-    roundIdRef.current = null;
-    return;
-  }
-
   setGameState('menu');
   roundIdRef.current = null;
 }, [
   guesses, optimalPath, currentPath, startArea, targetArea,
-  dailyMode, dailyDifficulty, dailyDate, dailyPar, hintsUsed, difficulty, onPersist
+  dailyMode, difficulty, onPersist
 ]);
 
 
@@ -1944,13 +1791,13 @@ const focusStartAndTarget = React.useCallback((startCode, targetCode, pad = 0.2)
 
 
 const COLORS = {
-  baseFill:    '#ecded6ff',
-  baseStroke:  '#2e3744ff',
-  startFill:   '#1a6e65ff',
+  baseFill:    '#94A3B8',
+  baseStroke:  '#475569',
+  startFill:   '#2A9D8F',
   startStroke: '#0F766E',
   currentFill: '#2563EB',
   currentStroke:'#FFFFFF',
-  visitedFill: '#04bd32ff',
+  visitedFill: '#00fa3eff',
   visitedStroke:'#64748B',
   targetFill:  '#F59E0B',
   targetStroke:'#92400E',
@@ -1963,7 +1810,7 @@ const getAreaStyle = (code) => {
   // Flags
   const isStart   = code === startArea;
   const isTarget  = code === targetArea;
-  const isCurrent = currentArea && code === currentArea && !isStart && !roundResolved;
+  const isCurrent = currentArea && code === currentArea && !isStart;
   const isVisited = currentPath.includes(code);
   const isFlashing = flashAreas.includes(code);
 
@@ -1980,10 +1827,9 @@ const getAreaStyle = (code) => {
   // 🔴 Invalid/duplicate guess flash overrides everything for 400ms
 if (isFlashing) {
   return {
-    fill: '#a50707ff',                 // red flash for invalid/duplicate guess
-    color: '#fff',   // texture (not color)
-    stroke: '#e3e637ff',                     // high-contrast border
-    strokeWidth: 5,                   // clearly thicker than normal
+    fill: 'url(#pp-invalid-stripes)',   // texture (not color)
+    stroke: '#000',                     // high-contrast border
+    strokeWidth: 4.5,                   // clearly thicker than normal
     strokeDasharray: '6 4',             // hint via line style
   };
 }
@@ -2047,28 +1893,29 @@ useEffect(() => {
 const [statsVersion, setStatsVersion] = React.useState(0);
 
 const resetAllStats = React.useCallback(({ alsoResetStreaks = true } = {}) => {
-  const cleared = emptySnapshot();
+  // Gameplay history
+  localStorage.removeItem(GAME_HISTORY_KEY);
 
-  if (!alsoResetStreaks) {
-    cleared.streaks = getLocalSnapshot().streaks;
+  // Achievements + visited progress
+  localStorage.removeItem(ACHIEVEMENTS_KEY);
+  localStorage.removeItem(VISITED_KEY);
+
+  // Lifetime coverage caches (🚨 the missing bit)
+  localStorage.removeItem(USED_FERRIES_KEY);
+  localStorage.removeItem(USED_BRIDGES_KEY);
+
+  // Daily streaks (optional)
+  if (alsoResetStreaks) {
+    ['easy','normal','hard','master'].forEach(d =>
+      localStorage.removeItem(STREAK_KEY_V2(d))
+    );
+    localStorage.removeItem('pp_daily_streak_v1'); // legacy
   }
 
-writeLocalSnapshot(cleared);
-localStorage.removeItem(VISITED_KEY);
-localStorage.removeItem(USED_FERRIES_KEY);
-localStorage.removeItem(USED_BRIDGES_KEY);
-localStorage.removeItem('pp_daily_streak_v1');
-
-for (const d of DIFFS) {
-  localStorage.removeItem(dailySessionKey(d));
-}
-
-setAchievementToasts([]);
-setStreaks({ easy: 0, normal: 0, hard: 0, master: 0 });
-setStatsVersion(v => v + 1);
-
-onPersist?.(true);
-}, [onPersist]);
+  // UI updates
+  setAchievementToasts([]);
+  setStatsVersion(v => v + 1);
+}, []);
 
 
 function computeStats(){
@@ -2158,12 +2005,13 @@ const finishGame = useCallback((finalPath) => {
     endArea: targetArea,
   };
 
-addGameToHistory(event, { onPersist: () => onPersist(true) });
+addGameToHistory(event);
 
 if (dailyMode && dailyDifficulty) {
-  const rec = bumpStreakFor(dailyDifficulty);
-  setStreaks(s => ({ ...s, [dailyDifficulty]: rec.count ?? rec }));
+  const rec = bumpStreakFor(dailyDifficulty); // updates v2 key
+  setStreaks(s => ({ ...s, [dailyDifficulty]: rec }));
 
+  // 🔓 unlock both global and per-diff streaks from the current count
   const streakNew = unlockStreaksFor(dailyDifficulty);
   if (streakNew.length) setAchievementToasts(q => [...q, ...streakNew]);
 }
@@ -2214,7 +2062,7 @@ if (unlocked?.length && window.gtag) {
   currentPath, optimalPath,
   difficulty, startArea, targetArea,
   dailyMode, dailyDifficulty,
-  bumpStreakFor, tallyEdgeUsage, onPersist
+  bumpStreakFor, tallyEdgeUsage
 ]);
 
 useEffect(() => {
@@ -2296,7 +2144,7 @@ function Callout({ code, label, color, getCenter, scale }) {
   if (!c) return null;
 
   // 👇 tweak this multiplier until you’re happy (e.g. 1.6 → 2.2)
-  const CALLOUT_MULT = 7;
+  const CALLOUT_MULT = 10;
    const CAP = {
     stroke: 0.1,
     dot: 14,
@@ -2307,7 +2155,7 @@ function Callout({ code, label, color, getCenter, scale }) {
     radius: 18,
     font: 24,
     notch: 18,
-    offset: 10,                   // max distance from centroid to bubble center
+    offset: 1,                   // max distance from centroid to bubble center
   };
   const spx = makeSpx(scale, CALLOUT_MULT);
 
@@ -2557,7 +2405,6 @@ const startNewGame = () => {
   setCurrentPath([start]);
   setGuesses([]);
   setGameWon(false);
-  setDailyGaveUp(false);
   addVisited([start]);
 
   setOptimalPath(path);              // we already have it
@@ -2573,7 +2420,7 @@ const startNewGame = () => {
 
 // const minStepsByMode = { easy: 3, normal: 4, hard: 5, master: 6 };
 const makeGuess = useCallback((area) => {
-  if (gameWon || dailyGaveUp) return;
+  if (gameWon) return;
 
   setErrorToast(prev => (prev ? '' : prev));
   setShowHints(false);
@@ -2590,7 +2437,7 @@ const makeGuess = useCallback((area) => {
 
   if (!isValidMove || (alreadyVisited && !revisitAllowed)) {
     setFlashAreas(prev => [...prev, area]);
-    setTimeout(() => setFlashAreas(prev => prev.filter(a => a !== area)), 500);
+    setTimeout(() => setFlashAreas(prev => prev.filter(a => a !== area)), 400);
 
     if (!isValidMove)        showError(`${area} isn’t adjacent to ${currentLocation}`);
     else if (alreadyVisited) showError(`You've already visited ${area} in this game. Revisiting is not allowed in ${difficulty} difficulty`);
@@ -2630,7 +2477,7 @@ const makeGuess = useCallback((area) => {
 }, [
   getNeighbors, gameWon, currentPath, targetArea, finishGame,
   ferryAdj, bridgeAdj, difficulty, showError,
-  onPersist, dailyGaveUp
+  onPersist,
 ]);
 
 // const isFerryEdge  = (a,b) => ferryAdj.get(a)?.has(b)  || false;
@@ -2740,12 +2587,12 @@ const renderMap = () => (
       borderRadius: 16,
     }}
   >
-    
-{/*     <div className="absolute top-2 left-2 z-10 flex gap-2">
+    {/* Zoom overlay, top-left */}
+    <div className="absolute top-2 left-2 z-10 flex gap-2">
       <button onClick={() => zoomOut(ZOOM_STEP)} className="smlbtn" title="Zoom out"><ZoomOut className="w-2 h-2" /></button>
       <button onClick={() => zoomIn(ZOOM_STEP)}  className="smlbtn" title="Zoom in"><ZoomIn className="w-2 h-2" /></button>
       <button onClick={resetView} className="smlbtn" title="Reset view to Start & Target"><Scan className="w-2 h-2" /></button>
-    </div> */}
+    </div>
 
     <svg
       ref={svgRef}
@@ -2928,7 +2775,7 @@ const renderMap = () => (
     <Callout
       code={startArea}
       label={`Start: ${startArea}`}
-      color="#167903ff"
+      color="#10b981"
       getCenter={getCenter}
       scale={scaleForLabels || 1}
     />
@@ -2937,7 +2784,7 @@ const renderMap = () => (
     <Callout
       code={targetArea}
       label={`Target: ${targetArea}`}
-      color="#da5903ff"
+      color="#9333ea"
       getCenter={getCenter}
       scale={scaleForLabels || 1}
     />
@@ -2998,8 +2845,8 @@ const getVisibleJourneyItems = useCallback(() => {
 const renderControls = () => (
   <div ref={controlsRef} className="pp-controls-layer top-0 z-20 w-full">
     <div
-      className="pp-top-overlay glass glass--white mx-auto relative"
-      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}
+      className="pp-top-overlay glass glass--slate mx-auto relative"
+      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'visible', borderRadius: 10, WebkitOverflowScrolling: 'touch' }}
     >
       <div className="grid-container">
         <div>
@@ -3010,15 +2857,15 @@ const renderControls = () => (
             aria-label="Back to menu"
             title="Back to menu (Esc)"
           >
-            <ArrowBigLeft w-4 h-4 />
+            ←
           </button>
         </div>
 
         <div className="text-center leading-tight text-[clamp(11px,2.6vw,13px)]">
           <span className="whitespace-nowrap">
-            Travel from<br /> <span className="text-indigo-200">{startArea || '—'}</span> → {' '}
-            <span className="text-indigo-200">{targetArea || '—'}</span><br />
-            {dailyMode && Number.isFinite(dailyPar) && (  
+            Travel from <span className="text-indigo-200">{startArea || '—'}</span> to{' '}
+            <span className="text-indigo-200">{targetArea || '—'}</span>
+            {dailyMode && Number.isFinite(dailyPar) && (
               <span className="badge badge-gray ml-2 inline-flex items-center !text-[11px] !leading-tight !py-0.5 !px-2 align-middle">
                 <span className="mr-1 align-[-0.1em]">⛳</span>
                 Par {dailyPar}
@@ -3172,10 +3019,10 @@ const renderControls = () => (
     <div className="pp-controls-spacer" aria-hidden="true" />
 
     <div
-      className="pp-bottom-overlay mx-auto"
-      style={{ width: '100%', maxWidth: '630px', overflowX: 'auto', overflowY: 'auto', maxHeight: '1000px', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
+      className="pp-bottom-overlay glass glass--slate mx-auto"
+      style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'auto', borderRadius: 10, maxHeight: '1000px', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
     >
-      {!roundResolved && (
+      {!gameWon && (
         <div className="px-3 pb-3 pt-2">
           {isTouch ? (
             <MobileCodeScroller
@@ -3205,7 +3052,6 @@ const renderControls = () => (
                   ref={inputRef}
                   list="pp-codelist"
                   type="text"
-                  placeholder='Enter a Postcode'
                   className="rounded-2xl border border-slate-300 text-center shadow-md focus:ring-4 focus:ring-indigo-400 focus:outline-none"
                   onInput={handleSelectorInput}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleInputSubmit(e.currentTarget); }}
@@ -3216,11 +3062,11 @@ const renderControls = () => (
                   enterKeyHint="go"
                   aria-label="Select or enter a postcode"
                   style={{
-                    width: 400,
+                    width: 200,
                     height: 20,
                     fontSize: 28,
                     padding: '16px 64px 16px 20px',
-                    
+                    textTransform: 'uppercase',
                     letterSpacing: '0.04em',
                     display: 'inline-block',
                     margin: '0 auto',
@@ -3258,7 +3104,7 @@ const renderControls = () => (
         </div>
       )}
 
-      <div className="glass glass--white px-3 pb-2">
+      <div className="px-3 pb-2">
         <div className="flex flex-wrap items-center gap-2">
           <div
             ref={journeyRailRef}
@@ -3286,10 +3132,10 @@ const renderControls = () => (
               const base =
                 code === targetArea ? 'badge-green' :
                 i === currentPath.length - 1 ? 'badge-blue' :
-                code === startArea ? 'badge-green' :
-                type === 'ferry' ? 'badge-green' :
-                type === 'bridge' ? 'badge-green' :
-                'badge-green';
+                code === startArea ? 'badge-gray' :
+                type === 'ferry' ? 'badge-blue' :
+                type === 'bridge' ? 'badge-purple' :
+                'badge-gray';
               const title =
                 i === 0 ? 'Start area' :
                 i === currentPath.length - 1 ? 'Current area' :
@@ -3320,7 +3166,7 @@ const renderControls = () => (
               <button
                 type="button"
                 onClick={() => setJourneyExpanded(false)}
-                className="badge badge-green shrink-0"
+                className="badge badge-gray shrink-0"
                 title="Collapse journey"
                 aria-label="Collapse journey"
               >
@@ -3354,7 +3200,7 @@ const renderControls = () => (
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            {!roundResolved && !masterMode && (
+            {!gameWon && !masterMode && (
               <button
                 onClick={undoLastMove}
                 disabled={currentPath.length <= 1}
@@ -3366,7 +3212,7 @@ const renderControls = () => (
               </button>
             )}
 
-            {!roundResolved && (
+            {!gameWon && (
               <button className="btn btn-warn" onClick={() => setGiveUpOpen(true)} title="End this game as a loss">
                 Give up
               </button>
@@ -3397,7 +3243,7 @@ const renderControls = () => (
                 >
                   <h2 id="giveup-title" className="text-xl font-semibold mb-2">Give up?</h2>
                   <p className="mb-4">
-                    This will record a <b>loss</b> for this {dailyMode ? 'Daily' : 'Free Play'} game{dailyMode ? ' and reveal the optimal path' : ''}.<br />
+                    This will record a <b>loss</b> for this {dailyMode ? 'Daily' : 'Free Play'} game.<br />
                     Current route: <b>{Math.max(0, currentPath.length - 1)}</b> moves
                     {optimalPath.length > 0 && <> · Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
                   </p>
@@ -3410,7 +3256,7 @@ const renderControls = () => (
               document.body
             )}
 
-            {!roundResolved && (
+            {!gameWon && (
               <button
                 className="btn btn-success"
                 onClick={toggleHints}
@@ -3423,12 +3269,12 @@ const renderControls = () => (
               </button>
             )}
 
-            {roundResolved && (
+            {gameWon && (
               <>
                 <div className="inline-flex items-center gap-2 px-2 py-1 rounded border border-emerald-300 bg-emerald-100 text-emerald-900">
                   <Trophy className="w-4 h-4" />
                   <span>
-                    {gameWon ? <>Completed in <b>{Math.max(0, currentPath.length - 1)}</b></> : <>Gave up after <b>{Math.max(0, currentPath.length - 1)}</b></>}
+                    Completed in <b>{Math.max(0, currentPath.length - 1)}</b>
                     {optimalPath.length > 0 && <> · Optimal <b>{Math.max(0, optimalPath.length - 1)}</b></>}
                   </span>
                 </div>
@@ -3443,7 +3289,7 @@ const renderControls = () => (
       </div>
 
       <Modal
-        open={showHints && !roundResolved && currentPath.length > 0}
+        open={showHints && !gameWon && currentPath.length > 0}
         onClose={() => setShowHints(false)}
         title="Available connections"
       >
@@ -3484,12 +3330,12 @@ const renderControls = () => (
         })()}
       </Modal>
 
-      {(roundResolved && showOptimal && optimalPath?.length > 0) && (
+      {gameWon && showOptimal && optimalPath?.length > 0 && (
         <div className="mt-3">
           <div className="text-sm font-semibold mb-1">Optimal route:</div>
           <div className="badges flex flex-wrap items-center gap-2">
             {optimalPath.map((code, i) => (
-              <span key={i} className="badge badge-best">
+              <span key={i} className="badge badge-green">
                 <span style={{ marginRight: 6 }}>{i}:</span>
                 {code}
               </span>
@@ -3499,7 +3345,7 @@ const renderControls = () => (
       )}
 
       <ToastShell
-        open={showNudge && !masterMode && !roundResolved}
+        open={showNudge && !masterMode && !gameWon}
         onClose={dismissNudge}
         width={360}
       >
@@ -3515,7 +3361,7 @@ const renderControls = () => (
             }
           }}
         >
-          You are in the <b>glowing postcode area</b>. Enter and select a neighbouring postcode area like <b>{exampleNeighbor}</b>. If you're still unsure, try the tutorial.
+          You are in the <b>glowing postcode area</b>. Enter a neighbouring postcode like <b>{exampleNeighbor}</b> and press <b>Enter</b>. If you're still unsure, try the tutorial.
         </TipToast>
       </ToastShell>
 
@@ -3614,9 +3460,11 @@ function handleDailyChoice(diff) {
 const renderMenu = () => (
   <div className="max-w-2xl mx-auto p-8 glass glass--slate text-center mt-8 relative">
     
-    
-<img src="logo192.png" alt="Postcode Pursuit logo" height="100" className="w-32 h-auto mx-auto mb-4" />
+    <MapPin className="w-16 h-16 mx-auto text-indigo-600 mb-4" />
     <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Postcode Pursuit</h1>
+    <p className="text-slate-600 mb-6">
+      Navigate between UK postcode areas by following their geographical connections!
+    </p>
         <div className="absolute top-2 right-2 flex items-center gap-2">
 <AuthButton size="btn-sm" />
       </div>
@@ -3849,7 +3697,7 @@ const renderMenu = () => (
 
             <div className="mt-3 flex gap-2 justify-center">
               <button
-                className="btn btn-primary"
+                className="button-shiny blue w-full max-w-[20rem]"
                 onClick={() => {
                   startOrResumeDaily(dailyChoice);
                   setShowDailyChooser(false);
@@ -3857,12 +3705,12 @@ const renderMenu = () => (
                 }}
                 style={{ 
                   display: 'block', 
-                  width: '98%', 
-                  padding: '1rem 1rem', // Smaller padding
+                  width: '90%', 
+                  padding: '1rem 0.5rem', // Smaller padding
                   fontSize: '2rem', // Smaller text
                 }}
               >
-                Play Game
+                Play Game ▶️
               </button>
             </div>
           </div>
@@ -4014,7 +3862,7 @@ const renderMenu = () => (
 
       <div className="mt-3 flex gap-2 justify-center">
         <button
-          className="btn btn-primary"
+          className="button-shiny blue w-full max-w-[20rem]"
           onClick={() => {
             startWithDifficulty(freeChoice);
             setShowFreePlayChooser(false);
@@ -4022,8 +3870,8 @@ const renderMenu = () => (
           }}
                           style={{ 
                   display: 'block', 
-                  width: '98%', 
-                  padding: '1rem 1rem', // Smaller padding
+                  width: '90%', 
+                  padding: '1rem 0.5rem', // Smaller padding
                   fontSize: '2rem', // Smaller text
                 }}
         >
@@ -4055,139 +3903,88 @@ const renderMenu = () => (
   onClose={() => setShowAbout(false)}
   title="About Postcode Pursuit"
 >
-  <div className="space-y-5 text-slate-800">
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <p className="text-sm leading-6 text-slate-700">
-        <span className="font-semibold text-slate-900">Postcode Pursuit</span> is a daily UK
-        geography puzzle. Start in one postcode area and reach the{" "}
-        <span className="font-semibold text-slate-900">Target</span> by moving through adjacent
-        postcode areas. It’s inspired by{" "}
-        <a
-          href="https://travle.earth"
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-700"
-        >
-          Travle
-        </a>
-        .
-      </p>
-    </section>
+<div className="prose prose-slate max-w-none">
+  <p>
+    <b>Postcode Pursuit</b> is a geography-based puzzle game: travel from your <b>Start</b> postcode area
+    to the <b>Target</b> by stepping through adjacent UK postcode areas.
+    It’s inspired by the excellent{" "}
+    <a href="https://travle.earth" target="_blank" rel="noreferrer" className="text-indigo-600 underline">
+      Travle
+    </a>.
+  </p>
 
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        How it works
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Move between neighbouring UK postcode areas.</li>
-        <li>
-          <span className="font-medium text-slate-900">Dashed lines</span> show ferry links.
-        </li>
-        <li>
-          <span className="font-medium text-slate-900">Solid lines</span> show major bridges and
-          tunnels.
-        </li>
-        <li>Reach the target in as few moves as possible.</li>
-      </ul>
-    </section>
+  <h3 className="font-semibold">Connections</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li><b>Land borders</b> between postcode areas</li>
+    <li><b>Ferries</b> — dashed lines</li>
+    <li><b>Major bridges &amp; tunnels</b> — solid lines</li>
+  </ul>
 
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Difficulty modes
-      </h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900"><u>Easy</u></div>
-          <p className="mt-1 text-sm leading-5 text-slate-600">
-            Outlines and labels always visible. Revisits and undo allowed.
-          </p>
-        </div>
+  <h3 className="font-semibold">Game Modes</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li><b>Easy</b> — outlines and labels always visible. <b>Revisit</b> and <b>Undo</b> allowed.</li>
+    <li><b>Normal</b> — outlines on; labels on <b>Start</b> &amp; <b>Visited</b> areas. Revisit and Undo both allowed.</li>
+    <li><b>Hard</b> — no outlines or labels. <b>No revisits</b>. Undo not allowed.</li>
+    <li><b>Master</b> — only start/current/visited/target visible. No <b>revisits</b>, No <b>undo</b>.</li>
+  </ul>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900"><u>Normal</u></div>
-          <p className="mt-1 text-sm leading-5 text-slate-600">
-            Outlines visible; labels shown for Start and visited areas. Revisits and undo allowed.
-          </p>
-        </div>
+  <h3 className="font-semibold">Par &amp; Scoring</h3>
+  <p>
+    Each daily puzzle has a <b>Par</b> based on the optimal number of moves.
+  </p>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900"><u>Hard</u></div>
-          <p className="mt-1 text-sm leading-5 text-slate-600">
-            No outlines or labels. No revisits. No undo.
-          </p>
-        </div>
+  <h3 className="font-semibold">Achievements</h3>
+  <p>
+    Unlock achievements for milestones like winning on harder modes, using ferries/bridges,
+    perfect runs (optimal number of moves), long routes, lifetime coverage, and daily streaks.
+    Some are <i>hidden</i>—you’ll discover them as you play.
+  </p>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900"><u>Master</u></div>
-          <p className="mt-1 text-sm leading-5 text-slate-600">
-            Only start, current, visited and target areas are shown. No revisits. No undo.
-          </p>
-        </div>
-      </div>
-    </section>
+  <h3 className="font-semibold">Stats</h3>
+  <p>
+    The <b>Stats</b> page shows totals, win rate, average moves (wins), best time,
+    and average vs Par, plus a per-difficulty breakdown. You can reset data from there.
+  </p>
 
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Daily Challenge
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Choose one difficulty each day.</li>
-        <li>Your progress is saved automatically, so you can resume later.</li>
-        <li>You get up to <span className="font-medium text-slate-900">3 hints per day</span> for each difficulty.</li>
-        <li>Streaks are tracked separately for each difficulty.</li>
-        <li>You can share your result once you finish.</li>
-      </ul>
-    </section>
+  <h3 className="font-semibold">Daily Challenge</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li>Pick one difficulty (Easy/Normal/Hard/Master) per day.</li>
+    <li>Progress auto-saves; you can <b>resume</b> later the same day.</li>
+    <li><b>Hints:</b> up to 3 per day for each difficulty.</li>
+    <li><b>Streaks</b> are tracked per difficulty. Keep winning to build them.</li>
+    <li>Share your result from the victory screen.</li>
+  </ul>
 
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Scoring, stats and achievements
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Each daily puzzle has a <span className="font-medium text-slate-900">Par</span> based on the optimal route.</li>
-        <li>The <span className="font-medium text-slate-900">Stats</span> page shows wins, win rate, average moves, best time and average vs Par.</li>
-        <li>Unlock achievements for harder wins, perfect routes, long journeys, ferries, bridges, coverage and streaks.</li>
-        <li>Some achievements stay hidden until you discover them.</li>
-      </ul>
-    </section>
+  <h3 className="font-semibold">How to Play</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li>Type a neighbouring postcode in the selector and press <b>Enter</b>.</li>
+    <li>Use the map controls (top-left) to zoom and reset view.</li>
+    <li>Open the menu (top-right) for New Game, Restart, Tutorial, or Back to Menu.</li>
+  </ul>
 
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Controls
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Type a neighbouring postcode area and press <span className="font-medium text-slate-900">Enter</span>.</li>
-        <li>Use the map controls to zoom or reset the view.</li>
-        <li>Open the menu for New Game, Restart, Tutorial and more.</li>
-        <li><span className="font-medium text-slate-900">Ctrl/Cmd + Z</span> undoes a move where undo is available.</li>
-      </ul>
-    </section>
+  <h3 className="font-semibold">Tips &amp; Shortcuts</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li>Hints list valid neighbours; click one to move there.</li>
+    <li>Revisiting (Easy/Normal) can help explore—moves still count.</li>
+    <li><b>Ctrl/Cmd+Z</b> to undo a move (not available in Master).</li>
+  </ul>
 
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Privacy & data
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Your progress, stats, achievements, coverage and streaks are stored locally in your browser.</li>
-        <li>Clearing site data, switching browser or using another device can reset your progress.</li>
-      </ul>
-    </section>
+  <h3 className="font-semibold">Privacy &amp; Data</h3>
+  <ul className="list-disc list-inside space-y-1">
+    <li>Your progress, stats, achievements, coverage, and streaks are stored <b>locally</b> in your browser.</li>
+    <li>Clearing site data or using another browser/device resets your progress.</li>
+  </ul>
 
-    <section className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 shadow-sm">
-      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-indigo-700">
-        Feedback
-      </h3>
-      <p className="text-sm leading-6 text-slate-700">
-        Got feedback, spotted a bug, or have an idea for the game?
-      </p>
-      <a
-        href="https://forms.gle/Hf6fgRzBSnnZCqYJ6"
-        className="mt-3 inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
-      >
-        Send feedback
-      </a>
-    </section>
-  </div>
+  <h3 className="font-semibold">Contact</h3>
+  <p className="mb-0">
+    Feedback is welcome!
+    <br />
+    <a className="btn btn-primary mt-2" href="https://forms.gle/Hf6fgRzBSnnZCqYJ6">
+      Send Feedback
+    </a>
+  </p>
+</div>
+
 </Modal>
 
 
@@ -4302,12 +4099,8 @@ if (route === 'privacy') {
 return (
   <>
 
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
-      {gameState === 'menu' ? renderMenu() : (
-        <div className="pp-game-screen">
-          {renderGameBoard()}
-        </div>
-      )}
+    <div className="min-h-[100dvh] w-full overflow-hidden bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
+      {gameState === 'menu' ? renderMenu() : renderGameBoard()}
     </div>
 
     <OnboardingTutorial

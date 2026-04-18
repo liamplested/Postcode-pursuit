@@ -4,7 +4,7 @@ import { lastNGamesArePerfect } from './utils/historyUtils';
 import { readJSON } from './utils/storageUtils';
 import { ACHIEVEMENTS_KEY, writeJSON, canonEdge} from './PostcodePursuit';
 
-const ACH_MAP_KEY = 'pp_achievements_v2';                 // map used by pages
+
 const STREAK_KEY_V2 = (d) => `pp_daily_streak_v2_${d}`;   // per-difficulty
 
 const getJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
@@ -37,14 +37,14 @@ function buildMetaIfMissing(m) {
 
 function unlockAndPersist(list) {
   if (!list?.length) return [];
-  const map = getJSON(ACH_MAP_KEY, {}) || {};
+  const map = getJSON(ACHIEVEMENTS_KEY, {}) || {};
   const now = new Date().toISOString();
   const fresh = [];
   for (const a of list) {
     if (!a?.id) continue;
     if (!map[a.id]) { map[a.id] = { unlockedAt: now }; fresh.push(a); }
   }
-  if (fresh.length) localStorage.setItem(ACH_MAP_KEY, JSON.stringify(map));
+  if (fresh.length) localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(map));
   return fresh;
 }
 

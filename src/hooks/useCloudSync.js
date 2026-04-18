@@ -7,6 +7,26 @@ const todayUTC = () => new Date().toISOString().slice(0,10);
 const daysBetweenUTC = (a, b) =>
   Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
 
+
+const pickMoreRecentSession = (a, b) => {
+  if (!a) return b;
+  if (!b) return a;
+
+  const aTime = Date.parse(a.savedAt || a.updatedAt || a.date || 0);
+  const bTime = Date.parse(b.savedAt || b.updatedAt || b.date || 0);
+
+  return bTime >= aTime ? b : a;
+};
+
+const mergeDailySessions = (cloudSessions = {}, localSessions = {}) => {
+  const out = {};
+  for (const d of DIFFS) {
+    out[d] = pickMoreRecentSession(cloudSessions[d], localSessions[d]);
+  }
+  return out;
+};
+
+
 function normalizeStreaks(merged) {
   const out = { ...merged, streaks: { ...(merged.streaks || {}) } };
   const today = todayUTC();
@@ -36,36 +56,75 @@ function pruneUndefinedDeep(value) {
   return out;
 }
 
+async function mergeAndSave(uid, localSnapshot) {
+  const cloud = await loadCloud(uid);
+  const merged = normalizeStreaks(mergeCloudWithLocal(cloud, localSnapshot));
+  await saveCloud(uid, merged);
+  return merged;
+}
+
+function mergeBooleanMap(a = {}, b = {}) {
+  return { ...a, ...b };
+}
 
 function mergeMeta(a, b) {
+
   const out = { ...(a || {}), ...(b || {}) };
 
   // 1) visitedAreas: set-union
-  const visited = { ...(a?.visitedAreas || {}), ...(b?.visitedAreas || {}) };
-  const visitedCount = Object.keys(visited).length;
+  const visitedAreas = mergeBooleanMap(a?.visitedAreas, b?.visitedAreas);
+  const visitedCount = Object.keys(visitedAreas).length;
 
-  // 2) per-device counters: max per device (monotonic)
+  // 2) ferry / bridge coverage: set-union
+  const usedFerries = mergeBooleanMap(a?.usedFerries, b?.usedFerries);
+  const usedBridges = mergeBooleanMap(a?.usedBridges, b?.usedBridges);
+
+  const usedFerriesCount = Object.keys(usedFerries).length;
+  const usedBridgesCount = Object.keys(usedBridges).length;
+
+  // 3) per-device counters: max per device (monotonic)
   const byDev = { ...(a?.countersByDevice || {}) };
   for (const [dev, c] of Object.entries(b?.countersByDevice || {})) {
     const base = byDev[dev] || {};
     byDev[dev] = {
       ferries: Math.max(base.ferries || 0, c.ferries || 0),
       bridges: Math.max(base.bridges || 0, c.bridges || 0),
-      land:    Math.max(base.land    || 0, c.land    || 0),
+      land: Math.max(base.land || 0, c.land || 0),
     };
   }
 
-  // 3) totals = sum across devices
+  // 4) totals = sum across devices
   const totals = Object.values(byDev).reduce(
     (acc, c) => ({
       ferries: acc.ferries + (c.ferries || 0),
       bridges: acc.bridges + (c.bridges || 0),
-      land:    acc.land    + (c.land    || 0),
+      land: acc.land + (c.land || 0),
     }),
     { ferries: 0, bridges: 0, land: 0 }
   );
 
-  return { ...out, visitedAreas: visited, visitedCount, countersByDevice: byDev, counters: totals };
+  return {
+    ...out,
+
+    visitedAreas,
+    visitedCount,
+
+    usedFerries,
+    usedBridges,
+    usedFerriesCount,
+    usedBridgesCount,
+
+    countersByDevice: byDev,
+    counters: totals,
+
+    hasMersey: !!(a?.hasMersey || b?.hasMersey),
+
+    totalAreas: Math.max(a?.totalAreas || 0, b?.totalAreas || 0),
+    totalFerries: Math.max(a?.totalFerries || 0, b?.totalFerries || 0),
+    totalBridges: Math.max(a?.totalBridges || 0, b?.totalBridges || 0),
+
+    hintsUsed: Math.max(a?.hintsUsed || 0, b?.hintsUsed || 0),
+  };
 }
 
 
@@ -138,13 +197,14 @@ function mergeCloudWithLocal(cloud, local) {
   // streaks: per-difficulty merge (with back-compat for legacy 'streak')
   const streaks = mergeStreaks(toStreaks(cloud), toStreaks(local));
 
-  return {
-    version: 1,
-    achievements: ach,
-    history: { games },
-    streaks,                         // <-- was 'streak'
-    meta: mergeMeta(cloud.meta, local.meta),
-  };
+return {
+  version: 2,
+  achievements: ach,
+  history: { games },
+  streaks,
+  dailySessions: mergeDailySessions(cloud.dailySessions, local.dailySessions),
+  meta: mergeMeta(cloud.meta, local.meta),
+};
 }
 
 async function loadCloud(uid) {
@@ -205,16 +265,18 @@ export default function useCloudSync(getLocalSnapshot, writeLocalSnapshot) {
     if (!user) return;
     if (raf.current) cancelAnimationFrame(raf.current);
     raf.current = requestAnimationFrame(async () => {
-      const snapshot = getSnapRef.current();
-      await saveCloud(user.uid, snapshot);
+const local = getSnapRef.current();
+const merged = await mergeAndSave(user.uid, local);
+writeSnapRef.current(merged);
     });
   }, [user]);
 
   // immediate save
   const saveNow = React.useCallback(async () => {
     if (!user) return;
-    const snapshot = getSnapRef.current();
-    await saveCloud(user.uid, snapshot);
+const local = getSnapRef.current();
+const merged = await mergeAndSave(user.uid, local);
+writeSnapRef.current(merged);
   }, [user]);
 
   return { user, syncing, queueSave, saveNow };
