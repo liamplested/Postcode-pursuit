@@ -213,10 +213,10 @@ async function loadCloud(uid) {
   return snap.exists() ? snap.data() : null;
 }
 
-export async function saveCloud(uid, data) {
+export async function saveCloud(uid, data, { merge = true } = {}) {
   const ref = doc(db, 'users', uid, 'pp', 'v1');
   const payload = pruneUndefinedDeep({ ...data, updatedAt: ts() });
-  await setDoc(ref, payload, { merge: true });
+  await setDoc(ref, payload, { merge });
 }
 
 export default function useCloudSync(getLocalSnapshot, writeLocalSnapshot) {
@@ -279,5 +279,11 @@ const merged = await mergeAndSave(user.uid, local);
 writeSnapRef.current(merged);
   }, [user]);
 
-  return { user, syncing, queueSave, saveNow };
+const overwriteNow = React.useCallback(async (snapshot) => {
+  if (!user) return;
+  await saveCloud(user.uid, snapshot, { merge: false });
+  writeSnapRef.current(snapshot);
+}, [user]);
+
+  return { user, syncing, queueSave, saveNow, overwriteNow  };
 }

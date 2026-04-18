@@ -766,9 +766,8 @@ const edgeType = (a, b) => {
   return 'land';
 };
 
-
-
-const { user, queueSave, saveNow } = useCloudSync(getLocalSnapshot, writeLocalSnapshot);
+const { user, queueSave, saveNow, overwriteNow } =
+  useCloudSync(getLocalSnapshot, writeLocalSnapshot);
 
 // One helper for everywhere you persist
 const onPersist = React.useCallback((immediate = false) => {
@@ -2053,22 +2052,24 @@ const resetAllStats = React.useCallback(({ alsoResetStreaks = true } = {}) => {
     cleared.streaks = getLocalSnapshot().streaks;
   }
 
-writeLocalSnapshot(cleared);
-localStorage.removeItem(VISITED_KEY);
-localStorage.removeItem(USED_FERRIES_KEY);
-localStorage.removeItem(USED_BRIDGES_KEY);
-localStorage.removeItem('pp_daily_streak_v1');
+  writeLocalSnapshot(cleared);
+  localStorage.removeItem(VISITED_KEY);
+  localStorage.removeItem(USED_FERRIES_KEY);
+  localStorage.removeItem(USED_BRIDGES_KEY);
+  localStorage.removeItem('pp_daily_streak_v1');
 
-for (const d of DIFFS) {
-  localStorage.removeItem(dailySessionKey(d));
-}
+  for (const d of DIFFS) {
+    localStorage.removeItem(dailySessionKey(d));
+  }
 
-setAchievementToasts([]);
-setStreaks({ easy: 0, normal: 0, hard: 0, master: 0 });
-setStatsVersion(v => v + 1);
+  setAchievementToasts([]);
+  setStreaks(cleared.streaks);
+  setStatsVersion(v => v + 1);
 
-onPersist?.(true);
-}, [onPersist]);
+  if (user) {
+    overwriteNow(cleared);
+  }
+}, [user, overwriteNow]);
 
 
 function computeStats(){
