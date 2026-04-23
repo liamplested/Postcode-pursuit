@@ -1,109 +1,107 @@
-import React from 'react';
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
-export default function PrivacyPolicy() {
+export default function PrivacyPolicy({ onBack }) {
+  const navigate = useNavigate();
+
+  const handleBack = () => {
+    if (onBack) onBack();
+    else navigate("/", { replace: true });
+  };
+
   return (
-    <div className="max-w-3xl mx-auto p-6 prose prose-slate">
-      <h1>Privacy & Cookie Policy</h1>
-      <p><em>Last updated: 19 September 2025</em></p>
+    <div className="page">
+      <h1>Privacy Policy</h1>
+      <p><b>Last updated: 23 April 2026</b></p>
 
-      <h2>Who we are</h2>
       <p>
-        <strong>Postcode Pursuit</strong> is a hobby project made by Liam Plested.
-        Contact: <a href="mailto:plestedl@gmail.com">plestedl@gmail.com</a>.
+        Postcode Pursuit is a browser-based game. We keep data collection to a minimum 
+        and only use what’s needed to run the game and understand how it’s being used.
       </p>
 
-      <h2>What data we collect</h2>
+      <h2>What we collect</h2>
       <ul>
-        <li>
-          <b>Account (Google Sign-In)</b>: if you choose to sign in, we receive your Google UID,
-          display name, email address, and profile photo URL (if available) via Firebase Authentication.
-        </li>
-        <li>
-          <b>Gameplay & progress (cloud save)</b>: achievements, game history (start/target, result, date, moves),
-          daily <i>streaks per difficulty</i> (easy/normal/hard/master), and lifetime stats
-          (visited postcode areas and counts of ferry/bridge/land moves).
-        </li>
-        <li>
-          <b>Local storage on your device</b>: we store the same progress data for offline use,
-          preferences (e.g., difficulty, hints, UI toggles), tutorial completion, and an anonymous
-          install ID to keep per-device counters consistent.
-        </li>
-        <li>
-          <b>Necessary data/cookies</b> to run the site (e.g., session state, security, load balancing).
-        </li>
-        <li>
-          <b>Optional analytics</b> (Google Analytics 4) only if you opt in.
-        </li>
+        <li>Gameplay data (moves, progress, achievements)</li>
+        <li>Basic usage data (for example, which pages are visited)</li>
+        <li>Account-related data if you choose to sign in</li>
       </ul>
 
-      <h2>Cookies</h2>
-      <p>
-        We set essential cookies/storage needed for core functionality (e.g., remembering game state).
-        If you opt in to analytics, GA4 may set additional cookies to help us understand usage patterns.
-      </p>
-
-      <h2>Authentication & cloud saves</h2>
-      <p>
-        We use Google Firebase to provide Google Sign-In and to sync your progress across devices.
-        Your cloud save is stored under your Firebase user ID and secured by Firestore security rules.
-        You can play signed out; cloud sync is optional.
-      </p>
-
-      <h2>Analytics (opt-in)</h2>
-      <p>
-        If you consent, we use Google Analytics 4 to measure usage and spot trends (e.g., puzzle difficulty).
-        IP anonymisation is enabled. You can revoke consent any time in <Link to="/settings">Settings</Link>.
-      </p>
-
-      <h2>How we use your data</h2>
+      <h2>How we use it</h2>
       <ul>
-        <li>Run the game, save progress, and keep it in sync across devices.</li>
-        <li>Remember settings and improve the experience.</li>
-        <li>Maintain security and diagnose issues.</li>
-      </ul>
-      <p>We do <strong>not</strong> sell your personal data or use third-party advertising.</p>
-
-      <h2>Where your data is stored</h2>
-      <p>
-        We use Google Firebase (Authentication and Cloud Firestore). Data is stored in the region
-        configured for our Firebase project and may be processed globally by our providers
-        using appropriate transfer safeguards.
-      </p>
-
-      <h2>Sharing</h2>
-      <p>
-        We share data with service providers only to operate the Service:
-        Google Firebase (auth & database) and our hosting/CDN (e.g., Netlify).
-        We may disclose information if required by law or to protect rights and safety.
-      </p>
-
-      <h2>Data retention</h2>
-      <ul>
-        <li><b>Cloud data (Firestore)</b>: kept until you delete your cloud save or ask us to remove it.</li>
-        <li><b>Local storage</b>: remains on your device until you clear it (via your browser or in-app controls).</li>
-        <li><b>Analytics</b>: retained per Google’s defaults when enabled by you.</li>
+        <li>To run the game and save your progress</li>
+        <li>To improve the experience over time</li>
+        <li>To understand how people are using the game</li>
       </ul>
 
-      <h2>Your rights</h2>
+      <h2>Analytics</h2>
       <p>
-        Under UK GDPR, you may have rights to access, rectify, erase, restrict or object to processing,
-        and data portability. You can export or delete your cloud data via in-app controls (where available)
-        or by emailing <a href="mailto:plestedl@gmail.com">plestedl@gmail.com</a>.
+        We use Google Analytics (GA4) to understand how the game is used. This may 
+        involve cookies or similar technologies.
+      </p>
+      <p>
+        Analytics is only enabled if you give consent. You can choose this when you first 
+        visit the site, and change your preference later.
       </p>
 
-      <h2>Children</h2>
-      <p>This game is not directed to children under 13.</p>
+      <h2>Accounts and cloud storage</h2>
+      <p>
+        If you sign in, your progress (including achievements and stats) may be stored 
+        using Firebase, a service provided by Google. This allows your progress to sync 
+        across devices.
+      </p>
+
+      <h2>Local storage</h2>
+      <p>
+        We also store some data directly in your browser (local storage) so the game can 
+        remember your progress and settings without requiring an account.
+      </p>
+
+      <h2>Data sharing</h2>
+      <p>
+        We do not sell your data. We only share data with services we rely on to run the 
+        game, such as Google Analytics and Firebase.
+      </p>
+
+      <h2>Where data is processed</h2>
+      <p>
+        Some data may be processed outside of the United Kingdom (for example, by Google 
+        services).
+      </p>
+
+      <h2>Your choices</h2>
+      <ul>
+        <li>You can choose whether to enable analytics</li>
+        <li>You can play without signing in</li>
+        <li>You can clear stored data at any time via your browser</li>
+      </ul>
 
       <h2>Changes</h2>
       <p>
-        We may update this page as the project evolves. Material changes will be indicated by updating the date above.
+        This policy may change as the game evolves. The latest version will always be 
+        available here.
       </p>
 
-      <div className="not-prose mt-6 flex gap-3">
-        <Link to="/settings" className="btn btn-purple">Settings</Link>
-        <Link to="/" className="btn btn-primary">Return to Menu</Link>
-      </div>
+      <h2>Contact</h2>
+<p>
+  If you have any questions about this policy or how your data is handled, 
+  you can contact us at <br />
+
+  <a 
+  href="mailto:plestedl@gmail.com"
+  style={{ color: "#7dd3fc", textDecoration: "underline" }}
+>
+   plestedl@gmail.com
+</a>
+</p>
+
+      <button onClick={handleBack} className="btn btn-primary">
+        Return to Menu
+      </button>
+            <a
+        href="https://forms.gle/Hf6fgRzBSnnZCqYJ6"
+        className="mt-3 inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
+      >
+        Send feedback
+      </a>
     </div>
   );
 }

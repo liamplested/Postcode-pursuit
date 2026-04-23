@@ -676,6 +676,65 @@ const [guesses, setGuesses] = useState([]);
 const [gameWon, setGameWon] = useState(false);
 const [optimalPath, setOptimalPath] = useState([]);
 const [achievementToasts, setAchievementToasts] = useState([]);
+const pendingAchievementItemsRef = useRef([]);
+const pendingAchievementTimerRef = useRef(null);
+
+const flushAchievementBatch = useCallback(() => {
+  const list = pendingAchievementItemsRef.current.filter(Boolean);
+  pendingAchievementItemsRef.current = [];
+
+  if (pendingAchievementTimerRef.current) {
+    window.clearTimeout(pendingAchievementTimerRef.current);
+    pendingAchievementTimerRef.current = null;
+  }
+
+  if (!list.length) return;
+
+  const payload = list.length === 1
+    ? list[0]
+    : {
+        id: `achievement-group-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        kind: 'group',
+        items: list,
+      };
+
+  setAchievementToasts(q => [...q, payload]);
+}, []);
+
+const enqueueAchievementBatch = useCallback((items) => {
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!list.length) return;
+
+  pendingAchievementItemsRef.current = [
+    ...pendingAchievementItemsRef.current,
+    ...list,
+  ];
+
+  if (pendingAchievementTimerRef.current) {
+    window.clearTimeout(pendingAchievementTimerRef.current);
+  }
+
+  pendingAchievementTimerRef.current = window.setTimeout(() => {
+    flushAchievementBatch();
+  }, 500);
+}, [flushAchievementBatch]);
+
+const clearAchievementToasts = useCallback(() => {
+  pendingAchievementItemsRef.current = [];
+  if (pendingAchievementTimerRef.current) {
+    window.clearTimeout(pendingAchievementTimerRef.current);
+    pendingAchievementTimerRef.current = null;
+  }
+  setAchievementToasts([]);
+}, []);
+
+useEffect(() => {
+  return () => {
+    if (pendingAchievementTimerRef.current) {
+      window.clearTimeout(pendingAchievementTimerRef.current);
+    }
+  };
+}, []);
 const [showHints, setShowHints] = useState(false);
 const [dailyGaveUp, setDailyGaveUp] = useState(false);
 const [journeyExpanded, setJourneyExpanded] = useState(false);
@@ -1488,6 +1547,20 @@ const handleInputSubmit = (inputElement) => {
   
   const inputRef = useRef(null);
 
+  const focusPostcodeInput = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        el.focus();
+      }
+      if (typeof el.select === 'function') el.select();
+    });
+  }, []);
+
   const shareResult = async () => {
     const text = buildShareText();
     try {
@@ -1581,23 +1654,37 @@ const handleSelectorInput = useCallback((e) => {
 
 const [showNudge, setShowNudge] = useState(false);
 const nudgeDismissedRef = useRef(false);
+const NUDGE_DISMISSED_KEY = 'pp_nudge_dismissed';
+
+const hasCompletedAnyGame = React.useMemo(() => {
+  try {
+    const history = readJSON(GAME_HISTORY_KEY, { games: [] });
+    return (history.games || []).some(g => g?.won === true);
+  } catch {
+    return false;
+  }
+}, []);
 
 useEffect(() => {
   if (!consentResolved) return;
 
+  const nudgeDismissedPersistently = localStorage.getItem(NUDGE_DISMISSED_KEY) === 'true';
   const atStart = gameState === 'playing' && currentPath.length === 1;
-  if (!atStart || nudgeDismissedRef.current) {
+
+  if (!atStart || nudgeDismissedRef.current || nudgeDismissedPersistently || hasCompletedAnyGame) {
     setShowNudge(false);
     return;
   }
 
   const id = window.setTimeout(() => setShowNudge(true), 20000);
   return () => window.clearTimeout(id);
-}, [consentResolved, gameState, currentPath.length]);
+}, [consentResolved, gameState, currentPath.length, hasCompletedAnyGame]);
 
 const dismissNudge = () => {
   nudgeDismissedRef.current = true; // don’t show again this round
+  localStorage.setItem(NUDGE_DISMISSED_KEY, 'true');
   setShowNudge(false);
+  focusPostcodeInput();
 };
 
 const tallyEdgeUsage = useCallback((path) => {
@@ -2062,14 +2149,14 @@ const resetAllStats = React.useCallback(({ alsoResetStreaks = true } = {}) => {
     localStorage.removeItem(dailySessionKey(d));
   }
 
-  setAchievementToasts([]);
+  clearAchievementToasts();
   setStreaks(cleared.streaks);
   setStatsVersion(v => v + 1);
 
   if (user) {
     overwriteNow(cleared);
   }
-}, [user, overwriteNow]);
+}, [user, overwriteNow, clearAchievementToasts]);
 
 
 function computeStats(){
@@ -2131,7 +2218,7 @@ const finishGame = useCallback((finalPath) => {
   setGameWon(true);
   addVisited([targetArea], postcodeAreas);
  const metaNew = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
-  if (metaNew?.length) setAchievementToasts(q => [...q, ...metaNew]);
+  if (metaNew?.length) enqueueAchievementBatch(metaNew);
 
   setGameState('gameWon');
   const end = performance.now();
@@ -2166,13 +2253,13 @@ if (dailyMode && dailyDifficulty) {
   setStreaks(s => ({ ...s, [dailyDifficulty]: rec.count ?? rec }));
 
   const streakNew = unlockStreaksFor(dailyDifficulty);
-  if (streakNew.length) setAchievementToasts(q => [...q, ...streakNew]);
+  if (streakNew.length) enqueueAchievementBatch(streakNew);
 }
 
 
 const unlocked = evaluateAndUnlockAchievements(event);
 if (unlocked.length) {
-  setAchievementToasts(q => [...q, ...unlocked]);
+  enqueueAchievementBatch(unlocked);
   logAchievementsToGA(unlocked, {
     difficulty,
     dailyMode,
@@ -2215,7 +2302,7 @@ if (unlocked?.length && window.gtag) {
   currentPath, optimalPath,
   difficulty, startArea, targetArea,
   dailyMode, dailyDifficulty,
-  bumpStreakFor, tallyEdgeUsage, onPersist
+  bumpStreakFor, tallyEdgeUsage, onPersist, enqueueAchievementBatch
 ]);
 
 useEffect(() => {
@@ -2247,7 +2334,7 @@ const shouldLock = overlayOpen;
     document.documentElement.style.overflow = prevHtml;
     document.body.style.overflow = prevBody;
   };
-}, [gameState, showAbout, victoryOpen, showTutorial, showDailyChooser, showFreePlayChooser, giveUpOpen, leaveConfirmOpen]);
+}, [gameState, showAbout, victoryOpen, showTutorial, showDailyChooser, showFreePlayChooser, giveUpOpen, leaveConfirmOpen, isTouch, roundResolved, focusPostcodeInput]);
 
   // controls height -> CSS var
   useEffect(() => {
@@ -2501,6 +2588,7 @@ const backToMenu = React.useCallback(() => {
   // Daily autosaves — safe to leave immediately
   if (dailyMode) {
     abandonIfActive('menu');
+    clearAchievementToasts();
     setGameState('menu');
     setBurgerOpen(false);
     return;
@@ -2511,10 +2599,11 @@ const backToMenu = React.useCallback(() => {
     setLeaveConfirmOpen(true);
   } else {
     abandonIfActive('menu');
+    clearAchievementToasts();
     setGameState('menu');
     setBurgerOpen(false);
   }
-}, [dailyMode, gameState, gameWon, abandonIfActive]);
+}, [dailyMode, gameState, gameWon, abandonIfActive, clearAchievementToasts]);
 
 useEffect(() => {
   const onKey = (e) => {
@@ -2548,6 +2637,7 @@ useEffect(() => {
 const startNewGame = () => {
   nudgeDismissedRef.current = false;
   setShowHints(false);
+  clearAchievementToasts();
   abandonIfActive('reroll');
 
   const { min, max } = boundsByDifficulty[difficulty] ?? { min: 4, max: null };
@@ -2606,20 +2696,20 @@ const makeGuess = useCallback((area) => {
   if (viaFerry) {
     if (addUsedFerryEdge(currentLocation, area)) {
       const newly = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
-      if (newly.length) setAchievementToasts(q => [...q, ...newly]);
+      if (newly.length) enqueueAchievementBatch(newly);
     }
   }
   if (viaBridge) {
     if (addUsedBridgeEdge(currentLocation, area)) {
       const newly = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
-      if (newly.length) setAchievementToasts(q => [...q, ...newly]);
+      if (newly.length) enqueueAchievementBatch(newly);
     }
   }
 
   // mark newly visited (game-local)
   if (addVisited([area])) {
     const newly = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
-    if (newly.length) setAchievementToasts(q => [...q, ...newly]);
+    if (newly.length) enqueueAchievementBatch(newly);
   }
 
   const newPath = [...currentPath, area];
@@ -2631,7 +2721,7 @@ const makeGuess = useCallback((area) => {
 }, [
   getNeighbors, gameWon, currentPath, targetArea, finishGame,
   ferryAdj, bridgeAdj, difficulty, showError,
-  onPersist, dailyGaveUp
+  onPersist, dailyGaveUp, enqueueAchievementBatch
 ]);
 
 // const isFerryEdge  = (a,b) => ferryAdj.get(a)?.has(b)  || false;
@@ -3096,6 +3186,7 @@ const renderControls = () => (
             abandonIfActive('restart');
             setCurrentPath([startArea]);
             setGuesses([]);
+            clearAchievementToasts();
             setGameWon(false);
             setOptimalPath(findShortestPath(startArea, targetArea));
             setBurgerOpen(false);
@@ -3522,27 +3613,120 @@ const renderControls = () => (
 
       <ToastShell
         open={!!errorToast}
-        onClose={() => setErrorToast('')}
+        onClose={() => {
+          setErrorToast('');
+          focusPostcodeInput();
+        }}
         width={420}
       >
         <ErrorToast
           message={errorToast}
-          onClose={() => setErrorToast('')}
+          onClose={() => {
+            setErrorToast('');
+            focusPostcodeInput();
+          }}
         />
       </ToastShell>
 
       {achievementToasts[0] && (
         <ToastShell
           open
-          onClose={() => setAchievementToasts(q => q.slice(1))}
+          onClose={() => {
+            setAchievementToasts(q => q.slice(1));
+            focusPostcodeInput();
+          }}
           width={420}
         >
-          <AchievementToast
-            icon={achievementToasts[0].icon}
-            title={achievementToasts[0].name}
-            description={achievementToasts[0].description}
-            onClose={() => setAchievementToasts(q => q.slice(1))}
-          />
+          {achievementToasts[0].kind === 'group' ? (
+            <div
+              style={{
+                borderRadius: 22,
+                overflow: 'hidden',
+                boxShadow: '0 28px 60px rgba(0,0,0,0.35)',
+                border: '1px solid rgba(255,255,255,0.16)',
+                background: 'rgba(9,14,28,0.78)',
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+                color: 'white',
+              }}
+            >
+              <div style={{ height: 4, background: 'linear-gradient(90deg, #22c55e, #06b6d4, #8b5cf6)' }} />
+              <div style={{ padding: 18, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                <div
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: 14,
+                    background: 'rgba(34,197,94,0.18)',
+                    display: 'grid',
+                    placeItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Trophy size={22} />
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 800, fontSize: 16 }}>Achievements unlocked</div>
+                  <div style={{ color: 'rgba(255,255,255,0.82)', fontSize: 14, marginTop: 4 }}>
+                    <strong>{achievementToasts[0].items.length} achievements earned</strong>
+                  </div>
+
+                  <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+                    {achievementToasts[0].items.map((item) => (
+                      <div
+                        key={item.id || item.name}
+                        style={{
+                          borderRadius: 14,
+                          padding: '10px 12px',
+                          background: 'rgba(255,255,255,0.08)',
+                          border: '1px solid rgba(255,255,255,0.10)',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: 15 }}>{item.name}</div>
+                        {item.description ? (
+                          <div style={{ color: 'rgba(255,255,255,0.82)', fontSize: 14, marginTop: 2 }}>
+                            {item.description}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+                    <button
+                      className="btn btn-success"
+                      onClick={() => {
+                        setAchievementToasts(q => q.slice(1));
+                        focusPostcodeInput();
+                      }}
+                    >
+                      Nice
+                    </button>
+                    <button
+                      className="btn btn-neutral"
+                      onClick={() => {
+                        setAchievementToasts(q => q.slice(1));
+                        focusPostcodeInput();
+                      }}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <AchievementToast
+              icon={achievementToasts[0].icon}
+              title={achievementToasts[0].name}
+              description={achievementToasts[0].description}
+              onClose={() => {
+                setAchievementToasts(q => q.slice(1));
+                focusPostcodeInput();
+              }}
+            />
+          )}
         </ToastShell>
       )}
       
@@ -3555,6 +3739,10 @@ useEffect(() => {
     showDailyChooser || showFreePlayChooser ||
     victoryOpen || giveUpOpen || showAbout || showHints ||
     leaveConfirmOpen || showTutorial;
+
+  if (!overlayOpen && !isTouch && gameState === 'playing' && !roundResolved) {
+    focusPostcodeInput();
+  }
 
   const shouldLock = overlayOpen
 
@@ -3582,7 +3770,8 @@ useEffect(() => {
 }, [
   gameState,
   showDailyChooser, showFreePlayChooser,
-  victoryOpen, giveUpOpen, showAbout, showHints, leaveConfirmOpen, showTutorial
+  victoryOpen, giveUpOpen, showAbout, showHints, leaveConfirmOpen, showTutorial,
+  focusPostcodeInput, isTouch, roundResolved
 ]);
 
 
@@ -4361,6 +4550,7 @@ return (
           onClick={() => {
             setLeaveConfirmOpen(false);
             abandonIfActive('menu');    // analytics-safe
+            clearAchievementToasts();
             setGameState('menu');
             setBurgerOpen(false);
           }}

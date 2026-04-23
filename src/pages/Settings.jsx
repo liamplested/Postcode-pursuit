@@ -1,18 +1,24 @@
 import React from 'react';
 import { openConsent } from '../components/consentBus';
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 
-export default function Settings() {
+
+export default function Settings({ onBack }) {
+  const navigate = useNavigate();
   const hasConsented = !!localStorage.getItem('pp_consents');
   const stored = hasConsented ? JSON.parse(localStorage.getItem('pp_consents')) : null;
   
-
+const handleBack = () => {
+  if (onBack) onBack();
+  else navigate("/", { replace: true });
+};
 
   return (
 
     
     <div className="max-w-3xl mx-auto p-6">
+      
       <h1 className="text-2xl font-bold mb-4">Settings</h1>
 
       <section className="glass p-4 rounded-xl mb-6">
@@ -25,12 +31,30 @@ export default function Settings() {
           <button className="btn btn-primary" onClick={openConsent}>
             Manage cookies
           </button>
-          <a className="btn btn-purple" href="/privacy">
-            Privacy Policy
-          </a>
-<Link to="/" className="btn btn-primary">
+<button
+  className="btn btn-purple"
+  onClick={() => {
+    if (onBack) {
+      // use hash navigation inside game
+      window.location.hash = "#/privacy";
+    } else {
+      navigate("/privacy");
+    }
+  }}
+>
+  Privacy Policy
+</button>
+
+
+<button onClick={handleBack} className="btn btn-primary">
   Return to Menu
-</Link>
+</button><br />
+      <a
+        href="https://forms.gle/Hf6fgRzBSnnZCqYJ6"
+        className="mt-3 inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
+      >
+        Send feedback
+      </a>
         </div>
 
         {stored && (
@@ -42,5 +66,6 @@ export default function Settings() {
         )}
       </section>
     </div>
+
   );
 }
