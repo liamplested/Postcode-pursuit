@@ -3360,6 +3360,15 @@ const renderControls = () => (
               current={currentPath[currentPath.length - 1]}
 onPick={(code) => {
   makeGuess(code);
+
+  requestAnimationFrame(() => {
+    zoomToArea(code, {
+      containerEl: containerRef.current,
+      getWorldCenter,
+      getPanZoom: () => ({ scale: 1, tx: 0, ty: 0 }),
+      setPanZoom: ({ scale, tx, ty }) => reset({ scale, x: tx, y: ty }),
+    });
+  });
 }}
               getNeighbors={getNeighbors}
               currentPath={currentPath}
