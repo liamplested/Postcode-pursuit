@@ -205,6 +205,48 @@ export default function useSvgPan(
     [min, max, getSVGPoint, apply, svgRef]
   );
 
+const animateTo = useCallback(({ x, y, scale }, { duration = 350 } = {}) => {
+  const start = {
+    x: s.current.x,
+    y: s.current.y,
+    scale: s.current.scale,
+  };
+
+  const target = {
+    x: typeof x === 'number' ? x : start.x,
+    y: typeof y === 'number' ? y : start.y,
+    scale: typeof scale === 'number' ? scale : start.scale,
+  };
+
+  if (!duration || duration <= 0) {
+    s.current.x = target.x;
+    s.current.y = target.y;
+    s.current.scale = target.scale;
+    apply();
+    return;
+  }
+
+  const ease = (t) => (t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t);
+  const t0 = performance.now();
+
+  const tick = (now) => {
+    const t = Math.min(1, (now - t0) / duration);
+    const e = ease(t);
+
+    s.current.x = start.x + (target.x - start.x) * e;
+    s.current.y = start.y + (target.y - start.y) * e;
+    s.current.scale = start.scale + (target.scale - start.scale) * e;
+
+    apply();
+    if (t < 1) requestAnimationFrame(tick);
+  };
+
+  requestAnimationFrame(tick);
+}, [apply]);
+
+
+
+
   const reset = useCallback(
     ({ x = 0, y = 0, scale = 1 } = {}) => {
       s.current.x = x;
@@ -261,6 +303,7 @@ const panTo = useCallback((point, { duration = 350 } = {}) => {
 
   return {
     reset,
+    animateTo,
     zoomIn: (factor = 1.25) => zoomTo(s.current.scale * factor),
     zoomOut: (factor = 1.25) => zoomTo(s.current.scale / factor),
     zoomTo,

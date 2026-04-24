@@ -873,6 +873,7 @@ const parLine = (dailyMode && Number.isFinite(dailyPar))
   ? <>Par: <b>{dailyPar}</b> · <b>{golfPhrase(guessesCount, dailyPar)}</b></>
   : null;
 
+  
 
 const parFor = (optimalMoves, diff) =>
   Math.max(1, Math.ceil(optimalMoves * (diff === 'master' ? 1.5 : 1.5)));
@@ -1018,17 +1019,15 @@ const resetDailyFlags = React.useCallback(() => {
 }, []);
 
 
-function toggleHints(){
-  if (dailyMode) {
-    // Opening the panel consumes a hint (closing doesn't refund)
-    if (!showHints) {
-      if (hintsUsed >= MAX_DAILY_HINTS) {
-        alert('No hints left for today.');
-        return;
-      }
-      setHintsUsed(h => h + 1);
+function toggleHints() {
+  if (!showHints) {
+    if (dailyMode && hintsUsed >= MAX_DAILY_HINTS) {
+      alert('No hints left for today.');
+      return;
     }
+    setHintsUsed(h => h + 1);
   }
+
   setShowHints(v => !v);
 }
 const [dailyChoice, setDailyChoice] = useState(null);   // 'easy'|'normal'|'hard'|'master'|null
@@ -1047,6 +1046,7 @@ const undoLastMove = useCallback(() => {
   if (currentPath.length <= 1 || gameWon) return; // can't undo the start, or after win
   const newPath = currentPath.slice(0, -1);
   setCurrentPath(newPath);
+  
   setFlashAreas(prev => prev.filter(a => a !== currentPath[currentPath.length - 1]));
 
   window.gtag?.('event', 'move_undone', {
@@ -1179,6 +1179,8 @@ if (snap.gameWon) {
 }
 
 
+
+
 React.useEffect(() => {
   const today = new Date().toISOString().slice(0,10);
   const diffs = ['easy','normal','hard','master'];
@@ -1294,17 +1296,33 @@ onPersist?.();
 const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
 
 
-  const { reset, panTo } = useSvgPan(svgRef, gRef, {
+  const { reset, animateTo, getState } = useSvgPan(svgRef, gRef, {
     enabled: isMapInteractive,
     min: MIN_SCALE,
     max: MAX_SCALE,
     onChange: ({ scale }) => setScaleForLabels(scale),
   });
 
-  const centerOn = useCallback((code) => {
+const centerOn = useCallback((code) => {
   const pt = getCenter(code);
-  if (pt) panTo(pt, { duration: 350 }); // tweak duration if you like
-}, [panTo, getCenter]);
+  if (!pt) return;
+
+  const current = getState();
+  const nextScale = Math.max(current.scale, 2.2);
+
+  const vw = WORLD.width;
+  const vh = WORLD.height;
+  const viewCx = WORLD.x + vw / 2;
+  const viewCy = WORLD.y + vh / 2;
+
+  const tx = viewCx - nextScale * pt.x;
+  const ty = viewCy - nextScale * pt.y;
+
+  animateTo(
+    { x: tx, y: ty, scale: nextScale },
+    { duration: 450 }
+  );
+}, [getCenter, getState, animateTo]);
 
  const fitToContent = useCallback((padding = 0.92) => {
    const g = contentRef.current;
@@ -1917,9 +1935,10 @@ const giveUpNow = useCallback(() => {
     ferryCount,
     bridgeCount,
     optimalMoves,
+    hintsUsed,
     pathUsed: currentPath.slice(),
     startArea,
-    endArea: targetArea,
+    target_postcode: targetArea,
   };
   addGameToHistory(event, { onPersist: () => onPersist(true) });
 
@@ -1976,57 +1995,71 @@ const giveUpNow = useCallback(() => {
   dailyMode, dailyDifficulty, dailyDate, dailyPar, hintsUsed, difficulty, onPersist
 ]);
 
+const topOverlayRef = useRef(null);
+const bottomOverlayRef = useRef(null);
 
   // ---------- STATE CLASSES (Option A) ----------
 const focusStartAndTarget = React.useCallback((startCode, targetCode, pad = 0.2) => {
   const A = getCenter(startCode);
   const B = getCenter(targetCode);
-  if (!A || !B) return;
+  const svgEl = svgRef.current;
 
-  // Tight bbox around the two points
-  const minX = Math.min(A.x, B.x), maxX = Math.max(A.x, B.x);
-  const minY = Math.min(A.y, B.y), maxY = Math.max(A.y, B.y);
+  if (!A || !B || !svgEl) return;
 
+  const svgRect = svgEl.getBoundingClientRect();
+  if (!svgRect.height || !svgRect.width) return;
 
- const MIN_FRACTION = 0.18;
- const spanX = Math.max(maxX - minX, WORLD.width  * MIN_FRACTION);
- const spanY = Math.max(maxY - minY, WORLD.height * MIN_FRACTION);
+  const topRect = topOverlayRef.current?.getBoundingClientRect?.() || null;
+  const bottomRect = bottomOverlayRef.current?.getBoundingClientRect?.() || null;
 
-  // Expand by padding
-  const w = spanX * (1 + pad * 2);
-  const h = spanY * (1 + pad * 2);
+  const topInsetPx = topRect ? Math.max(0, topRect.bottom - svgRect.top) : 0;
+  const bottomInsetPx = bottomRect ? Math.max(0, svgRect.bottom - bottomRect.top) : 0;
 
-  // Center of the pair
+  const safeTopFrac = Math.max(0, Math.min(0.45, topInsetPx / svgRect.height));
+  const safeBottomFrac = Math.max(0, Math.min(0.45, bottomInsetPx / svgRect.height));
+  const safeHeightFrac = Math.max(0.15, 1 - safeTopFrac - safeBottomFrac);
+
+  const minX = Math.min(A.x, B.x);
+  const maxX = Math.max(A.x, B.x);
+  const minY = Math.min(A.y, B.y);
+  const maxY = Math.max(A.y, B.y);
+
+  const MIN_FRACTION = 0.18;
+  const spanX = Math.max(maxX - minX, WORLD.width * MIN_FRACTION);
+  const spanY = Math.max(maxY - minY, WORLD.height * MIN_FRACTION);
+
+  const padX = pad;
+  const padY = pad;
+
+  const w = spanX * (1 + padX * 2);
+  const h = spanY * (1 + padY * 2);
+
   const cx = (A.x + B.x) / 2;
   const cy = (A.y + B.y) / 2;
 
-  // Compute scale to fit w×h inside the VIEWBOX
-  const vw = WORLD.width, vh = WORLD.height;
-  let s = Math.min(vw / w, vh / h);
+  const vw = WORLD.width;
+  const vh = WORLD.height;
+
+  const fitScaleX = vw / w;
+  const fitScaleY = (vh * safeHeightFrac) / h;
+
+  let s = Math.min(fitScaleX, fitScaleY);
   s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, s));
 
-  // Translate so the pair center is in the middle of the viewBox
+  const safeCenterFracY = safeTopFrac + safeHeightFrac / 2;
   const viewCx = WORLD.x + vw / 2;
-  const viewCy = WORLD.y + vh / 2;
+  const viewCy = WORLD.y + vh * safeCenterFracY;
+
   const tx = viewCx - s * cx;
   const ty = viewCy - s * cy;
 
   reset({ scale: s, x: tx, y: ty });
 
-  hasFitRef.current = true;       // prevent other auto-fits
-  didAutoFitRef.current = true;   // prevent the “first-fit” effect
+  hasFitRef.current = true;
+  didAutoFitRef.current = true;
 }, [reset, getCenter]);
 
 
-
-/* const COLORS = {
-  baseFill:    '#52974eff', // slate-200
-  baseStroke:  '#454f5eff', // slate-400
-  startFill:   '#60abb8ff', startStroke: '#1e40af',
-  currentFill: '#1d4ed8', currentStroke:'#ffffffff',
-  visitedFill: '#bae6fd', visitedStroke:'#424c5cff',
-  targetFill:  '#FDE68A', targetStroke:'#b45309',
-}; */
 
 
 const COLORS = {
@@ -2228,23 +2261,29 @@ const finishGame = useCallback((finalPath) => {
   const { ferryCount, bridgeCount } = tallyEdgeUsage(path);
   const optimalMoves = Math.max(0, (optimalPath?.length || 1) - 1);
 
-  const event = {
-    id: (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
-    dateISO: new Date().toISOString(),
-    mode: dailyMode ? 'daily' : 'free',
-    difficulty,
-    won: true,
-    moves: Math.max(0, path.length - 1),
-    durationMs: ms,
-    usedFerry: ferryCount > 0,
-    usedBridge: bridgeCount > 0,
-    ferryCount,
-    bridgeCount,
-    optimalMoves,
-    pathUsed: path.slice(),
-    startArea,
-    endArea: targetArea,
-  };
+const moves = Math.max(0, path.length - 1);
+const perfect = Number.isFinite(optimalMoves) && moves === optimalMoves;
+
+
+const event = {
+  id: (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
+  dateISO: new Date().toISOString(),
+  mode: dailyMode ? 'daily' : 'free',
+  difficulty,
+  won: true,
+  moves,
+  durationMs: ms,
+  usedFerry: ferryCount > 0,
+  usedBridge: bridgeCount > 0,
+  ferryCount,
+  bridgeCount,
+  optimalMoves,
+  hintsUsed,
+  perfect,
+  pathUsed: path.slice(),
+  startArea,
+  endArea: targetArea,
+};
 
 addGameToHistory(event, { onPersist: () => onPersist(true) });
 
@@ -2285,16 +2324,25 @@ if (unlocked?.length && window.gtag) {
 }
 
 
+
   // ---- Analytics ----
   if (window.gtag) {
-    window.gtag('event', 'game_won', {
-      difficulty,
-      start_postcode: startArea,
-      target_postcode: targetArea,
-      guesses: Math.max(0, path.length - 1),
-      time_ms: ms,
-      round_id: roundIdRef.current || undefined,
-    });
+window.gtag?.('event', 'game_finished', {
+  round_id: roundIdRef.current,
+  won: 1,
+  difficulty,
+  mode: dailyMode ? 'daily' : 'free',
+  daily_mode: dailyMode ? 1 : 0,
+  start_postcode: startArea,
+  target_postcode: targetArea,
+  moves,
+  optimal_moves: optimalMoves,
+  perfect: perfect ? 1 : 0,
+  time_ms: ms,
+  ferry_count: ferryCount,
+  bridge_count: bridgeCount,
+  hints_used: hintsUsed,
+});
   }
 
   setVictoryOpen(true);
@@ -2302,7 +2350,7 @@ if (unlocked?.length && window.gtag) {
   currentPath, optimalPath,
   difficulty, startArea, targetArea,
   dailyMode, dailyDifficulty,
-  bumpStreakFor, tallyEdgeUsage, onPersist, enqueueAchievementBatch
+  bumpStreakFor, tallyEdgeUsage, onPersist, enqueueAchievementBatch,hintsUsed
 ]);
 
 useEffect(() => {
@@ -2548,32 +2596,37 @@ useEffect(() => {
   const prev = prevStateRef.current;
   if (prev !== 'playing' && gameState === 'playing') {
     roundIdRef.current = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
-    window.gtag?.('event', 'game_started', {
-      difficulty,
-      start_postcode: startArea,
-      target_postcode: targetArea,
-      round_id: roundIdRef.current,
-    });
+window.gtag?.('event', 'game_started', {
+  round_id: roundIdRef.current,
+  difficulty,
+  mode: dailyMode ? 'daily' : 'free',
+  daily_mode: dailyMode ? 1 : 0,
+  start_postcode: startArea,
+  target_postcode: targetArea,
+});
   }
   prevStateRef.current = gameState;
-}, [gameState, difficulty, startArea, targetArea]);
+}, [gameState, difficulty, startArea, targetArea, dailyMode]);
 
 
 const abandonIfActive = useCallback((reason = 'navigation') => {
   if (gameState === 'playing' && !gameWon && window.gtag) {
     const ms = gameStartRef.current ? Math.max(0, performance.now() - gameStartRef.current) : undefined;
-    window.gtag('event', 'game_abandoned', {
-      difficulty,
-      start_postcode: startArea,
-      target_postcode: targetArea,
-      guesses: Math.max(0, currentPath.length - 1),
-      time_ms: ms,
-      reason,
-      round_id: roundIdRef.current || undefined,
-    });
+window.gtag?.('event', 'game_abandoned', {
+  round_id: roundIdRef.current,
+  difficulty,
+  mode: dailyMode ? 'daily' : 'free',
+  daily_mode: dailyMode ? 1 : 0,
+  start_postcode: startArea,
+  target_postcode: targetArea,
+  moves: Math.max(0, currentPath.length - 1),
+  time_ms: ms,
+  hints_used: hintsUsed,
+  reason,
+});
     roundIdRef.current = null; // prevent duplicates
   }
-}, [gameState, gameWon, difficulty, startArea, targetArea, currentPath.length]);
+}, [gameState, gameWon, difficulty, startArea, targetArea, currentPath.length, dailyMode, hintsUsed]);
 
 useEffect(() => {
   const onUnload = () => abandonIfActive('beforeunload');
@@ -2667,6 +2720,7 @@ const makeGuess = useCallback((area) => {
   if (gameWon || dailyGaveUp) return;
 
   setErrorToast(prev => (prev ? '' : prev));
+  clearAchievementToasts();
   setShowHints(false);
 
   const currentLocation = currentPath[currentPath.length - 1];
@@ -2713,15 +2767,17 @@ const makeGuess = useCallback((area) => {
   }
 
   const newPath = [...currentPath, area];
-  setCurrentPath(newPath);
+setCurrentPath(newPath);
 
-  if (area === targetArea) {
-    finishGame(newPath); // last hop already counted above
-  }
+
+
+if (area === targetArea) {
+  finishGame(newPath);
+}
 }, [
   getNeighbors, gameWon, currentPath, targetArea, finishGame,
   ferryAdj, bridgeAdj, difficulty, showError,
-  onPersist, dailyGaveUp, enqueueAchievementBatch
+  onPersist, dailyGaveUp, enqueueAchievementBatch,clearAchievementToasts
 ]);
 
 // const isFerryEdge  = (a,b) => ferryAdj.get(a)?.has(b)  || false;
@@ -3088,8 +3144,9 @@ const getVisibleJourneyItems = useCallback(() => {
 
 const renderControls = () => (
   <div ref={controlsRef} className="pp-controls-layer top-0 z-20 w-full">
-    <div
-      className="pp-top-overlay glass glass--white mx-auto relative"
+<div
+  ref={topOverlayRef}
+  className="pp-top-overlay glass glass--white mx-auto relative"
       style={{ width: '100%', maxWidth: '600px', overflowX: 'auto', overflowY: 'visible', WebkitOverflowScrolling: 'touch' }}
     >
       <div className="grid-container">
@@ -3105,18 +3162,47 @@ const renderControls = () => (
           </button>
         </div>
 
-        <div className="text-center leading-tight text-[clamp(11px,2.6vw,13px)]">
-          <span className="whitespace-nowrap">
-            Travel from<br /> <span className="text-indigo-200">{startArea || '—'}</span> → {' '}
-            <span className="text-indigo-200">{targetArea || '—'}</span><br />
-            {dailyMode && Number.isFinite(dailyPar) && (  
-              <span className="badge badge-gray ml-2 inline-flex items-center !text-[11px] !leading-tight !py-0.5 !px-2 align-middle">
-                <span className="mr-1 align-[-0.1em]">⛳</span>
-                Par {dailyPar}
-              </span>
-            )}
-          </span>
-        </div>
+<div className="text-center leading-tight text-[clamp(11px,2.6vw,13px)]">
+  <div className="flex flex-col items-center gap-1">
+    <div className="whitespace-nowrap">Travel from</div>
+
+    <div className="flex items-center justify-center gap-2 flex-wrap">
+      <button
+        type="button"
+        className="btn btn-start"
+        onClick={() => startArea && centerOn(startArea)}
+        disabled={!startArea}
+        aria-label={startArea ? `Center map on start postcode ${startArea}` : 'No start postcode'}
+        title={startArea ? `Center on start: ${startArea}` : ''}
+      >
+        
+        {startArea || '—'}
+      </button>
+
+      <span className="text-slate-700 font-semibold" aria-hidden="true"> to </span>
+
+      <button
+        type="button"
+        className="btn btn-target"
+        onClick={() => targetArea && centerOn(targetArea)}
+        disabled={!targetArea}
+        aria-label={targetArea ? `Center map on target postcode ${targetArea}` : 'No target postcode'}
+        title={targetArea ? `Center on target: ${targetArea}` : ''}
+      >
+        
+        {targetArea || '—'}
+      </button>
+    </div>
+
+    {dailyMode && Number.isFinite(dailyPar) && (
+      <span className="badge badge-gray inline-flex items-center !text-[11px] !leading-tight !py-0.5 !px-2 align-middle">
+        <span className="mr-1 align-[-0.1em]">⛳</span>
+        Par {dailyPar}
+      </span>
+    )}
+  </div>
+</div>
+
 
         <div>
           <button
@@ -3272,17 +3358,9 @@ const renderControls = () => (
           {isTouch ? (
             <MobileCodeScroller
               current={currentPath[currentPath.length - 1]}
-              onPick={(code) => {
-                makeGuess(code);
-                requestAnimationFrame(() => {
-                  zoomToArea(code, {
-                    containerEl: containerRef.current,
-                    getWorldCenter,
-                    getPanZoom: () => ({ scale: 1, tx: 0, ty: 0 }),
-                    setPanZoom: ({ scale, tx, ty }) => reset({ scale, x: tx, y: ty }),
-                  });
-                });
-              }}
+onPick={(code) => {
+  makeGuess(code);
+}}
               getNeighbors={getNeighbors}
               currentPath={currentPath}
               allCodes={allPostcodeOptions}

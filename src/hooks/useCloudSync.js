@@ -261,23 +261,31 @@ export default function useCloudSync(getLocalSnapshot, writeLocalSnapshot) {
   }, [user]);
 
   // queued save
-  const queueSave = React.useCallback(() => {
-    if (!user) return;
-    if (raf.current) cancelAnimationFrame(raf.current);
-    raf.current = requestAnimationFrame(async () => {
-const local = getSnapRef.current();
-const merged = await mergeAndSave(user.uid, local);
-writeSnapRef.current(merged);
-    });
-  }, [user]);
+const queueSave = React.useCallback(() => {
+  if (!user) return;
+  if (raf.current) cancelAnimationFrame(raf.current);
+  raf.current = requestAnimationFrame(async () => {
+    try {
+      const local = getSnapRef.current();
+      const merged = await mergeAndSave(user.uid, local);
+      writeSnapRef.current(merged);
+    } catch (e) {
+      console.error('[cloud queueSave] failed:', e);
+    }
+  });
+}, [user]);
 
   // immediate save
-  const saveNow = React.useCallback(async () => {
-    if (!user) return;
-const local = getSnapRef.current();
-const merged = await mergeAndSave(user.uid, local);
-writeSnapRef.current(merged);
-  }, [user]);
+const saveNow = React.useCallback(async () => {
+  if (!user) return;
+  try {
+    const local = getSnapRef.current();
+    const merged = await mergeAndSave(user.uid, local);
+    writeSnapRef.current(merged);
+  } catch (e) {
+    console.error('[cloud saveNow] failed:', e);
+  }
+}, [user]);
 
 const overwriteNow = React.useCallback(async (snapshot) => {
   if (!user) return;

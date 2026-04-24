@@ -197,9 +197,10 @@ export const achievements = [
     description: 'Win with a route of 20+ moves',
     check: (e) => e.won && (e.moves ?? 0) >= 20 },
 
-  { id: 'zero_assist_master', name: 'Zero-Assist Master', icon:'🧘', tier:'legendary',
-    description: 'Win on Master with zero hints',
-    check: (e,_h,meta) => e.won && e.difficulty==='master' && ((meta?.hintsUsed ?? 0) === 0) },
+{ id: 'zero_assist_master', name: 'Zero-Assist Master', icon:'🧘',
+  tier:'legendary',
+  description: 'Win on Master with zero hints',
+  check: (e) => e.won && e.difficulty === 'master' && (e.hintsUsed ?? 0) === 0 },
 
   { id: 'double_perfect', name: 'Double Perfect', icon:'✨', tier:'gold',
   description: 'Two consecutive wins with optimal moves',
@@ -364,11 +365,6 @@ export function unlockStreaksFor(diff) {
   const n = readStreakCount(diff);
   const want = [];
 
-  // global thresholds (keep if you want the generic badges too)
-  if (n >= 3)  want.push({ id: 'streak_3',  name: 'Threepeat',        tier: 'bronze' });
-  if (n >= 7)  want.push({ id: 'streak_7',  name: 'One Week Wonder',  tier: 'silver' });
-  if (n >= 14) want.push({ id: 'streak_14', name: 'Fortnight Flyer',  tier: 'gold' });
-  if (n >= 30) want.push({ id: 'streak_30', name: 'Monthly Machine',  tier: 'gold' });
   if (n >= 365) want.push({ id: 'streak_365', name: 'Unbreakable',  tier: 'legendary' });
 
   // per-difficulty thresholds
@@ -469,14 +465,31 @@ export function checkAndUnlockMetaAchievements(_difficulty, _postcodeAreas, ferr
   const allB = new Set(bridgeLinks.map(({a,b}) => canonEdge(a,b)));
 
   const want = [];
-  if (usedF.size >= 1) want.push({ id: 'first_crossing'  });   // harmless if already unlocked
-  if (usedB.size >= 1) want.push({ id: 'first_span' });
+  if (usedF.size >= 1) want.push({ id: 'first_crossing' });
+if (usedB.size >= 1) want.push({ id: 'first_span' });
 
-  if (allF.size > 0 && usedF.size === allF.size) want.push({ id: 'all_ferries', name: 'Ferry Collector', tier:'gold' });
-  if (allB.size > 0 && usedB.size === allB.size) want.push({ id: 'all_bridges', name: 'Bridge Club',     tier:'gold' });
+if (allF.size > 0 && usedF.size === allF.size) want.push({ id: 'all_ferries' });
+if (allB.size > 0 && usedB.size === allB.size) want.push({ id: 'all_bridges' });
 
-  // (optional) special edge, tweak codes if yours differ
-  if (usedF.has(canonEdge('L','CH'))) want.push({ id: 'mersey', name: 'Ferry Across the Mersey', tier:'silver' });
+if (
+  allF.size > 0 &&
+  allB.size > 0 &&
+  usedF.size >= Math.ceil(allF.size / 2) &&
+  usedB.size >= Math.ceil(allB.size / 2)
+) {
+  want.push({ id: 'networker' });
+}
+
+if (
+  allF.size > 0 &&
+  allB.size > 0 &&
+  usedF.size === allF.size &&
+  usedB.size === allB.size
+) {
+  want.push({ id: 'infrastructure_chief' });
+}
+
+if (usedF.has(canonEdge('L', 'CH'))) want.push({ id: 'mersey' });
 
   // map the minimal items above to real objects from your defined list (by id)
   const byId = new Map(achievements.map(a => [a.id, a]));

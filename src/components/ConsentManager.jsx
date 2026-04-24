@@ -65,6 +65,8 @@ function writeConsent(choices) {
 
 function enableAnalytics(measurementId) {
   if (!measurementId || typeof document === "undefined") return;
+  if (window.__gaInit) return;
+  window.__gaInit = true;
 
   // 1) Capture any queued calls from the stub (if present)
   const queued = (window.gtag && window.gtag.__queue) ? [...window.gtag.__queue] : [];
@@ -142,8 +144,13 @@ export default function ConsentManager({ measurementId, policyUrl }) {
   const existing = readConsent();
   const [open, setOpen] = useState(!existing);
   const [customise, setCustomise] = useState(false);
-  const [analytics, setAnalytics] = useState(false);
+
+ const [analytics, setAnalytics] = useState(
+  () => existing?.choices?.analytics ?? false
+);
+
   const dialogRef = useFocusTrap(open);
+
 
   // Enable analytics immediately if previously granted
   useEffect(() => {
@@ -243,15 +250,28 @@ return (
         </button>
       </div>
 
-      {customise && (
-        <div id="customise-panel" style={{ marginTop: 12, padding: 12, borderRadius: 12, background: "#0e3358ff", border: "1px solid #e5e7eb" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <input type="checkbox" checked readOnly /> <span><b>Necessary</b> — required to make the site work (always on)</span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input type="checkbox" checked={analytics} onChange={e => setAnalytics(e.target.checked)} /> <span><b>Analytics</b> — helps us understand how the game is used</span>
-          </label>
-        </div>
+{customise && (
+  <>
+    <div id="customise-panel" style={{ marginTop: 12, padding: 12, borderRadius: 12, background: "#0e3358ff", border: "1px solid #e5e7eb" }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+        <input type="checkbox" checked readOnly /> <span><b>Necessary</b> — required to make the site work (always on)</span>
+      </label>
+      <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <input type="checkbox" checked={analytics} onChange={e => setAnalytics(e.target.checked)} /> <span><b>Analytics</b> — helps us understand how the game is used</span>
+      </label>
+    </div>
+
+    <div style={{ marginTop: 12 }}>
+      <button
+        type="button"
+        onClick={() => commit({ analytics })}
+        style={{ padding: "10px 14px", borderRadius: 12, background: "#ffffffff", color: "black", border: 0, fontWeight: 700 }}
+      >
+        Save preferences
+      </button>
+    </div>
+  </>
+
       )}
 
       <div style={{ marginTop: 10, fontSize: 12, color: "#6b7280" }}>

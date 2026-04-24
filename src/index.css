@@ -240,6 +240,13 @@ a:visited {
   .btn-hollowgreen { background-color: #ffffff; color: green; border: 2px solid green }
   .btn-hollowgreen:hover { background-color: green; color:#ffffff }
 
+  .btn-start { background-color: #1a6e65; color: white; border: 2px solid #166534 }
+  .btn-start:hover { background-color: rgb(255, 255, 255); color:green }
+
+  .btn-target { background-color: #f59e0b; color: white; border: 2px solid #f5740b }
+  .btn-target:hover { background-color: rgb(255, 255, 255); color:#f59e0b }
+
+
 /* Easy */
 .btn-green  { background-color:#15803d; color:#fff; border:2px solid #166534; }
 .btn-green:hover  { background-color:#166534; }
@@ -459,6 +466,10 @@ a:visited {
 .badge-gray  { background:#f9fafb; color:#374151; border-color:#d1d5db; }
 .badge-fail  { background:#e93f0b; color:#374151; border-color:#ff0000; color:#ffffff}
 .badge-best  { background:#8b5cf6; color:#ffffff; border-color:#8b5cf6}
+.badge-target  { background:#f59e0b; color:#ffffff; border-color:#f59e0b}
+.badge-start  { background:#15803d; color:#ffffff; border-color:#15803d} 
+
+
 
 @keyframes nudge {
   0%,100% { transform: translateX(0); }
