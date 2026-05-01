@@ -29,6 +29,27 @@ const tierChipStyle = (tier) => {
   }
 };
 
+const categoryChipStyle = (category) => {
+  const base = {
+    fontSize: 11,
+    padding: '2px 7px',
+    borderRadius: 999,
+    textTransform: 'inherit',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    whiteSpace: 'nowrap',
+  };
+  switch ((category || '').toLowerCase()) {
+    case 'challenge':
+      return { ...base, background: '#ffffffff', color: '#92400E', borderColor: '#F59E0B' };
+    case 'streak':
+      return { ...base, background: '#ffffffff', color: '#6B21A8', borderColor: '#C084FC' };
+    case 'exploration':
+    default:
+      return { ...base, background: '#ffffffff', color: '#166534', borderColor: '#22C55E' };
+  }
+};
+
 const tierBorderColor = (tier) => {
   switch ((tier || '').toLowerCase()) {
     case 'bronze':    return '#F59E0B';
@@ -82,6 +103,7 @@ function groupByTier(list) {
 // --- Unlocked card header ---
 function AchCardUnlocked({ a, whenISO }) {
   const when = whenISO ? new Date(whenISO) : null;
+  const category = a.category || 'xploration';
   return (
     <div className="glass rounded-2xl transition hover:shadow-lg"
          style={glassCardStyle(a.tier)} title={a.description}>
@@ -103,7 +125,13 @@ function AchCardUnlocked({ a, whenISO }) {
         
       </div>
 
-      <div className="text-sm mt-2 text-white/90"><span
+      <div className="mt-2 flex flex-wrap gap-2">
+        <span style={tierChipStyle(a.tier)}>{a.tier}</span>
+        <span style={categoryChipStyle(category)}>{category}</span>
+      </div>
+
+      <div className="text-sm mt-2 text-white/90">{a.description}</div>
+      {/* <div className="text-sm mt-2 text-white/90"><span
           style={{
             marginLeft: 'auto',
             ...tierChipStyle(a.tier),
@@ -111,7 +139,7 @@ function AchCardUnlocked({ a, whenISO }) {
           }}
         >
           {a.tier}
-        </span><br />{a.description}</div>
+        </span><br />{a.description}</div> */}
       {when && (
         <div className="text-xs mt-2 text-emerald-200/80">
           Unlocked {when.toLocaleDateString()}
@@ -123,6 +151,7 @@ function AchCardUnlocked({ a, whenISO }) {
 
 
 function AchCardLocked({ a }) {
+  const category = a.category || 'exploration';
   return (
     <div className="glass rounded-2xl" style={glassCardMuted} title={a.description}>
       <div
@@ -145,7 +174,13 @@ function AchCardLocked({ a }) {
 
       </div>
 
-      <div className="text-sm mt-1 text-slate-100/90">        <span
+      <div className="mt-2 flex flex-wrap gap-2">
+        <span style={tierChipStyle(a.tier)}>{a.tier}</span>
+        <span style={categoryChipStyle(category)}>{category}</span>
+      </div>
+
+      <div className="text-sm mt-1 text-slate-100/90">{a.description}</div>
+      {/* <div className="text-sm mt-1 text-slate-100/90">        <span
           style={{
             marginLeft: 'auto',
             ...tierChipStyle(a.tier),
@@ -153,7 +188,7 @@ function AchCardLocked({ a }) {
           }}
         >
           {a.tier}
-        </span><br />{a.description}</div>
+        </span><br />{a.description}</div> */}
     </div>
   );
 }
@@ -210,6 +245,11 @@ const visitedCount =
           <p className="text-slate-200 mb-4 text-sm">
             Visited <b>{visitedCount}</b> / <b>{totalAreas}</b> postcode areas
           </p>
+          <div className="mb-5 rounded-xl border border-white/20 bg-white/10 p-3 text-sm text-slate-100">
+            <p><b>🧭 Exploration</b> achievements can be earned in Free Play or Daily Challenge.</p>
+            <p><b>🗺️ Challenge</b> achievements require a no-hint run.</p>
+            <p><b>🔥 Streak</b> achievements can only be achieved in the Daily Challenges</p>
+          </div>
 
           {/* Unlocked */}
           <section className="mb-6">

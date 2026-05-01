@@ -90,7 +90,7 @@ export default function StatsPage({
 }) {
   const [viewStats, setViewStats] = useState(stats || zeroStats());
   const [showReset, setShowReset] = useState(false);
-  const [alsoResetStreaks, setAlsoResetStreaks] = useState(true);
+ const [alsoResetStreaks, setAlsoResetStreaks] = useState(false);
   const [alsoResetCoverage, setAlsoResetCoverage] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
 
@@ -429,7 +429,7 @@ export default function StatsPage({
                   onClick={() => {
                     // Let parent handle stats / streaks / achievements as before
                     if (onResetAll) {
-                      onResetAll(alsoResetStreaks);
+                      onResetAll({ alsoResetStreaks });
                     }
 
                     // Optional: reset coverage locally

@@ -99,11 +99,29 @@ export function generateTodayDaily(difficulty, postcodeAreas, getNeighbors, boun
   return { start, target, path, steps: Math.max(0, path.length - 1) };
 }
 
+const gaveUpTodayFromHistory = (difficulty) => {
+  try {
+    const history = JSON.parse(localStorage.getItem('pp_history_v2') || '{"games":[]}');
+    return (history.games || []).some((game) =>
+      game?.mode === 'daily' &&
+      game?.difficulty === difficulty &&
+      game?.won === false &&
+      String(game?.dateISO || '').slice(0, 10) === todayUTC()
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const dailyStatus = (difficulty) => {
   const snap = loadSnapshot(difficulty);
   const today = todayUTC();
-  if (snap && snap.date === today) return (snap.gameWon || snap.gaveUp || snap.roundOver) ? 'View result' : 'Continue';
-  return 'Start';
+  if (snap && snap.date === today) {
+    if (snap.status === 'gave_up' || snap.gaveUp || gaveUpTodayFromHistory(difficulty)) return 'Gave up';
+    if (snap.status === 'won' || snap.gameWon || snap.roundOver) return 'View result';
+    return 'Continue';
+  }
+  return gaveUpTodayFromHistory(difficulty) ? 'Gave up' : 'Start';
 };
 
 export function getStreak(diff) {

@@ -1110,15 +1110,26 @@ function startOrResumeDaily(difficulty) {
         ? snap.currentPath
         : [snap.startArea]
     );
-    setGuesses(Array.isArray(snap.guesses) ? snap.guesses : []);
-    setShowOptimal(!!snap.showOptimal || !!snap.gaveUp || !!snap.roundOver);
-    setElapsedMs(snap.elapsedMs || 0);
+setGuesses(Array.isArray(snap.guesses) ? snap.guesses : []);
+setShowOptimal(!!snap.showOptimal || !!snap.gaveUp || !!snap.roundOver);
+setElapsedMs(snap.elapsedMs || 0);
+
+const restoredStatus = normalizeStatus(Daily.dailyStatus?.(difficulty));
+const restoredGaveUp = restoredStatus === 'gaveUp' || !!snap.gaveUp || (!!snap.roundOver && !snap.gameWon);
+setDailyGaveUp(restoredGaveUp);
 
 if (snap.gameWon) {
   setGameWon(true);
   setVictoryOpen(true);
   setGameState('gameWon');
   gameStartRef.current = null;
+  } else if (restoredGaveUp) {
+  setGameWon(false);
+  setShowOptimal(true);
+  setVictoryOpen(false);
+  setGameState('gameOver');
+  gameStartRef.current = null;
+
 } else if (snap.gaveUp || snap.roundOver) {
   setGameWon(false);
   setShowOptimal(true);
@@ -1208,6 +1219,12 @@ useEffect(() => {
     (elapsedMs || 0) +
     (gameStartRef.current ? Math.max(0, performance.now() - gameStartRef.current) : 0);
 
+  const previousDailySnapshot = Daily.loadSnapshot(dailyDifficulty);
+  const previousGaveUp =
+    previousDailySnapshot?.date === dailyDate &&
+    (previousDailySnapshot?.status === 'gave_up' || previousDailySnapshot?.gaveUp === true);
+  const resolvedGaveUp = dailyGaveUp || previousGaveUp;
+
   Daily.saveSnapshot(dailyDifficulty, {
     date: dailyDate,
     difficulty: dailyDifficulty,
@@ -1219,11 +1236,12 @@ useEffect(() => {
     optimalPath,
     elapsedMs: Math.floor(elapsedSoFar),
     gameWon,
-    gaveUp: dailyGaveUp,
-    roundOver: gameWon || dailyGaveUp,
-    showOptimal,
-    victoryOpen,
+    gaveUp: resolvedGaveUp,
+    roundOver: gameWon || resolvedGaveUp,
+    showOptimal: showOptimal || resolvedGaveUp,
+    victoryOpen: resolvedGaveUp ? false : victoryOpen,
     par: dailyPar,
+    status: resolvedGaveUp ? 'gave_up' : gameWon ? 'won' : 'playing',
     savedAt: new Date().toISOString(),
   });
   onPersist?.();
@@ -1382,6 +1400,7 @@ function getWorldCenter(code) {
 function zoomToArea(code, {
   minScale = MIN_SCALE,
   maxScale = MAX_SCALE,
+  duration = 0,
 } = {}) {
   // 1) Resolve bbox (prefer real geometry; cached for speed)
   let bbox = getAreaBBoxFromDOM(code);
@@ -1434,7 +1453,11 @@ const relax   = lerp(1.00,  1.40, Math.pow(r, 0.70)); // gentle zoom-out for big
   const ty = viewCy - s * cy;
 
   // 7) Apply via your useSvgPan
+  if (duration > 0) {
+  animateTo({ scale: s, x: tx, y: ty }, { duration });
+} else {
   reset({ scale: s, x: tx, y: ty });
+}
 }
 
 
@@ -1535,31 +1558,35 @@ const buildShareText = () => {
   }
 };
 
-/*   const handleInputSubmit = (inputElement) => {
-    const val = inputElement.value.toUpperCase().trim();
-    if (postcodeAreas[val]) {
-      makeGuess(val);
-      inputElement.value = '';
-    }
-  }; */
-
 const handleInputSubmit = (inputElement) => {
   const val = inputElement.value.toUpperCase().trim();
   if (!val) return;
+
+  const currentLocation = currentPath[currentPath.length - 1];
+  const isKnownArea = !!postcodeAreas[val];
+  const isValidMove = getNeighbors(currentLocation).includes(val);
+  const alreadyVisited = currentPath.includes(val);
+  const revisitAllowed = difficulty === 'easy' || difficulty === 'normal';
+  const allowedMove = isValidMove && (!alreadyVisited || revisitAllowed);
 
   makeGuess(val);
   inputElement.value = '';
   setSelectorEmpty(true);
 
-  // 👇 zoom to the entered code
+  if (!isKnownArea) return;
+
   requestAnimationFrame(() => {
     zoomToArea(val, {
-      containerEl: containerRef.current,
-      getWorldCenter,
-      // Instead of setPanZoom, use your useSvgPan reset:
-      getPanZoom: () => ({ scale: 1, tx: 0, ty: 0 }), // not used
-      setPanZoom: ({ scale, tx, ty }) => reset({ scale, x: tx, y: ty })
+      duration: allowedMove ? 0 : 250,
     });
+
+    if (!allowedMove) {
+      window.setTimeout(() => {
+        zoomToArea(currentLocation, {
+          duration: 450,
+        });
+      }, 700);
+    }
   });
 };
   
@@ -1977,6 +2004,7 @@ const giveUpNow = useCallback(() => {
       showOptimal: true,
       victoryOpen: false,
       par: dailyPar,
+      status: 'gave_up',
       savedAt: new Date().toISOString(),
     });
     onPersist?.();
@@ -2079,31 +2107,33 @@ const COLORS = {
  // const visitedSet  = useMemo(() => new Set(currentPath), [currentPath]);
  
 const getAreaStyle = (code) => {
-  // Flags
   const isStart   = code === startArea;
   const isTarget  = code === targetArea;
   const isCurrent = currentArea && code === currentArea && !isStart && !roundResolved;
   const isVisited = currentPath.includes(code);
   const isFlashing = flashAreas.includes(code);
 
-  // MASTER: hide everything except start/target/current/visited
-  const revealedInMaster = isStart || isTarget || isVisited || isCurrent;
-  if (masterMode && !revealedInMaster) 
-  
-  
-  {
+  if (isFlashing) {
+    return {
+      fill: 'rgba(165, 7, 7, 0.18)',
+      stroke: '#e3e637ff',
+      strokeWidth: 5,
+      strokeDasharray: '6 4',
+    };
+  }
 
+  const revealedInMaster = isStart || isTarget || isVisited || isCurrent;
+  if (masterMode && !revealedInMaster) {
     return { fill: 'transparent', stroke: 'none', strokeWidth: 0 };
   }
   
   // 🔴 Invalid/duplicate guess flash overrides everything for 400ms
 if (isFlashing) {
   return {
-    fill: '#a50707ff',                 // red flash for invalid/duplicate guess
-    color: '#fff',   // texture (not color)
-    stroke: '#e3e637ff',                     // high-contrast border
-    strokeWidth: 5,                   // clearly thicker than normal
-    strokeDasharray: '6 4',             // hint via line style
+    fill: 'transparent',
+    stroke: '#e3e637ff',
+    strokeWidth: 6,
+    strokeDasharray: '8 5',
   };
 }
 
@@ -3624,8 +3654,17 @@ onPick={(code) => {
       <Modal
         open={showHints && !roundResolved && currentPath.length > 0}
         onClose={() => setShowHints(false)}
-        title="Available connections"
+        title={dailyMode ? `Available connections (${Math.max(0, MAX_DAILY_HINTS - hintsUsed)} left)` : 'Available connections'}
       >
+        <p className={`mb-3 rounded-lg border px-3 py-2 text-sm ${
+          dailyMode
+            ? 'border-sky-200 bg-sky-50 text-sky-900'
+            : 'border-amber-200 bg-amber-50 text-amber-900'
+        }`}>
+          {dailyMode
+            ? 'Daily hints are limited. Streak and exploration achievements still count, but challenge achievements require a no-hint run.'
+            : 'This run is now assisted. Exploration achievements still count, but challenge achievements require a no-hint run.'}
+        </p>
         {(() => {
           const current = currentPath[currentPath.length - 1];
           const options = getNeighbors(current)
@@ -3876,8 +3915,8 @@ const renderGameBoard = () => (
 // ---------- Menu page ----------
 
 function handleDailyChoice(diff) {
-  const status = normalizeStatus(Daily.dailyStatus?.(diff)); // 'idle' | 'continue' | 'finished'
-  if (status === 'finished' || status === 'continue') {
+  const status = normalizeStatus(Daily.dailyStatus?.(diff)); // 'idle' | 'continue' | 'finished' | 'gaveUp'
+  if (status === 'finished' || status === 'continue' || status === 'gaveUp') {
     // jump straight in: resume or show the result
     startOrResumeDaily(diff);
     setShowDailyChooser(false);
@@ -4475,9 +4514,10 @@ const renderMenu = () => (
 // ---- Daily chooser helpers & streak state ----
 const DIFF_BASE_LABELS = { easy: 'Easy', normal: 'Normal', hard: 'Hard', master: 'Master' };
 
-// Map whatever Daily.dailyStatus returns into { idle | continue | finished }
+// Map whatever Daily.dailyStatus returns into { idle | continue | finished | gaveUp }
 function normalizeStatus(raw) {
   const s = String(raw || '').toLowerCase();
+  if (/gave|give|quit|forfeit/.test(s)) return 'gaveUp';
   if (/finish|done|complete|result/.test(s)) return 'finished';   // -> "See Result"
   if (/cont|progress|resume|started|ongoing/.test(s)) return 'continue'; // -> "Continue"
   return 'idle';
@@ -4486,6 +4526,7 @@ function normalizeStatus(raw) {
 function makeDailyLabel(diff) {
   const base = DIFF_BASE_LABELS[diff] ?? diff;
   const status = normalizeStatus(Daily.dailyStatus?.(diff));
+  if (status === 'gaveUp') return `${base} - Gave up`;
   if (status === 'continue') return `${base} - Continue`;
   if (status === 'finished') return `${base} - Result`;
   return base; // idle

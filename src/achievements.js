@@ -42,7 +42,8 @@ function unlockAndPersist(list) {
   const fresh = [];
   for (const a of list) {
     if (!a?.id) continue;
-    if (!map[a.id]) { map[a.id] = { unlockedAt: now }; fresh.push(a); }
+    const category = getAchievementCategory(a);
+    if (!map[a.id]) { map[a.id] = { ...a, category, unlockedAt: now }; fresh.push({ ...a, category }); }
   }
   if (fresh.length) localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(map));
   return fresh;
@@ -51,6 +52,42 @@ function unlockAndPersist(list) {
 export function readStreakCount(diff) {
   const rec = getJSON(STREAK_KEY_V2(diff), null);
   return Number(rec?.count || 0);
+}
+
+const CHALLENGE_ACHIEVEMENT_IDS = new Set([
+  'normal_win',
+  'hard_win',
+  'master_win',
+  'speedy',
+  'straight_shooter',
+  'so_close',
+  'dry_feet',
+  'quick_trip',
+  'sprinter',
+  'flawless_line',
+  'trailblazer',
+  'masterpiece',
+  'zero_assist_master',
+  'double_perfect',
+  'turkey',
+  'deep_dive',
+]);
+
+export function getAchievementCategory(achievementOrId) {
+  const id = typeof achievementOrId === 'string' ? achievementOrId : achievementOrId?.id;
+  const explicit = typeof achievementOrId === 'object' ? achievementOrId?.category : null;
+  if (explicit) return explicit;
+  if (!id) return 'exploration';
+  if (id.startsWith('streak')) return 'streak';
+  if (CHALLENGE_ACHIEVEMENT_IDS.has(id)) return 'challenge';
+  return 'exploration';
+}
+
+function isEligibleForRun(achievement, event = {}) {
+  const category = getAchievementCategory(achievement);
+  if (category === 'challenge') return Number(event?.hintsUsed || 0) === 0;
+  if (category === 'streak') return event?.mode === 'daily' || event?.dailyMode === true;
+  return true;
 }
 
 // ---- Definitions ----
@@ -358,7 +395,7 @@ export const achievements = [
 
 
   
-  ];
+  ].map((a) => ({ ...a, category: getAchievementCategory(a) }));
 
 // unlock helper that emits *both* global and per-difficulty ids
 export function unlockStreaksFor(diff) {
@@ -419,8 +456,8 @@ export function evaluateAndUnlockAchievements(
 
   for (const a of achievements) {
     try {
-      if (!have[a.id] && a.check(event, history, meta)) {
-        have[a.id] = { ...a, unlockedAt: nowISO };
+      if (!have[a.id] && isEligibleForRun(a, event) && a.check(event, history, meta)) {
+        have[a.id] = { ...a, category: getAchievementCategory(a), unlockedAt: nowISO };
         newly.push(have[a.id]);
       }
     } catch {

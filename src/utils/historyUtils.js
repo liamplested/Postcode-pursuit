@@ -12,5 +12,5 @@ export function addGameToHistory(event, { onPersist } = {}) {
 export function lastNGamesArePerfect(n) {
   const db = readJSON(GAME_HISTORY_KEY, { games: [] });
   const recent = db.games.slice(-n);
-  return recent.length === n && recent.every(g => g.perfect === true);
+  return recent.length === n && recent.every(g => g.perfect === true && Number(g.hintsUsed || 0) === 0);
 }
