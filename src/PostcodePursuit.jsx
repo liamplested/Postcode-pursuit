@@ -45,6 +45,8 @@ const MAX_SCALE = 30;
 
 // Daily helpers
 const DAILY_STREAK_KEY = 'pp_daily_streak_v1'; // {count:number, lastWinDate:'YYYY-MM-DD'}
+const UI_THEME_KEY = 'pp:theme:v1';
+const UI_COLORBLIND_KEY = 'pp:colorblind:v1';
 
 function parseUTC(dateStr){ return new Date(dateStr + 'T00:00:00Z'); }
 function daysBetweenUTC(a,b){
@@ -763,6 +765,13 @@ const [showTutorial, setShowTutorial] = useState(false);
 const [consentResolved, setConsentResolved] = useState(
   () => !!localStorage.getItem('pp_consents')
 );
+const [uiTheme, setUiTheme] = useState(() => {
+  const stored = localStorage.getItem(UI_THEME_KEY);
+  return ['system', 'light', 'dark'].includes(stored) ? stored : 'system';
+});
+const [colorblindFriendly, setColorblindFriendly] = useState(
+  () => localStorage.getItem(UI_COLORBLIND_KEY) === 'true'
+);
 
 const canClickAreas = difficulty === 'easy';
 const roundResolved = gameWon || dailyGaveUp;
@@ -778,6 +787,19 @@ function parPhrase(moves, par) {
   return `${d} over par`;
 }
 const [dailyPar, setDailyPar] = useState(null);
+
+useEffect(() => {
+  document.documentElement.dataset.ppTheme = uiTheme;
+
+  if (colorblindFriendly) {
+    document.documentElement.dataset.ppColorblind = 'true';
+  } else {
+    delete document.documentElement.dataset.ppColorblind;
+  }
+
+  localStorage.setItem(UI_THEME_KEY, uiTheme);
+  localStorage.setItem(UI_COLORBLIND_KEY, colorblindFriendly ? 'true' : 'false');
+}, [uiTheme, colorblindFriendly]);
 
 const isTouch = useIsTouchDevice();
 
@@ -2138,18 +2160,31 @@ const focusStartAndTarget = React.useCallback((startCode, targetCode, pad = 0.2)
 
 
 
-const COLORS = {
-  baseFill:    '#ecded6ff',
-  baseStroke:  '#2e3744ff',
-  startFill:   '#1a6e65ff',
-  startStroke: '#0F766E',
-  currentFill: '#2563EB',
-  currentStroke:'#FFFFFF',
-  visitedFill: '#04bd32ff',
-  visitedStroke:'#64748B',
-  targetFill:  '#F59E0B',
-  targetStroke:'#92400E',
-};
+const COLORS = colorblindFriendly
+  ? {
+      baseFill:    '#ecded6ff',
+      baseStroke:  '#2e3744ff',
+      startFill:   '#0072B2',
+      startStroke: '#005C8F',
+      currentFill: '#56B4E9',
+      currentStroke:'#FFFFFF',
+      visitedFill: '#009E73',
+      visitedStroke:'#005F46',
+      targetFill:  '#E69F00',
+      targetStroke:'#9A6700',
+    }
+  : {
+      baseFill:    '#ecded6ff',
+      baseStroke:  '#2e3744ff',
+      startFill:   '#1a6e65ff',
+      startStroke: '#0F766E',
+      currentFill: '#2563EB',
+      currentStroke:'#FFFFFF',
+      visitedFill: '#04bd32ff',
+      visitedStroke:'#64748B',
+      targetFill:  '#F59E0B',
+      targetStroke:'#92400E',
+    };
 
   const currentArea = currentPath[currentPath.length - 1] || null;
  // const visitedSet  = useMemo(() => new Set(currentPath), [currentPath]);
@@ -4709,6 +4744,10 @@ if (route === 'settings') {
   return (
     <Settings
       onBack={() => navigate('')}
+      uiTheme={uiTheme}
+      onUiThemeChange={setUiTheme}
+      colorblindFriendly={colorblindFriendly}
+      onColorblindFriendlyChange={setColorblindFriendly}
     />
   );
 }

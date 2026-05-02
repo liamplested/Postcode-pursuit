@@ -1760,3 +1760,739 @@ html, body, #root {
     grid-template-columns: 1fr;
   }
 }
+/* Unified UI pass: map-first, solid controls, restrained glass */
+:root {
+  --pp-bg: #0b3f60;
+  --pp-ink: #172033;
+  --pp-muted: #64748b;
+  --pp-surface: rgba(248, 250, 252, 0.94);
+  --pp-surface-solid: #f8fafc;
+  --pp-surface-subtle: #eef3f8;
+  --pp-surface-map: rgba(235, 241, 247, 0.88);
+  --pp-border: rgba(15, 23, 42, 0.16);
+  --pp-border-strong: rgba(15, 23, 42, 0.28);
+  --pp-shadow: 0 14px 38px rgba(2, 6, 23, 0.22);
+  --pp-shadow-soft: 0 8px 22px rgba(2, 6, 23, 0.14);
+  --pp-radius-sm: 8px;
+  --pp-radius-md: 12px;
+  --pp-radius-lg: 14px;
+  --pp-primary: #4f46e5;
+  --pp-primary-hover: #4338ca;
+  --pp-start: #137567;
+  --pp-daily: #197a43;
+  --pp-target: #f59e0b;
+  --pp-danger: #d97706;
+  --pp-success: #059669;
+}
+
+.bg-gradient-to-br {
+  background-image: none !important;
+  background-color: var(--pp-bg) !important;
+}
+
+.glass {
+  background: var(--pp-surface);
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius-md) !important;
+  box-shadow: var(--pp-shadow-soft);
+  color: var(--pp-ink);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.glass--white,
+.glass--slate,
+.glass--black,
+.glass--indigo,
+.glass--emerald {
+  --glass-bg: var(--pp-surface);
+  --glass-fallback-bg: var(--pp-surface-solid);
+  --glass-border: var(--pp-border);
+  --glass-fg: var(--pp-ink);
+}
+
+.glass--map,
+.pp-map-canvas.glass {
+  background: #194b86;
+  border-color: rgba(226, 232, 240, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.btn,
+.lrgbtn,
+.smlbtn,
+.btn-glass,
+.btn-cta {
+  border-radius: var(--pp-radius-sm) !important;
+  box-shadow: none;
+  letter-spacing: 0;
+}
+
+.btn {
+  border: 1px solid transparent;
+  font-weight: 750;
+}
+
+.btn-primary,
+.btn-menu {
+  background-color: var(--pp-primary);
+  border-color: var(--pp-primary);
+  color: #fff;
+}
+
+.btn-primary:hover,
+.btn-menu:hover {
+  background-color: var(--pp-primary-hover);
+}
+
+.btn-neutral,
+.btn-white {
+  background-color: #e8eef5;
+  border-color: #cbd5e1;
+  color: var(--pp-ink);
+}
+
+.btn-neutral:hover,
+.btn-white:hover {
+  background-color: #dbe4ee;
+}
+
+.btn-warn {
+  background-color: var(--pp-target);
+  border-color: #d97706;
+  color: #111827;
+}
+
+.btn-warn:hover {
+  background-color: #e38b07;
+}
+
+.btn-success,
+.btn-hollowgreen {
+  background-color: var(--pp-success);
+  border-color: #047857;
+  color: #fff;
+}
+
+.btn-success:hover,
+.btn-hollowgreen:hover {
+  background-color: #047857;
+  color: #fff;
+}
+
+.btn-start {
+  background-color: var(--pp-start);
+  border-color: #0f5f55;
+  color: #fff;
+}
+
+.btn-target {
+  background-color: var(--pp-target);
+  border-color: #d97706;
+  color: #fff;
+}
+
+.btn-green,
+.tint-green,
+.btn-glass.tint-green {
+  background: var(--pp-daily) !important;
+  border-color: #166534 !important;
+  color: #fff !important;
+}
+
+.btn-yellow {
+  background: #eab308 !important;
+  border-color: #a16207 !important;
+  color: #111827 !important;
+}
+
+.btn-orange {
+  background: #c2410c !important;
+  border-color: #9a3412 !important;
+  color: #fff !important;
+}
+
+.btn-purple,
+.btn-glass.tint-blue {
+  background: var(--pp-primary) !important;
+  border-color: var(--pp-primary-hover) !important;
+  color: #fff !important;
+}
+
+.btn-glass.glass--white,
+.glass--white.btn-glass {
+  background: #e8eef5 !important;
+  border-color: #cbd5e1 !important;
+  color: var(--pp-ink) !important;
+}
+
+.btn-glass:hover {
+  transform: none;
+  box-shadow: var(--pp-shadow-soft);
+}
+
+.badge {
+  border-radius: var(--pp-radius-sm) !important;
+  font-weight: 750;
+}
+
+.badge-green,
+.badge-start {
+  background: #dcfce7;
+  color: #14532d;
+  border-color: #22c55e;
+}
+
+.badge-blue {
+  background: #dbeafe;
+  color: #1e3a8a;
+  border-color: #60a5fa;
+}
+
+.badge-gray {
+  background: #eef2f7;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.badge-target {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.badge-best {
+  background: #ede9fe;
+  color: #4c1d95;
+  border-color: #8b5cf6;
+}
+
+.pp-top-overlay,
+.pp-bottom-overlay .glass,
+.pp-mobile-tabs,
+.pp-game-menu,
+.pp-tutorial-modal,
+[data-page="stats"] .glass-panel,
+[data-page="stats"] .glass-tile,
+[data-page="stats"] .glass-table,
+.pages-achievements .glass {
+  border-radius: var(--pp-radius-md) !important;
+}
+
+.pp-top-overlay {
+  background: var(--pp-surface-map) !important;
+  border-color: rgba(226, 232, 240, 0.7);
+  box-shadow: var(--pp-shadow-soft);
+}
+
+.pp-top-overlay .text-slate-700,
+.pp-top-overlay .text-slate-900 {
+  color: var(--pp-ink) !important;
+}
+
+.pp-bottom-overlay .glass.glass--white,
+.pp-bottom-overlay > .glass,
+.pp-bottom-overlay .glass {
+  background: var(--pp-surface) !important;
+  border-color: var(--pp-border);
+  color: var(--pp-ink);
+}
+
+.pp-mobile-tabs {
+  background: #dfe7f0;
+  border-bottom-color: #c4ceda;
+}
+
+.pp-mobile-tab {
+  color: #475569;
+  border-right-color: #c4ceda;
+}
+
+.pp-mobile-tab.active {
+  background: var(--pp-surface-solid);
+  color: var(--pp-ink);
+  box-shadow: inset 0 -3px var(--pp-primary);
+}
+
+.pp-mobile-option-rail {
+  mask-image: none;
+}
+
+.pp-game-menu,
+.pp-game-menu-sheet,
+.pp-tutorial-modal {
+  background: var(--pp-surface-solid);
+  border-color: var(--pp-border);
+  color: var(--pp-ink);
+  box-shadow: var(--pp-shadow);
+}
+
+.pp-game-menu-sheet .pp-game-menu-item,
+.pp-game-menu-sheet .pp-game-menu-title {
+  color: var(--pp-ink);
+}
+
+.pp-game-menu-sheet .pp-game-menu-eyebrow,
+.pp-game-menu-sheet .pp-game-menu-label,
+.pp-game-menu-sheet .pp-game-menu-item small {
+  color: var(--pp-muted);
+}
+
+.pp-game-menu-section,
+.pp-game-menu-head,
+.pp-tutorial-header,
+.pp-tutorial-tabs {
+  border-color: var(--pp-border);
+}
+
+.pp-menu-primary-wrap,
+.pp-menu-secondary-tray {
+  border-radius: var(--pp-radius-md);
+  box-shadow: none;
+}
+
+.pp-menu-primary-wrap {
+  background: rgba(25, 122, 67, 0.16);
+  border-color: rgba(34, 197, 94, 0.34);
+}
+
+.pp-menu-secondary-tray {
+  background: rgba(248, 250, 252, 0.08);
+  border-color: rgba(226, 232, 240, 0.22);
+}
+
+.pp-tutorial-tabs,
+.pp-tutorial-content,
+.pp-rules-grid section,
+.pp-tutorial-map {
+  background-color: var(--pp-surface-subtle);
+}
+
+.pp-rules-grid section,
+.pp-tutorial-map,
+.pp-tutorial-form input,
+.pp-tutorial-error,
+.pp-tutorial-hint {
+  border-radius: var(--pp-radius-sm);
+  border-color: var(--pp-border);
+}
+
+[data-page="stats"] .glass-panel,
+[data-page="stats"] .glass-tile,
+[data-page="stats"] .glass-table,
+.pages-achievements .glass,
+.min-h-screen .glass.rounded-2xl.p-5 {
+  background: var(--pp-surface) !important;
+  border-color: var(--pp-border) !important;
+  color: var(--pp-ink) !important;
+}
+
+[data-page="stats"] h1,
+[data-page="stats"] h2,
+[data-page="stats"] h3,
+[data-page="stats"] .stat-value,
+[data-page="stats"] .stat-label,
+[data-page="stats"] .text-slate-50,
+[data-page="stats"] .text-slate-100,
+[data-page="stats"] .text-slate-200,
+.pages-achievements h1,
+.pages-achievements h2,
+.pages-achievements h3,
+.pages-achievements .text-slate-50,
+.pages-achievements .text-slate-100,
+.pages-achievements .text-slate-200,
+.min-h-screen .glass.rounded-2xl.p-5 .text-slate-200,
+.min-h-screen .glass.rounded-2xl.p-5 .text-white {
+  color: var(--pp-ink) !important;
+}
+
+[data-page="stats"] .stat-label,
+.pages-achievements .text-slate-400,
+.pages-achievements .opacity-80 {
+  color: var(--pp-muted) !important;
+}
+
+[data-page="stats"] .table-head,
+[data-page="stats"] .table-row,
+[data-page="stats"] .table-row td,
+[data-page="stats"] .glass-table {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--pp-ink) !important;
+}
+
+[data-page="stats"] .table-row {
+  border-top: 1px solid var(--pp-border);
+}
+
+@media (max-width: 768px) {
+  .pp-top-overlay,
+  .pp-bottom-overlay .glass {
+    border-radius: 0 !important;
+  }
+
+  .pp-bottom-overlay .glass.glass--white {
+    box-shadow: 0 -10px 24px rgba(2, 6, 23, 0.12);
+  }
+}
+/* Unified UI follow-up fixes */
+.lrgbtn.btn-neutral {
+  border: 1px solid #cbd5e1 !important;
+  background: #e8eef5 !important;
+  color: var(--pp-ink) !important;
+}
+
+[data-page="stats"] > div > .flex h1,
+.pages-achievements > div > .flex h1 {
+  color: #e8eef7 !important;
+}
+
+/* Respect system dark mode while keeping postcode map colours readable. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pp-bg: #071f31;
+    --pp-ink: #e8eef7;
+    --pp-muted: #9fb0c4;
+    --pp-surface: rgba(17, 34, 48, 0.96);
+    --pp-surface-solid: #122230;
+    --pp-surface-subtle: #1a2d3d;
+    --pp-surface-map: rgba(30, 48, 63, 0.9);
+    --pp-border: rgba(226, 232, 240, 0.18);
+    --pp-border-strong: rgba(226, 232, 240, 0.3);
+    --pp-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+    --pp-shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.28);
+  }
+
+  .btn-neutral,
+  .btn-white,
+  .lrgbtn.btn-neutral,
+  .btn-glass.glass--white,
+  .glass--white.btn-glass {
+    background: #dfe7f0 !important;
+    border-color: #b8c4d2 !important;
+    color: #172033 !important;
+  }
+
+  .glass,
+  .pp-game-menu,
+  .pp-game-menu-sheet,
+  .pp-tutorial-modal,
+  [data-page="stats"] .glass-panel,
+  [data-page="stats"] .glass-tile,
+  [data-page="stats"] .glass-table,
+  .pages-achievements .glass,
+  .min-h-screen .glass.rounded-2xl.p-5 {
+    color: var(--pp-ink) !important;
+  }
+
+  .pp-bottom-overlay .glass.glass--white,
+  .pp-bottom-overlay > .glass,
+  .pp-bottom-overlay .glass,
+  .pp-tutorial-tabs,
+  .pp-tutorial-content,
+  .pp-rules-grid section,
+  .pp-tutorial-map {
+    background: var(--pp-surface) !important;
+    color: var(--pp-ink) !important;
+  }
+
+  .pp-mobile-tabs {
+    background: #1e3040;
+    border-bottom-color: rgba(226, 232, 240, 0.18);
+  }
+
+  .pp-mobile-tab {
+    color: #b7c4d4;
+    border-right-color: rgba(226, 232, 240, 0.18);
+  }
+
+  .pp-mobile-tab.active {
+    background: #263a4c;
+    color: #f8fafc;
+  }
+
+  .pp-tutorial-copy p,
+  .pp-rules-grid p,
+  .pp-game-menu-item small,
+  .pp-game-menu-eyebrow,
+  .pp-game-menu-label,
+  .pp-tutorial-eyebrow {
+    color: var(--pp-muted) !important;
+  }
+
+  .pp-tutorial-form input {
+    background: #0f1f2d;
+    border-color: var(--pp-border-strong);
+    color: var(--pp-ink);
+  }
+
+  .badge-gray {
+    background: #223446;
+    color: #dbe7f3;
+    border-color: rgba(226, 232, 240, 0.2);
+  }
+}
+
+/* User-selectable appearance preferences */
+html[data-pp-theme="light"] {
+  --pp-bg: #0b3f60;
+  --pp-ink: #172033;
+  --pp-muted: #64748b;
+  --pp-surface: rgba(248, 250, 252, 0.94);
+  --pp-surface-solid: #f8fafc;
+  --pp-surface-subtle: #eef3f8;
+  --pp-surface-map: rgba(235, 241, 247, 0.88);
+  --pp-border: rgba(15, 23, 42, 0.16);
+  --pp-border-strong: rgba(15, 23, 42, 0.28);
+  --pp-shadow: 0 14px 38px rgba(2, 6, 23, 0.22);
+  --pp-shadow-soft: 0 8px 22px rgba(2, 6, 23, 0.14);
+}
+
+html[data-pp-theme="dark"] {
+  --pp-bg: #071f31;
+  --pp-ink: #e8eef7;
+  --pp-muted: #9fb0c4;
+  --pp-surface: rgba(17, 34, 48, 0.96);
+  --pp-surface-solid: #122230;
+  --pp-surface-subtle: #1a2d3d;
+  --pp-surface-map: rgba(30, 48, 63, 0.9);
+  --pp-border: rgba(226, 232, 240, 0.18);
+  --pp-border-strong: rgba(226, 232, 240, 0.3);
+  --pp-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+  --pp-shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.28);
+}
+
+html[data-pp-theme="light"] .btn-neutral,
+html[data-pp-theme="light"] .btn-white,
+html[data-pp-theme="light"] .lrgbtn.btn-neutral,
+html[data-pp-theme="light"] .btn-glass.glass--white,
+html[data-pp-theme="light"] .glass--white.btn-glass {
+  background: #e8eef5 !important;
+  border-color: #cbd5e1 !important;
+  color: #172033 !important;
+}
+
+html[data-pp-theme="dark"] .btn-neutral,
+html[data-pp-theme="dark"] .btn-white,
+html[data-pp-theme="dark"] .lrgbtn.btn-neutral,
+html[data-pp-theme="dark"] .btn-glass.glass--white,
+html[data-pp-theme="dark"] .glass--white.btn-glass {
+  background: #dfe7f0 !important;
+  border-color: #b8c4d2 !important;
+  color: #172033 !important;
+}
+
+html[data-pp-theme="dark"] .glass,
+html[data-pp-theme="dark"] .pp-game-menu,
+html[data-pp-theme="dark"] .pp-game-menu-sheet,
+html[data-pp-theme="dark"] .pp-tutorial-modal,
+html[data-pp-theme="dark"] [data-page="stats"] .glass-panel,
+html[data-pp-theme="dark"] [data-page="stats"] .glass-tile,
+html[data-pp-theme="dark"] [data-page="stats"] .glass-table,
+html[data-pp-theme="dark"] .pages-achievements .glass,
+html[data-pp-theme="dark"] .min-h-screen .glass.rounded-2xl.p-5 {
+  color: var(--pp-ink) !important;
+}
+
+html[data-pp-theme="dark"] .pp-bottom-overlay .glass.glass--white,
+html[data-pp-theme="dark"] .pp-bottom-overlay > .glass,
+html[data-pp-theme="dark"] .pp-bottom-overlay .glass,
+html[data-pp-theme="dark"] .pp-tutorial-tabs,
+html[data-pp-theme="dark"] .pp-tutorial-content,
+html[data-pp-theme="dark"] .pp-rules-grid section,
+html[data-pp-theme="dark"] .pp-tutorial-map {
+  background: var(--pp-surface) !important;
+  color: var(--pp-ink) !important;
+}
+
+html[data-pp-theme="dark"] .pp-mobile-tabs {
+  background: #1e3040;
+  border-bottom-color: rgba(226, 232, 240, 0.18);
+}
+
+html[data-pp-theme="dark"] .pp-mobile-tab {
+  color: #b7c4d4;
+  border-right-color: rgba(226, 232, 240, 0.18);
+}
+
+html[data-pp-theme="dark"] .pp-mobile-tab.active {
+  background: #263a4c;
+  color: #f8fafc;
+}
+
+html[data-pp-theme="dark"] .pp-tutorial-copy p,
+html[data-pp-theme="dark"] .pp-rules-grid p,
+html[data-pp-theme="dark"] .pp-game-menu-item small,
+html[data-pp-theme="dark"] .pp-game-menu-eyebrow,
+html[data-pp-theme="dark"] .pp-game-menu-label,
+html[data-pp-theme="dark"] .pp-tutorial-eyebrow {
+  color: var(--pp-muted) !important;
+}
+
+html[data-pp-theme="dark"] .pp-tutorial-form input {
+  background: #0f1f2d;
+  border-color: var(--pp-border-strong);
+  color: var(--pp-ink);
+}
+
+html[data-pp-theme="dark"] .badge-gray {
+  background: #223446;
+  color: #dbe7f3;
+  border-color: rgba(226, 232, 240, 0.2);
+}
+
+.pp-settings-page {
+  color: #e8eef7;
+}
+
+.pp-settings-page h1 {
+  color: #e8eef7;
+}
+
+.pp-settings-section {
+  color: var(--pp-ink);
+}
+
+.pp-settings-section h2 {
+  color: var(--pp-ink);
+}
+
+.pp-settings-section p,
+.pp-settings-consent,
+.pp-settings-toggle small {
+  color: var(--pp-muted);
+}
+
+.pp-settings-segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.25rem;
+  background: var(--pp-surface-subtle);
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius-md);
+}
+
+.pp-settings-segmented button {
+  min-height: 2.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--pp-radius-sm);
+  color: var(--pp-ink);
+  font-weight: 800;
+  background: transparent;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.pp-settings-segmented button:hover {
+  border-color: var(--pp-border-strong);
+}
+
+.pp-settings-segmented button.is-active {
+  background: var(--pp-primary);
+  border-color: var(--pp-primary-hover);
+  color: #ffffff;
+}
+
+.pp-settings-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid var(--pp-border);
+  border-radius: var(--pp-radius-md);
+  background: var(--pp-surface-subtle);
+  cursor: pointer;
+}
+
+.pp-settings-toggle input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  accent-color: var(--pp-primary);
+}
+
+.pp-settings-toggle span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.pp-settings-toggle strong {
+  color: var(--pp-ink);
+}
+
+.pp-settings-toggle small {
+  font-size: 0.9rem;
+}
+
+html[data-pp-colorblind="true"] {
+  --pp-start: #0072B2;
+  --pp-start-hover: #005C8F;
+  --pp-success: #009E73;
+  --pp-success-hover: #007A5A;
+  --pp-target: #E69F00;
+  --pp-target-hover: #B97D00;
+  --pp-primary: #6D5BD0;
+  --pp-primary-hover: #5948B7;
+}
+
+html[data-pp-colorblind="true"] .btn-start,
+html[data-pp-colorblind="true"] .tint-green,
+html[data-pp-colorblind="true"] .btn-green,
+html[data-pp-colorblind="true"] .btn-success,
+html[data-pp-colorblind="true"] .btn-hollowgreen {
+  background: #0072B2 !important;
+  border-color: #005C8F !important;
+  color: #ffffff !important;
+}
+
+html[data-pp-colorblind="true"] .btn-target,
+html[data-pp-colorblind="true"] .btn-warn,
+html[data-pp-colorblind="true"] .tint-orange,
+html[data-pp-colorblind="true"] .badge-target {
+  background: #E69F00 !important;
+  border-color: #B97D00 !important;
+  color: #111827 !important;
+}
+
+html[data-pp-colorblind="true"] .badge-start,
+html[data-pp-colorblind="true"] .badge-green {
+  background: #DBEAFE !important;
+  border-color: #0072B2 !important;
+  color: #123D5C !important;
+}
+
+html[data-pp-colorblind="true"] .badge-blue {
+  background: #E9E4FF !important;
+  border-color: #6D5BD0 !important;
+  color: #31256F !important;
+}
+/* Keep the in-game journey heading readable in explicit and system dark mode. */
+.pp-top-overlay {
+  color: var(--pp-ink) !important;
+}
+
+.pp-top-overlay .grid-container,
+.pp-top-overlay .grid-container > div,
+.pp-top-overlay .whitespace-nowrap {
+  color: inherit !important;
+}
+/* Neutral glass buttons sit on light button surfaces even inside dark modals. */
+.btn.btn-neutral.glass,
+button.btn-neutral.glass {
+  background: #e8eef5 !important;
+  border-color: #cbd5e1 !important;
+  color: #172033 !important;
+}
+
+.btn.btn-neutral.glass:hover,
+button.btn-neutral.glass:hover {
+  background: #dbe4ee !important;
+  color: #172033 !important;
+}
+
+html[data-pp-theme="dark"] .btn.btn-neutral.glass,
+html[data-pp-theme="dark"] button.btn-neutral.glass {
+  background: #dfe7f0 !important;
+  border-color: #b8c4d2 !important;
+  color: #172033 !important;
+}

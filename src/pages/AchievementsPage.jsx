@@ -230,7 +230,7 @@ const visitedCount =
   const lockedGroups   = groupByTier(locked);
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
+    <div className="pages-achievements min-h-screen w-full bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
       <div className="max-w-5xl mx-auto p-4">
         <div className="flex items-center gap-2 py-4">
           <button className="btn btn-primary" onClick={onBack} aria-label="Back">← Back</button>
