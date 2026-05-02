@@ -737,7 +737,9 @@ useEffect(() => {
 }, []);
 const [showHints, setShowHints] = useState(false);
 const [dailyGaveUp, setDailyGaveUp] = useState(false);
+const [betaDailyMode, setBetaDailyMode] = useState(false);
 const [journeyExpanded, setJourneyExpanded] = useState(false);
+const [mobileControlsTab, setMobileControlsTab] = useState('enter');
   const [elapsedMs, setElapsedMs] = useState(0);
 
 const [showOutlines, setShowOutlines] = useState(true);
@@ -768,25 +770,13 @@ const roundResolved = gameWon || dailyGaveUp;
 // --- Soft Par helpers (Daily only) ---
 const parForOptimal = (optimalMoves) => Math.max(1, Math.ceil(optimalMoves * 1.25));
 const parDelta = (moves, par) => moves - par; // negative = under par
-function golfLabel(delta) {
-  if (delta <= -3) return 'albatross';
-  if (delta === -2) return 'eagle';
-  if (delta === -1) return 'birdie';
-  if (delta === 0)  return 'par';
-  if (delta === 1)  return 'bogey';
-  if (delta === 2)  return 'double bogey';
-  if (delta === 3)  return 'triple bogey';
-  return `${Math.abs(delta)} over par`;
-}
-function golfPhrase(moves, par) {
+function parPhrase(moves, par) {
   if (!Number.isFinite(par)) return null;
   const d = parDelta(moves, par);
-  const name = golfLabel(d);
-  if (d < 0)  return `${Math.abs(d)} under par (${name})`;
-  if (d === 0) return `level par`;
-  return `${d} over par (${name})`;
+  if (d < 0) return `${Math.abs(d)} under par`;
+  if (d === 0) return 'on par';
+  return `${d} over par`;
 }
-
 const [dailyPar, setDailyPar] = useState(null);
 
 const isTouch = useIsTouchDevice();
@@ -870,7 +860,7 @@ const [burgerPos, setBurgerPos] = useState({ top: 0, left: 0, width: 224 }); // 
 
 const guessesCount = Math.max(0, currentPath.length - 1);
 const parLine = (dailyMode && Number.isFinite(dailyPar))
-  ? <>Par: <b>{dailyPar}</b> · <b>{golfPhrase(guessesCount, dailyPar)}</b></>
+  ? <>Par: <b>{dailyPar}</b> · <b>{parPhrase(guessesCount, dailyPar)}</b></>
   : null;
 
   
@@ -1016,6 +1006,7 @@ const resetDailyFlags = React.useCallback(() => {
   setHintsUsed(0);
   setShowHints(false);
   setDailyGaveUp(false);
+  setBetaDailyMode(false);
 }, []);
 
 
@@ -1033,12 +1024,13 @@ function toggleHints() {
 const [dailyChoice, setDailyChoice] = useState(null);   // 'easy'|'normal'|'hard'|'master'|null
 const [freeChoice,  setFreeChoice]  = useState(null);
 
-const DIFF_LABELS = { easy: 'Easy', normal: 'Normal', hard: 'Hard', master: 'Master' };
+const DIFF_LABELS = { easy: 'Easy', normal: 'Normal', hard: 'Hard', master: 'Master', beta: 'Beta Daily' };
 const DIFF_DESCRIPTIONS = {
   easy:   'Postcode area outlines and labels are shown. Revisit and undo both allowed.',
   normal: 'Postcode area outlines are shown. Labels hidden on unvisited areas. Revisiting and undo both allowed.',
   hard:   'No outlines or labels are shown. Revisiting is not allowed.',
   master: 'Only start, target and visited areas are shown. Revisit and undo both disabled.',
+  beta: 'Experimental Daily Challenge using Normal-style rules and beta features.',
 };
 
 
@@ -1074,18 +1066,49 @@ useEffect(() => {
 }, [undoLastMove, masterMode]);
 
 
-function startOrResumeDaily(difficulty) {
+const wait = (ms) => new Promise(resolve => window.setTimeout(resolve, ms));
+
+async function playDailyIntroTour(start, target) {
+  const token = ++introTourRef.current;
+  gameStartRef.current = null;
+
+  if (prefersReducedMotion()) {
+    focusStartAndTarget(start, target);
+    if (introTourRef.current === token && !gameStartRef.current) {
+      gameStartRef.current = performance.now();
+    }
+    return;
+  }
+
+  zoomToArea(start, { duration: 840 });
+  await wait(1040);
+  if (introTourRef.current !== token || gameStartRef.current) return;
+
+  zoomToArea(target, { duration: 840 });
+  await wait(1040);
+  if (introTourRef.current !== token || gameStartRef.current) return;
+
+  focusStartAndTarget(start, target);
+  await wait(360);
+  if (introTourRef.current === token && !gameStartRef.current) {
+    gameStartRef.current = performance.now();
+    setElapsedMs(0);
+  }
+}
+
+function startOrResumeDaily(difficulty, { intro = true } = {}) {
+  const betaMode = difficulty === 'beta';
+  const rulesDifficulty = betaMode ? 'normal' : difficulty;
   const today = Daily.todayUTC();
   const snap = Daily.loadSnapshot(difficulty);
 
-  // Visual toggles
-  if (difficulty === 'easy')   { setShowOutlines(true);  setShowLabels(true);  setMasterMode(false); }
-  if (difficulty === 'normal') { setShowOutlines(true);  setShowLabels(false); setMasterMode(false); }
-  if (difficulty === 'hard')   { setShowOutlines(false); setShowLabels(false); setMasterMode(false); }
-  if (difficulty === 'master') { setShowOutlines(false); setShowLabels(false); setMasterMode(true);  }
-  setDifficulty(difficulty);
+  if (rulesDifficulty === 'easy')   { setShowOutlines(true);  setShowLabels(true);  setMasterMode(false); }
+  if (rulesDifficulty === 'normal') { setShowOutlines(true);  setShowLabels(false); setMasterMode(false); }
+  if (rulesDifficulty === 'hard')   { setShowOutlines(false); setShowLabels(false); setMasterMode(false); }
+  if (rulesDifficulty === 'master') { setShowOutlines(false); setShowLabels(false); setMasterMode(true);  }
+  setDifficulty(rulesDifficulty);
+  setBetaDailyMode(betaMode);
 
-  // --- 1) Try to RESUME today’s daily if a snapshot exists ---
   if (snap && snap.date === today) {
     const resolvedOptimal =
       Array.isArray(snap.optimalPath) && snap.optimalPath.length
@@ -1110,63 +1133,52 @@ function startOrResumeDaily(difficulty) {
         ? snap.currentPath
         : [snap.startArea]
     );
-setGuesses(Array.isArray(snap.guesses) ? snap.guesses : []);
-setShowOptimal(!!snap.showOptimal || !!snap.gaveUp || !!snap.roundOver);
-setElapsedMs(snap.elapsedMs || 0);
+    setGuesses(Array.isArray(snap.guesses) ? snap.guesses : []);
+    setShowOptimal(!!snap.showOptimal || !!snap.gaveUp || !!snap.roundOver);
+    setElapsedMs(snap.elapsedMs || 0);
 
-const restoredStatus = normalizeStatus(Daily.dailyStatus?.(difficulty));
-const restoredGaveUp = restoredStatus === 'gaveUp' || !!snap.gaveUp || (!!snap.roundOver && !snap.gameWon);
-setDailyGaveUp(restoredGaveUp);
+    const restoredStatus = normalizeStatus(Daily.dailyStatus?.(difficulty));
+    const restoredGaveUp = restoredStatus === 'gaveUp' || !!snap.gaveUp || (!!snap.roundOver && !snap.gameWon);
+    setDailyGaveUp(restoredGaveUp);
 
-if (snap.gameWon) {
-  setGameWon(true);
-  setVictoryOpen(true);
-  setGameState('gameWon');
-  gameStartRef.current = null;
-  } else if (restoredGaveUp) {
-  setGameWon(false);
-  setShowOptimal(true);
-  setVictoryOpen(false);
-  setGameState('gameOver');
-  gameStartRef.current = null;
+    if (snap.gameWon) {
+      setGameWon(true);
+      setVictoryOpen(true);
+      setGameState('gameWon');
+      gameStartRef.current = null;
+    } else if (restoredGaveUp) {
+      setGameWon(false);
+      setShowOptimal(true);
+      setVictoryOpen(false);
+      setGameState('gameOver');
+      gameStartRef.current = null;
+    } else {
+      setGameWon(false);
+      setVictoryOpen(!!snap.victoryOpen);
+      setGameState('playing');
+      gameStartRef.current = performance.now() - (snap.elapsedMs || 0);
+    }
 
-} else if (snap.gaveUp || snap.roundOver) {
-  setGameWon(false);
-  setShowOptimal(true);
-  setVictoryOpen(false);
-  setGameState('gameOver');
-  gameStartRef.current = null;
-} else {
-  setGameWon(false);
-  setVictoryOpen(!!snap.victoryOpen);
-  setGameState('playing');
-  gameStartRef.current = performance.now() - (snap.elapsedMs || 0);
-}
-
-    requestAnimationFrame(() =>
-      focusStartAndTarget(snap.startArea, snap.targetArea)
-    );
-    return; // ✅ we’re done – no fresh daily needed
+    requestAnimationFrame(() => focusStartAndTarget(snap.startArea, snap.targetArea));
+    return;
   }
 
-  // --- 2) Otherwise, start a FRESH daily for today ---
   setDailyChoice(null);
   setFreeChoice(null);
 
-  const { start, target, path } =
-    Daily.generateTodayDaily(
-      difficulty,
-      postcodeAreas,
-      getNeighbors,
-      boundsByDifficulty
-    );
+  const { start, target, path } = Daily.generateTodayDaily(
+    difficulty,
+    postcodeAreas,
+    getNeighbors,
+    boundsByDifficulty
+  );
 
   setDailyMode(true);
   setDailyDate(today);
   setDailyDifficulty(difficulty);
   setHintsUsed(0);
   setShowHints(false);
-  abandonIfActive('daily_start');
+  abandonIfActive(betaMode ? 'beta_daily_start' : 'daily_start');
 
   setStartArea(start);
   setTargetArea(target);
@@ -1175,21 +1187,22 @@ if (snap.gameWon) {
   setGameWon(false);
   setDailyGaveUp(false);
   setOptimalPath(path);
-  setDailyPar(parFor(Math.max(0, path.length - 1), difficulty));
+  setDailyPar(parFor(Math.max(0, path.length - 1), rulesDifficulty));
   setGameState('playing');
-  gameStartRef.current = performance.now();
+  gameStartRef.current = intro ? null : performance.now();
   setElapsedMs(0);
   setVictoryOpen(false);
   setShowOptimal(false);
 
-  // ✅ log coverage + lifetime move for the *fresh* daily only
   addVisited([start]);
   recordLifetimeMove({ nextCode: start }, { onPersist });
 
-  requestAnimationFrame(() => focusStartAndTarget(start, target));
+  if (intro) {
+    requestAnimationFrame(() => playDailyIntroTour(start, target));
+  } else {
+    requestAnimationFrame(() => focusStartAndTarget(start, target));
+  }
 }
-
-
 
 
 React.useEffect(() => {
@@ -1290,6 +1303,7 @@ const isRevealed = useCallback(
 
   //const [streak, setStreak] = useState(() => Number(localStorage.getItem('pp_streak') || 0));
   const gameStartRef = useRef(null);
+  const introTourRef = useRef(0);
   
   const isMapInteractive = gameState !== 'menu' && !victoryOpen;
 
@@ -1330,8 +1344,18 @@ const centerOn = useCallback((code) => {
 
   const vw = WORLD.width;
   const vh = WORLD.height;
+  const svgEl = svgRef.current;
+  const svgRect = svgEl?.getBoundingClientRect?.() || null;
+  const topRect = topOverlayRef.current?.getBoundingClientRect?.() || null;
+  const bottomRect = bottomOverlayRef.current?.getBoundingClientRect?.() || null;
+  const topInsetPx = svgRect && topRect ? Math.max(0, topRect.bottom - svgRect.top) : 0;
+  const bottomInsetPx = svgRect && bottomRect ? Math.max(0, svgRect.bottom - bottomRect.top) : 0;
+  const safeTopFrac = svgRect?.height ? Math.max(0, Math.min(0.45, topInsetPx / svgRect.height)) : 0;
+  const safeBottomFrac = svgRect?.height ? Math.max(0, Math.min(0.45, bottomInsetPx / svgRect.height)) : 0;
+  const safeHeightFrac = Math.max(0.15, 1 - safeTopFrac - safeBottomFrac);
+  const safeCenterFracY = safeTopFrac + safeHeightFrac / 2;
   const viewCx = WORLD.x + vw / 2;
-  const viewCy = WORLD.y + vh / 2;
+  const viewCy = WORLD.y + vh * safeCenterFracY;
 
   const tx = viewCx - nextScale * pt.x;
   const ty = viewCy - nextScale * pt.y;
@@ -1442,13 +1466,29 @@ const relax   = lerp(1.00,  1.40, Math.pow(r, 0.70)); // gentle zoom-out for big
   const w = spanX * (1 + pad * 2);
   const h = spanY * (1 + pad * 2);
 
-  // 5) Fit to WORLD viewBox -> scale
-  let s = Math.min(WORLD.width / w, WORLD.height / h);
+  const svgEl = svgRef.current;
+  const svgRect = svgEl?.getBoundingClientRect?.() || null;
+  const topRect = topOverlayRef.current?.getBoundingClientRect?.() || null;
+  const bottomRect = bottomOverlayRef.current?.getBoundingClientRect?.() || null;
+  const topInsetPx = svgRect && topRect ? Math.max(0, topRect.bottom - svgRect.top) : 0;
+  const bottomInsetPx = svgRect && bottomRect ? Math.max(0, svgRect.bottom - bottomRect.top) : 0;
+  const safeTopFrac = svgRect?.height ? Math.max(0, Math.min(0.45, topInsetPx / svgRect.height)) : 0;
+  const safeBottomFrac = svgRect?.height ? Math.max(0, Math.min(0.45, bottomInsetPx / svgRect.height)) : 0;
+  const safeHeightFrac = Math.max(0.15, 1 - safeTopFrac - safeBottomFrac);
+
+  // 5) Keep the original zoom feel, but avoid choosing a zoom that clips the
+  // target area behind mobile overlays.
+  const fullFitScale = Math.min(WORLD.width / w, WORLD.height / h);
+  const safeFitScale = Math.min(WORLD.width / w, (WORLD.height * safeHeightFrac) / h);
+  const hasVerticalOverlay = safeTopFrac > 0 || safeBottomFrac > 0;
+  const visibleFitScale = hasVerticalOverlay ? safeFitScale : fullFitScale;
+  let s = Math.min(fullFitScale, visibleFitScale * 1.5);
   s = Math.max(minScale, Math.min(maxScale, s));
 
-  // 6) Translate so area center lands at viewBox center (WORLD space)
+  // 6) Translate so area center lands in the visible safe area.
+  const safeCenterFracY = safeTopFrac + safeHeightFrac / 2;
   const viewCx = WORLD.x + WORLD.width  / 2;
-  const viewCy = WORLD.y + WORLD.height / 2;
+  const viewCy = WORLD.y + WORLD.height * safeCenterFracY;
   const tx = viewCx - s * cx;
   const ty = viewCy - s * cy;
 
@@ -1462,90 +1502,76 @@ const relax   = lerp(1.00,  1.40, Math.pow(r, 0.70)); // gentle zoom-out for big
 
 
 
-// Example wiring inside your component
-const containerRef = React.useRef(null);
-
-
 function parInfo({ moves, optimal, parMoves }) {
   const par = Number.isFinite(parMoves)
     ? parMoves
     : Math.max(1, Math.ceil(optimal * 1.5));
 
   const delta = moves - par;
-
-  const label =
-    delta <= -3 ? `Albatross (${delta})` :
-    delta === -2 ? 'Eagle (-2)' :
-    delta === -1 ? 'Birdie (-1)' :
-    delta ===  0 ? 'Par (E)' :
-    delta ===  1 ? 'Bogey (+1)' :
-    delta ===  2 ? 'Double bogey (+2)' :
-                   `+${delta}`;
+  const label = delta < 0
+    ? `${Math.abs(delta)} under par`
+    : delta === 0
+      ? 'On par'
+      : `${delta} over par`;
 
   return { par, delta, label };
 }
-
 // Emoji for each step type in the final route
 const MOVE_ICON = {
-  land:   '🟩',
-  bridge: '🟦',
-  ferry:  '🟪',
+  land: '\u{1F7E9}',
+  bridge: '\u{1F7E6}',
+  ferry: '\u{1F7EA}',
 };
 
+const SHARE_DOT = '\u00B7';
+const SHARE_ARROW = '\u2192';
+
 const buildShareText = () => {
-  const guessesCount = Math.max(0, currentPath.length - 1);
+  const moves = Math.max(0, currentPath.length - 1);
   const optimal = Math.max(0, (optimalPath?.length || 1) - 1);
-
-  const { par, label } = parInfo({ moves: guessesCount, optimal });
+  const { par, label } = parInfo({ moves, optimal });
   const time = elapsedMs ? formatTime(elapsedMs) : null;
+  const cleanRun = Number(hintsUsed || 0) === 0;
+  const assistedLabel = cleanRun ? 'Clean run' : `Assisted (${hintsUsed} hint${hintsUsed === 1 ? '' : 's'})`;
 
-  const header = dailyMode
-    ? `Postcode Pursuit — Daily ${dailyDate} (${dailyDifficulty} difficulty)`
-    : `Postcode Pursuit`;
-
-  // Build a tile row from the *actual path* (start → target)
   let routeTiles = '';
   if (currentPath && currentPath.length > 1) {
     for (let i = 1; i < currentPath.length; i += 1) {
       const prev = currentPath[i - 1];
       const curr = currentPath[i];
-      const t = edgeType(prev, curr);          // 'land' | 'bridge' | 'ferry'
-      routeTiles += MOVE_ICON[t] ?? '⬜';
+      const t = edgeType(prev, curr);
+      routeTiles += MOVE_ICON[t] ?? '\u2B1C';
     }
   }
 
-  let text = `${header}\n`;
+  const difficultyLabel = DIFF_LABELS[dailyDifficulty || difficulty] || dailyDifficulty || difficulty;
+  const header = dailyMode
+    ? `Postcode Pursuit Daily ${SHARE_DOT} ${difficultyLabel} ${SHARE_DOT} ${dailyDate}`
+    : `Postcode Pursuit ${SHARE_DOT} ${DIFF_LABELS[difficulty] || difficulty}`;
 
-  // Always show the route headline
-  if (startArea && targetArea) {
-    text += `${startArea} → ${targetArea}\n`;
+  const lines = [header, ''];
+
+  if (!dailyMode && startArea && targetArea) {
+    lines.push(`${startArea} ${SHARE_ARROW} ${targetArea}`, '');
   }
 
-  // Summary line
-  text += `${guessesCount} moves`;
-  if (optimal) text += ` (optimal ${optimal})`;
-  if (Number.isFinite(par)) text += ` · Par ${par} — ${label}`;
-  if (dailyMode) text += ` · Hints: ${hintsUsed}/${MAX_DAILY_HINTS}`;
-  if (time) text += ` · Time: ${time}`;
+  lines.push(gameWon ? `Solved in ${moves} moves` : `Gave up after ${moves} moves`);
+  if (Number.isFinite(par)) lines.push(`Par: ${par} ${SHARE_DOT} Optimal: ${optimal}`);
+  if (label) lines.push(label);
+  lines.push(time ? `${assistedLabel} ${SHARE_DOT} ${time}` : assistedLabel);
 
-  if (dailyMode && dailyDifficulty) {
+  if (dailyMode && dailyDifficulty && !betaDailyMode) {
     const streak = (streaks?.[dailyDifficulty] ?? readStreak?.(dailyDifficulty) ?? 0);
-    if (streak > 0) text += ` · ${DIFF_LABELS[dailyDifficulty]} streak: ${streak}`;
+    if (streak > 0) lines.push(`${DIFF_LABELS[dailyDifficulty]} streak: ${streak}`);
   }
 
-  // Tile row + legend
   if (routeTiles) {
-    text += `\nRoute: ${routeTiles}\n`;
-    text += `Key: 🟩 land · 🟦 bridge/tunnel · 🟪 ferry`;
+    lines.push('', routeTiles);
   }
 
-  text += `\npostcode-pursuit.co.uk`;
-  return text;
+  lines.push('postcode-pursuit.co.uk');
+  return lines.join('\n');
 };
-
-
-
-
   const linkPaint = (type) => {
   switch (type) {
     case "ferry":
@@ -2317,7 +2343,7 @@ const event = {
 
 addGameToHistory(event, { onPersist: () => onPersist(true) });
 
-if (dailyMode && dailyDifficulty) {
+if (dailyMode && dailyDifficulty && !betaDailyMode) {
   const rec = bumpStreakFor(dailyDifficulty);
   setStreaks(s => ({ ...s, [dailyDifficulty]: rec.count ?? rec }));
 
@@ -2380,7 +2406,7 @@ window.gtag?.('event', 'game_finished', {
   currentPath, optimalPath,
   difficulty, startArea, targetArea,
   dailyMode, dailyDifficulty,
-  bumpStreakFor, tallyEdgeUsage, onPersist, enqueueAchievementBatch,hintsUsed
+  bumpStreakFor, tallyEdgeUsage, onPersist, enqueueAchievementBatch,hintsUsed, betaDailyMode
 ]);
 
 useEffect(() => {
@@ -2566,6 +2592,7 @@ const boundsByDifficulty = {
   normal: { min: 4, max: 12 },
   hard:   { min: 5, max: null },  // no max
   master: { min: 8, max: null },  // no max
+  beta:   { min: 4, max: 12 },
 };
   
 function generatePuzzleWithBounds(minSteps, maxSteps = null, maxRetries = 800) {
@@ -2736,18 +2763,22 @@ const startNewGame = () => {
 
   setOptimalPath(path);              // we already have it
   setGameState('playing');
-  gameStartRef.current = performance.now();
+  gameStartRef.current = null;
   setElapsedMs(0);
   setVictoryOpen(false);
   setShowOptimal(false);
-  // Focus the camera on the start/target pair
-  requestAnimationFrame(() => focusStartAndTarget(start, target));
+  requestAnimationFrame(() => playDailyIntroTour(start, target));
   
 };
 
 // const minStepsByMode = { easy: 3, normal: 4, hard: 5, master: 6 };
 const makeGuess = useCallback((area) => {
   if (gameWon || dailyGaveUp) return;
+  if (gameState === 'playing' && !gameStartRef.current) {
+    introTourRef.current += 1;
+    gameStartRef.current = performance.now();
+    setElapsedMs(0);
+  }
 
   setErrorToast(prev => (prev ? '' : prev));
   clearAchievementToasts();
@@ -2807,7 +2838,7 @@ if (area === targetArea) {
 }, [
   getNeighbors, gameWon, currentPath, targetArea, finishGame,
   ferryAdj, bridgeAdj, difficulty, showError,
-  onPersist, dailyGaveUp, enqueueAchievementBatch,clearAchievementToasts
+  onPersist, dailyGaveUp, gameState, enqueueAchievementBatch,clearAchievementToasts
 ]);
 
 // const isFerryEdge  = (a,b) => ferryAdj.get(a)?.has(b)  || false;
@@ -3250,160 +3281,228 @@ const renderControls = () => (
       </div>
 
       {burgerOpen && createPortal(
-  <div
-    id="pp-burger-menu"
-    role="menu"
-    aria-orientation="vertical"
-    className={[
-      'glass rounded-xl shadow-lg p-2',
-      'transition duration-150 ease-out',
-      'transform will-change-transform will-change-opacity',
-      menuAnimClass,
-    ].join(' ')}
-    style={{
-      position: 'fixed',
-      top: burgerPos.top,
-      left: burgerPos.left + 60,
-      width: Math.min(burgerPos.width * 0.8, 180),
-      zIndex: 2147483000,
-      willChange: 'transform, opacity',
-    }}
-  >
-    <ul
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-        margin: 8,
-        padding: 0,
-        listStyle: 'none',
-      }}
-    >
-      <li className="mt-2">
-        <AuthButton variant="label" />
-      </li>
-      <li>
-        <button
-          role="menuitem"
-          onClick={dailyMode ? undefined : () => { fireReroll?.('new_game_button'); startNewGame(); setBurgerOpen(false); }}
-          disabled={dailyMode}
-          aria-disabled={dailyMode}
-          className="btn btn-primary"
-          style={{ display: 'block', width: '90%', padding: '0.3rem 1rem', fontSize: '0.8rem' }}
-          title={dailyMode ? 'Unavailable during Daily Challenge' : 'Start a new random game'}
+        <div
+          className={`pp-game-menu-layer ${isTouch ? 'is-sheet' : 'is-dropdown'}`}
+          onClick={() => setBurgerOpen(false)}
         >
-          New Game
-        </button>
-      </li>
-      <li>
-        <button
-          role="menuitem"
-          onClick={dailyMode ? undefined : () => {
-            abandonIfActive('restart');
-            setCurrentPath([startArea]);
-            setGuesses([]);
-            clearAchievementToasts();
-            setGameWon(false);
-            setOptimalPath(findShortestPath(startArea, targetArea));
-            setBurgerOpen(false);
-          }}
-          disabled={dailyMode}
-          aria-disabled={dailyMode}
-          className="btn btn-warn"
-          style={{ display: 'block', width: '90%', padding: '0.3rem 0.1rem', fontSize: '0.8rem' }}
-          title={dailyMode ? 'Unavailable during Daily Challenge' : 'Restart this round'}
-        >
-          Restart
-        </button>
-      </li>
-      <li>
-        <button
-          role="menuitem"
-          onClick={() => { localStorage.removeItem(ONBOARDING_KEY); setShowTutorial(true); setBurgerOpen(false); }}
-          className="btn btn-neutral"
-          style={{ display: 'block', width: '90%', padding: '0.3rem 0.1rem', fontSize: '0.8rem' }}
-          title="Replay the tutorial"
-        >
-          How to Play
-        </button>
-      </li>
+          <div
+            id="pp-burger-menu"
+            role="menu"
+            aria-orientation="vertical"
+            className={`pp-game-menu ${isTouch ? 'pp-game-menu-sheet' : 'pp-game-menu-dropdown'} ${menuAnimClass}`}
+            style={isTouch ? undefined : { top: burgerPos.top, right: Math.max(12, window.innerWidth - burgerPos.left - burgerPos.width) }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="pp-game-menu-head">
+              <div className="pp-game-menu-eyebrow">{dailyMode ? 'Daily Challenge' : 'Game menu'}</div>
+              <div className="pp-game-menu-title">
+                {dailyMode
+                  ? `${DIFF_LABELS[dailyDifficulty] || dailyDifficulty || 'Daily'} ${roundResolved ? '· Complete' : '· In progress'}`
+                  : `${DIFF_LABELS[difficulty] || difficulty || 'Free Play'} Free Play`}
+              </div>
+              {dailyMode && !roundResolved && (
+                <div className="pp-game-menu-pill">{Math.max(0, MAX_DAILY_HINTS - hintsUsed)} hints left</div>
+              )}
+            </div>
 
-      <li>
-        <button 
-          role="menuitem"
-          onClick={() => {
-  navigate('settings');
-  setBurgerOpen(false);
-}}
-          className="btn btn-neutral"
-          style={{
-            display: 'block',
-            width: '90%',
-            padding: '0.3rem 0.1rem',
-            fontSize: '0.8rem',
-            textDecoration: 'none',
-            textAlign: 'center',
-          }}
-          title="Open settings"
-        >
-          Settings
-        </button>
-      </li>
+            <div className="pp-game-menu-section">
+              <div className="pp-game-menu-label">{dailyMode ? 'Daily controls' : 'Game'}</div>
+              <button
+                type="button"
+                role="menuitem"
+                className="pp-game-menu-item"
+                onClick={() => { localStorage.removeItem(ONBOARDING_KEY); setShowTutorial(true); setBurgerOpen(false); }}
+              >
+                <BookOpen className="w-4 h-4" aria-hidden="true" />
+                <span>How to Play</span>
+              </button>
 
-      <li>
-        <button 
-          role="menuitem"
-          onClick={() => {
-  navigate('privacy');
-  setBurgerOpen(false);
-}}
-          className="btn btn-neutral"
-          style={{
-            display: 'block',
-            width: '90%',
-            padding: '0.3rem 0.1rem',
-            fontSize: '0.8rem',
-            textDecoration: 'none',
-            textAlign: 'center',
-          }}
-          title="Open privacy information"
-        >
-          Privacy
-        </button>
-      </li>
-    </ul>
-  </div>,
-  document.body
-)}
+              <button
+                type="button"
+                role="menuitem"
+                className={`pp-game-menu-item ${dailyMode ? 'is-disabled' : 'is-emphasis'}`}
+                onClick={dailyMode ? undefined : () => { fireReroll?.('new_game_button'); startNewGame(); setBurgerOpen(false); }}
+                disabled={dailyMode}
+                aria-disabled={dailyMode}
+                title={dailyMode ? 'Unavailable during Daily Challenge' : 'Start a new random game'}
+              >
+                <Flag className="w-4 h-4" aria-hidden="true" />
+                <span>
+                  New Game
+                  {dailyMode && <small>Unavailable during Daily</small>}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                className={`pp-game-menu-item ${dailyMode ? 'is-disabled' : 'is-warn'}`}
+                onClick={dailyMode ? undefined : () => {
+                  abandonIfActive('restart');
+                  setCurrentPath([startArea]);
+                  setGuesses([]);
+                  clearAchievementToasts();
+                  setGameWon(false);
+                  setOptimalPath(findShortestPath(startArea, targetArea));
+                  setBurgerOpen(false);
+                }}
+                disabled={dailyMode}
+                aria-disabled={dailyMode}
+                title={dailyMode ? 'Unavailable during Daily Challenge' : 'Restart this round'}
+              >
+                <Route className="w-4 h-4" aria-hidden="true" />
+                <span>
+                  Restart
+                  {dailyMode && <small>Unavailable during Daily</small>}
+                </span>
+              </button>
+            </div>
+
+            <div className="pp-game-menu-section">
+              <div className="pp-game-menu-label">Account</div>
+              <div className="pp-game-menu-account">
+                <AuthButton variant="label" />
+              </div>
+            </div>
+
+            <div className="pp-game-menu-section">
+              <button
+                type="button"
+                role="menuitem"
+                className="pp-game-menu-item"
+                onClick={() => { navigate('settings'); setBurgerOpen(false); }}
+              >
+                <Settings2 className="w-4 h-4" aria-hidden="true" />
+                <span>Settings</span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                className="pp-game-menu-item"
+                onClick={() => { navigate('privacy'); setBurgerOpen(false); }}
+              >
+                <Eye className="w-4 h-4" aria-hidden="true" />
+                <span>Privacy</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
 
     <div className="pp-controls-spacer" aria-hidden="true" />
 
     <div
+      ref={bottomOverlayRef}
       className="pp-bottom-overlay mx-auto"
       style={{ width: '100%', maxWidth: '630px', overflowX: 'auto', overflowY: 'auto', maxHeight: '1000px', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
     >
       {!roundResolved && (
         <div className="px-3 pb-3 pt-2">
           {isTouch ? (
-            <MobileCodeScroller
-              current={currentPath[currentPath.length - 1]}
-onPick={(code) => {
-  makeGuess(code);
+            <div className="glass glass--white rounded-xl overflow-hidden">
+              <div className="pp-mobile-tabs" role="tablist" aria-label="Mobile controls">
+                {['enter', 'journey', 'actions'].map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={mobileControlsTab === tab}
+                    className={`pp-mobile-tab ${mobileControlsTab === tab ? 'active' : ''}`}
+                    onClick={() => setMobileControlsTab(tab)}
+                  >
+                    {tab === 'enter' ? 'Enter' : tab === 'journey' ? 'Journey' : 'Actions'}
+                  </button>
+                ))}
+              </div>
 
-  requestAnimationFrame(() => {
-    zoomToArea(code, {
-      containerEl: containerRef.current,
-      getWorldCenter,
-      getPanZoom: () => ({ scale: 1, tx: 0, ty: 0 }),
-      setPanZoom: ({ scale, tx, ty }) => reset({ scale, x: tx, y: ty }),
-    });
-  });
-}}
-              getNeighbors={getNeighbors}
-              currentPath={currentPath}
-              allCodes={allPostcodeOptions}
-            />
+              {mobileControlsTab === 'enter' && (
+                <MobileCodeScroller
+                  current={currentPath[currentPath.length - 1]}
+                  onPick={(code) => {
+                    const currentLocation = currentPath[currentPath.length - 1];
+                    const isKnownArea = !!postcodeAreas[code];
+                    const isValidMove = getNeighbors(currentLocation).includes(code);
+                    const alreadyVisited = currentPath.includes(code);
+                    const revisitAllowed = difficulty === 'easy' || difficulty === 'normal';
+                    const allowedMove = isValidMove && (!alreadyVisited || revisitAllowed);
+
+                    makeGuess(code);
+
+                    if (!isKnownArea) return;
+
+                    requestAnimationFrame(() => {
+                      zoomToArea(code, { duration: allowedMove ? 0 : 250 });
+
+                      if (!allowedMove) {
+                        window.setTimeout(() => {
+                          zoomToArea(currentLocation, { duration: 450 });
+                        }, 700);
+                      }
+                    });
+                  }}
+                  getNeighbors={getNeighbors}
+                  currentPath={currentPath}
+                  allCodes={allPostcodeOptions}
+                />
+              )}
+
+              {mobileControlsTab === 'journey' && (
+                <div className="p-3">
+                  <div ref={journeyRailRef} className="journey-rail flex items-center gap-2 overflow-x-auto whitespace-nowrap">
+                    {getVisibleJourneyItems().map((item, railIdx) => {
+                      if (item.type === 'ellipsis') {
+                        return (
+                          <button key={`mobile-ellipsis-${railIdx}`} type="button" onClick={() => setJourneyExpanded(true)} className="badge badge-gray shrink-0" aria-label="Show full journey">...</button>
+                        );
+                      }
+
+                      const { code, index: i } = item;
+                      const type = i > 0 ? edgeType(currentPath[i - 1], code) : null;
+                      const base = i === currentPath.length - 1 ? 'badge-blue' : 'badge-green';
+                      const title = i === 0 ? 'Start area' : i === currentPath.length - 1 ? 'Current area' : type === 'ferry' ? 'Reached by ferry' : type === 'bridge' ? 'Reached by bridge/tunnel' : 'Land border';
+
+                      return (
+                        <button key={`mobile-${code}-${i}`} type="button" onClick={() => centerOn(code)} className={`badge ${base} inline-flex items-center shrink-0`} title={title} aria-label={`Center map on ${code} (${title})`}>
+                          <span style={{ marginRight: 6 }}>{i === 0 ? 'Start' : i === currentPath.length - 1 ? 'Current' : i}</span>
+                          {code}
+                          {type === 'ferry' && <Ship className="w-3 h-3 ml-1" aria-hidden="true" />}
+                          {type === 'bridge' && <Route className="w-3 h-3 ml-1" aria-hidden="true" />}
+                        </button>
+                      );
+                    })}
+                    {journeyExpanded && currentPath.length > 6 && (
+                      <button type="button" onClick={() => setJourneyExpanded(false)} className="badge badge-green shrink-0" aria-label="Collapse journey">Collapse</button>
+                    )}
+                  </div>
+                  {guesses.length > 0 && (
+                    <div className="flex flex-wrap gap-1 text-xs mt-3">
+                      <span className="text-slate-600">Last entry:</span>
+                      {guesses.slice(-1).map((g, i) => (
+                        <span key={i} className={`px-2 py-1 rounded ${g.valid && !g.alreadyVisited ? 'bg-emerald-100 text-emerald-800' : g.alreadyVisited ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}`}>
+                          {g.area}{g.valid && !g.alreadyVisited && g.viaFerry ? ' (ferry)' : ''}{g.valid && !g.alreadyVisited && g.viaBridge ? ' (bridge)' : ''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {mobileControlsTab === 'actions' && (
+                <div className="p-3 grid grid-cols-3 gap-2">
+                  {!masterMode && (
+                    <button onClick={undoLastMove} disabled={currentPath.length <= 1} aria-disabled={currentPath.length <= 1} className={`btn btn-neutral m-0 ${currentPath.length <= 1 ? 'opacity-50 cursor-not-allowed' : ''}`}>Undo</button>
+                  )}
+                  {masterMode && <span />}
+                  <button className="btn btn-warn m-0" onClick={() => setGiveUpOpen(true)}>Give up</button>
+                  <button className="btn btn-success m-0" onClick={toggleHints} disabled={dailyMode && hintsUsed >= MAX_DAILY_HINTS && !showHints}>
+                    {dailyMode ? `Hints (${Math.max(0, MAX_DAILY_HINTS - hintsUsed)})` : 'Hints'}
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="w-full">
               <div
@@ -3467,6 +3566,7 @@ onPick={(code) => {
         </div>
       )}
 
+      {!isTouch && (
       <div className="glass glass--white px-3 pb-2">
         <div className="flex flex-wrap items-center gap-2">
           <div
@@ -3651,6 +3751,45 @@ onPick={(code) => {
         </div>
       </div>
 
+      )}
+
+      {isTouch && giveUpOpen && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            zIndex: 2147483647,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-start',
+            paddingTop: '10vh',
+            padding: '10vh 16px 16px',
+          }}
+          onClick={() => setGiveUpOpen(false)}
+        >
+          <div
+            className="glass p-5 rounded-2xl shadow-xl text-center"
+            style={{ maxWidth: 520, width: '92vw', maxHeight: '80vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="giveup-title-mobile"
+          >
+            <h2 id="giveup-title-mobile" className="text-xl font-semibold mb-2">Give up?</h2>
+            <p className="mb-4">
+              This will record a <b>loss</b> for this {dailyMode ? 'Daily' : 'Free Play'} game{dailyMode ? ' and reveal the optimal path' : ''}.<br />
+              Current route: <b>{Math.max(0, currentPath.length - 1)}</b> moves
+              {optimalPath.length > 0 && <> - Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
+            </p>
+            <div className="flex gap-2 justify-center">
+              <button onClick={giveUpNow} className="btn btn-warn glass">Give up</button>
+              <button onClick={() => setGiveUpOpen(false)} className="btn btn-neutral glass">Cancel</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       <Modal
         open={showHints && !roundResolved && currentPath.length > 0}
         onClose={() => setShowHints(false)}
@@ -3938,99 +4077,98 @@ const renderMenu = () => (
       </div>
 
 
-    {/* Three big CTAs */}
-    <div className="mx-autoflex flex-col sm:flex-row items-stretch justify-center gap-3 mb-6 mx-auto w-full sm:w-auto ">
-<button
-      type="button"
-      className="lrgbtn btn-glass tint-green btn-cta"
-      onClick={() => setShowDailyChooser(true)}
-    >
-      <Trophy className="w-6 h-6 shrink-0" aria-hidden="true" />
-      <span>Daily Challenge</span>
-    </button>
-
-    <button
-      type="button"
-      className="lrgbtn btn-glass tint-blue btn-cta"
-      onClick={() => setShowFreePlayChooser(true)}
-    >
-      <Flag className="w-6 h-6 shrink-0" aria-hidden="true" />
-      <span>Free Play</span>
-    </button>
-
-    <button
-      type="button"
-      className="lrgbtn btn-glass glass--white btn-cta"
-      onClick={() => setShowTutorial(true)}
-    >
-      <BookOpen className="w-6 h-6 shrink-0" aria-hidden="true" />
-      <span>How to Play</span>
-    </button>
-
-
-
- <button className="lrgbtn btn-neutral" onClick={() => setShowAbout(true)}><InfoIcon className="w-4 h-4" />About  / Feedback</button>
+    <div className="mt-6 px-2">
+      <div className="pp-menu-primary-wrap">
+        <button
+          type="button"
+          className="lrgbtn btn-glass tint-green btn-cta min-h-[5.25rem] text-xl sm:text-2xl"
+          style={{ width: '100%', height: '5.25rem', margin: 0 }}
+          onClick={() => setShowDailyChooser(true)}
+        >
+          <Trophy className="w-7 h-7 shrink-0" aria-hidden="true" />
+          <span>Daily Challenge</span>
+        </button>
+      </div>
     </div>
-{/* Daily streaks summary */}
-{Object.values(streaks).some(n => (Number(n) || 0) > 0) && (
-<div className="mt-6 mx-auto w-full max-w-xl">
-  <div className="glass glass--white rounded-xl p-4">
-    <h3 className="text-base font-semibold text-slate-900 mb-3 text-center">
-      Your Daily Streaks
-    </h3>
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-slate-600">
-          <th className="text-left py-2">Difficulty</th>
-          <th className="text-left py-2">Streak</th>
-          <th className="text-right py-2"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {DIFF_ORDER.map((d) => (
-          <tr key={d} className="border-t border-slate-200/40">
-            <td className="py-2 font-medium">
-              {DIFF_LABELS[d] ?? d}
-            </td>
-            <td>
-                            {streaks?.[d] > 0 ? (
-                <span className="inline-flex items-center gap-2">
-                  
-                  
-                  <span className="sr-only">{streaks[d]}-day streak</span>
-                </span>
-              ) : (
-                <span className="text-slate-500">—</span>
-              )}
-             
-            </td>
-            <td className="py-2 text-right">
- <span aria-hidden="true">{renderStreak(streaks[d])}</span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
-)}
 
-<button className="lrgbtn btn-neutral ml-2" onClick={() => navigate('stats')}>
-  <ChartColumnBig className="w-4 h-4" /> Stats
-</button>
+    <div className="mt-3 px-2">
+      <div className="pp-menu-secondary-tray">
+        <div className="pp-menu-secondary-row">
+          <button
+            type="button"
+            className="lrgbtn btn-glass tint-blue btn-cta min-h-[3.25rem] text-base"
+            style={{ width: '100%', margin: 0 }}
+            onClick={() => setShowFreePlayChooser(true)}
+          >
+            <Flag className="w-5 h-5 shrink-0" aria-hidden="true" />
+            <span>Free Play</span>
+          </button>
 
-<button className="lrgbtn btn-neutral ml-2" onClick={() => navigate('achievements')}>
-  <Medal className="w-4 h-4" /> Achievements
-</button>
+          <button
+            type="button"
+            className="lrgbtn btn-glass glass--white btn-cta min-h-[3.25rem] text-base"
+            style={{ width: '100%', margin: 0 }}
+            onClick={() => setShowTutorial(true)}
+          >
+            <BookOpen className="w-5 h-5 shrink-0" aria-hidden="true" />
+            <span>How to Play</span>
+          </button>
+        </div>
 
-<button className="lrgbtn btn-neutral ml-2" onClick={() => navigate('settings')}>
-  <Settings2 className="w-4 h-4" /> Settings
-</button>
+        <div className="pp-menu-secondary-row">
+          <button className="lrgbtn btn-neutral min-h-[2.75rem] text-sm" style={{ width: '100%', margin: 0 }} onClick={() => navigate('stats')}>
+            <ChartColumnBig className="w-4 h-4" /> Stats
+          </button>
 
-<button className="lrgbtn btn-neutral ml-2" onClick={() => navigate('privacy')}>
-  <Eye className="w-4 h-4" /> Privacy Policy
-</button>
+          <button className="lrgbtn btn-neutral min-h-[2.75rem] text-sm" style={{ width: '100%', margin: 0 }} onClick={() => navigate('achievements')}>
+            <Medal className="w-4 h-4" /> Achievements
+          </button>
+        </div>
+      </div>
+    </div>
+    {/* Daily streaks summary */}
+    {Object.values(streaks).some(n => (Number(n) || 0) > 0) && (
+      <div className="mt-6 mx-auto w-full max-w-xl">
+        <div className="glass glass--white rounded-xl p-4">
+          <h3 className="text-base font-semibold text-slate-900 mb-3 text-center">
+            Your Daily Streaks
+          </h3>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-slate-600">
+                <th className="text-left py-2">Difficulty</th>
+                <th className="text-right py-2">Streak</th>
+              </tr>
+            </thead>
+            <tbody>
+              {DIFF_ORDER.map((d) => (
+                <tr key={d} className="border-t border-slate-200/40">
+                  <td className="py-2 font-medium">
+                    {DIFF_LABELS[d] ?? d}
+                  </td>
+                  <td className="py-2 text-right">
+                    <span aria-hidden="true">{renderStreak(streaks[d]) || '-'}</span>
+                    <span className="sr-only">{streaks[d] || 0}-day streak</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
 
+    <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm">
+      <button className="btn btn-neutral" onClick={() => setShowAbout(true)}>
+        <InfoIcon className="w-4 h-4" /> About / Feedback
+      </button>
+      <button className="btn btn-neutral" onClick={() => navigate('settings')}>
+        <Settings2 className="w-4 h-4" /> Settings
+      </button>
+      <button className="btn btn-neutral" onClick={() => navigate('privacy')}>
+        <Eye className="w-4 h-4" /> Privacy
+      </button>
+    </div>
     {/* --- Daily chooser modal --- */}
 {showDailyChooser && createPortal(
   <div
@@ -4078,85 +4216,41 @@ const renderMenu = () => (
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: 10, // Reduced gap
+          gap: 10,
           margin: 8,
           padding: 0,
           listStyle: 'none'
         }}
       >
-        <li className="choice-item">
-          <button
-            type="button"
-            className="btn btn-green btn-choice"
-            onClick={() => handleDailyChoice('easy')}
-            role="menuitem"
-            style={{ 
-              display: 'block', 
-              width: '95%', 
-              padding: '0.3rem 1rem', // Smaller padding
-              fontSize: '2rem', // Smaller text
-            }}
-          >
-            <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('easy') : <>Easy — {Daily.dailyStatus('easy')}</>}</span>
-            {renderSingleFireForChooser(streaks?.easy)}
-          </button>
-        </li>
-
-        <li className="choice-item">
-          <button
-            type="button"
-            className="btn btn-yellow btn-choice"
-            onClick={() => handleDailyChoice('normal')}
-            role="menuitem"
-            style={{ 
-              display: 'block', 
-              width: '95%', 
-              padding: '0.3rem 1rem', // Smaller padding
-              fontSize: '2rem', // Smaller text
-            }}
-          >
-            <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('normal') : <>Normal — {Daily.dailyStatus('normal')}</>}</span>
-            {renderSingleFireForChooser(streaks?.normal)}
-          </button>
-        </li>
-
-        <li className="choice-item">
-          <button
-            type="button"
-            className="btn btn-orange btn-choice"
-            onClick={() => handleDailyChoice('hard')}
-            role="menuitem"
-            style={{ 
-              display: 'block', 
-              width: '95%', 
-              padding: '0.3rem 1rem', // Smaller padding
-              fontSize: '2rem', // Smaller text
-            }}
-          >
-            <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('hard') : <>Hard — {Daily.dailyStatus('hard')}</>}</span>
-            {renderSingleFireForChooser(streaks?.hard)}
-          </button>
-        </li>
-
-        <li className="choice-item">
-          <button
-            type="button"
-            className="btn btn-purple btn-choice"
-            onClick={() => handleDailyChoice('master')}
-            role="menuitem"
-            style={{ 
-              display: 'block', 
-              width: '95%', 
-              padding: '0.3rem 1rem', // Smaller padding
-              fontSize: '2rem', // Smaller text
-            }}
-          >
-            <span>{typeof makeDailyLabel === 'function' ? makeDailyLabel('master') : <>Master — {Daily.dailyStatus('master')}</>}</span>
-            {renderSingleFireForChooser(streaks?.master)}
-          </button>
-        </li>
+        {DIFF_ORDER.map((diff) => {
+          const status = getDailyStatusMeta(diff);
+          return (
+            <li key={diff} className="choice-item">
+              <button
+                type="button"
+                className={`btn ${DAILY_CHOICE_BUTTON_CLASS[diff] || 'btn-primary'} btn-choice`}
+                onClick={() => handleDailyChoice(diff)}
+                role="menuitem"
+                style={{
+                  display: 'flex',
+                  width: '95%',
+                  padding: '0.45rem 1rem',
+                  fontSize: '1.45rem',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                }}
+              >
+                <span>{DIFF_LABELS[diff] ?? diff}</span>
+                <span className={`text-xs font-bold uppercase tracking-wide rounded-full px-2 py-1 ${status.className}`}>
+                  {status.label}
+                </span>
+                {renderSingleFireForChooser(streaks?.[diff])}
+              </button>
+            </li>
+          );
+        })}
       </ul>
-
       <div className={`collapsible ${dailyChoice ? 'open' : ''}`}>
         <div className="inner">
           <div className="mt-4 p-4 rounded-xl bg-white/75 text-slate-900 text-center">
@@ -4501,7 +4595,8 @@ const renderMenu = () => (
         className="mt-3 inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
       >
         Send feedback
-      </a>
+      </a><br />
+
     </section>
   </div>
 </Modal>
@@ -4512,36 +4607,35 @@ const renderMenu = () => (
 );
 
 // ---- Daily chooser helpers & streak state ----
-const DIFF_BASE_LABELS = { easy: 'Easy', normal: 'Normal', hard: 'Hard', master: 'Master' };
+const DAILY_CHOICE_BUTTON_CLASS = { easy: 'btn-green', normal: 'btn-yellow', hard: 'btn-orange', master: 'btn-purple' };
 
 // Map whatever Daily.dailyStatus returns into { idle | continue | finished | gaveUp }
 function normalizeStatus(raw) {
   const s = String(raw || '').toLowerCase();
   if (/gave|give|quit|forfeit/.test(s)) return 'gaveUp';
-  if (/finish|done|complete|result/.test(s)) return 'finished';   // -> "See Result"
-  if (/cont|progress|resume|started|ongoing/.test(s)) return 'continue'; // -> "Continue"
+  if (/finish|done|complete|result/.test(s)) return 'finished';
+  if (/cont|progress|resume|started|ongoing/.test(s)) return 'continue';
   return 'idle';
 }
 
-function makeDailyLabel(diff) {
-  const base = DIFF_BASE_LABELS[diff] ?? diff;
+function getDailyStatusMeta(diff) {
   const status = normalizeStatus(Daily.dailyStatus?.(diff));
-  if (status === 'gaveUp') return `${base} - Gave up`;
-  if (status === 'continue') return `${base} - Continue`;
-  if (status === 'finished') return `${base} - Result`;
-  return base; // idle
+  if (status === 'gaveUp') return { status, label: 'Gave up', className: 'bg-rose-100 text-rose-800' };
+  if (status === 'continue') return { status, label: 'Continue', className: 'bg-sky-100 text-sky-800' };
+  if (status === 'finished') return { status, label: 'Result', className: 'bg-emerald-100 text-emerald-800' };
+  return { status, label: 'Not played', className: 'bg-slate-100 text-slate-700' };
 }
-
 
 function renderStreak(count) {
   const n = Number(count) || 0;
   if (n <= 0) return null;
+  const fire = '\u{1F525}';
   if (n < 10) {
-    return <span aria-label={`${n}-day streak`}>{'🔥'.repeat(n)}</span>;
+    return <span aria-label={`${n}-day streak`}>{fire.repeat(n)}</span>;
   }
   return (
     <span className="inline-flex items-center gap-1" aria-label={`${n}-day streak`}>
-      🔥×{n}
+      {fire}x{n}
     </span>
   );
 }
@@ -4549,22 +4643,12 @@ function renderStreak(count) {
 function renderSingleFireForChooser(count) {
   const n = Number(count) || 0;
   return n > 0 ? (
-    <span aria-label={`${n}-day streak`} title={`${n}-day streak`}>🔥</span>
+    <span aria-label={`${n}-day streak`} title={`${n}-day streak`}>{'\u{1F525}'}</span>
   ) : null;
 }
-
 const [streaks, setStreaks] = React.useState({
   easy: 0, normal: 0, hard: 0, master: 0
 });
-
-/* 
-const DIFFICULTY_META = {
-easy: { label: 'Easy', hint: 'Outlines + labels', icon: '🔥' },
-normal: { label: 'Normal', hint: 'Outlines only', icon: '🔥' },
-hard: { label: 'Hard', hint: 'No outlines', icon: '🔥' },
-master: { label: 'Master', hint: 'Start & end only', icon: '🔥' },
-};
- */
 
 React.useEffect(() => {
   setStreaks({

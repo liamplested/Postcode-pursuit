@@ -1266,3 +1266,493 @@ html, body, #root {
     padding-top: 6px;
   }
 }
+
+/* Mobile tabbed game controls */
+.pp-mobile-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.55);
+  background: rgba(226, 232, 240, 0.82);
+}
+
+.pp-mobile-tab {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #475569;
+  border-right: 1px solid rgba(148, 163, 184, 0.55);
+}
+
+.pp-mobile-tab:last-child {
+  border-right: 0;
+}
+
+.pp-mobile-tab.active {
+  background: rgba(255, 255, 255, 0.9);
+  color: #0f172a;
+  box-shadow: inset 0 -3px #4f46e5;
+}
+
+@media (max-width: 768px) {
+  .pp-bottom-overlay .glass.glass--white.p-5 {
+    padding: 0.65rem;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+/* Main menu hierarchy */
+.pp-menu-primary-wrap {
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(134, 239, 172, 0.24);
+}
+
+
+.pp-menu-secondary-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pp-menu-secondary-tray {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(226, 232, 240, 0.08);
+  border: 1px solid rgba(226, 232, 240, 0.18);
+}
+
+@media (max-width: 640px) {
+  .pp-menu-secondary-row {
+    grid-template-columns: 1fr;
+  }
+
+  .pp-menu-primary-wrap {
+    padding: 6px;
+  }
+
+  .pp-menu-secondary-tray {
+    gap: 8px;
+    padding: 8px;
+  }
+}
+/* In-game burger menu */
+.pp-game-menu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: auto;
+}
+
+.pp-game-menu-layer.is-dropdown {
+  background: transparent;
+}
+
+.pp-game-menu-layer.is-sheet {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 6, 23, 0.42);
+}
+
+.pp-game-menu {
+  color: #122033;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(236, 242, 248, 0.92);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  overflow: hidden;
+  transform-origin: top right;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+.pp-game-menu-dropdown {
+  position: fixed;
+  width: min(330px, calc(100vw - 24px));
+  border-radius: 12px;
+}
+
+.pp-game-menu-sheet {
+  width: min(440px, 100%);
+  border-radius: 18px;
+  background: rgba(14, 28, 42, 0.94);
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.28);
+  transform-origin: bottom center;
+}
+
+.pp-game-menu-head {
+  padding: 13px 14px 11px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.16);
+}
+
+.pp-game-menu-sheet .pp-game-menu-head,
+.pp-game-menu-sheet .pp-game-menu-section {
+  border-color: rgba(226, 232, 240, 0.12);
+}
+
+.pp-game-menu-eyebrow,
+.pp-game-menu-label {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pp-game-menu-sheet .pp-game-menu-eyebrow,
+.pp-game-menu-sheet .pp-game-menu-label,
+.pp-game-menu-sheet .pp-game-menu-item small {
+  color: #9fb0c4;
+}
+
+.pp-game-menu-title {
+  margin-top: 3px;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.pp-game-menu-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 7px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #166534;
+  background: #dcfce7;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pp-game-menu-section {
+  padding: 8px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.16);
+}
+
+.pp-game-menu-section:last-child {
+  border-bottom: 0;
+}
+
+.pp-game-menu-label {
+  padding: 5px 8px 6px;
+}
+
+.pp-game-menu-item {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.pp-game-menu-item:hover,
+.pp-game-menu-item.is-emphasis {
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.pp-game-menu-sheet .pp-game-menu-item:hover,
+.pp-game-menu-sheet .pp-game-menu-item.is-emphasis {
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.pp-game-menu-item.is-warn {
+  color: #8a4a00;
+}
+
+.pp-game-menu-sheet .pp-game-menu-item.is-warn {
+  color: #fbbf24;
+}
+
+.pp-game-menu-item.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pp-game-menu-item small {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.pp-game-menu-account {
+  padding: 4px 8px 8px;
+}
+
+.pp-game-menu-account > * {
+  max-width: 100%;
+}
+/* How to Play tutorial */
+.pp-tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 6, 23, 0.58);
+}
+
+.pp-tutorial-modal {
+  width: min(96vw, 860px);
+  max-height: min(92vh, 860px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  color: #122033;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.pp-tutorial-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.14);
+}
+
+.pp-tutorial-eyebrow {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pp-tutorial-header h1,
+.pp-tutorial-copy h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.pp-tutorial-header h1 {
+  margin-top: 3px;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.pp-tutorial-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.14);
+  background: rgba(226, 232, 240, 0.78);
+}
+
+.pp-tutorial-tabs button {
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 14px;
+  background: transparent;
+  color: #475569;
+  font-weight: 850;
+}
+
+.pp-tutorial-tabs button.active {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: inset 0 -3px #4f46e5;
+}
+
+.pp-tutorial-content {
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+}
+
+.pp-tutorial-copy h2 {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.pp-tutorial-copy p,
+.pp-rules-grid p {
+  margin: 8px 0 0;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.pp-tutorial-progress {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.pp-tutorial-progress span {
+  height: 5px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+
+.pp-tutorial-progress span.active {
+  background: #4f46e5;
+}
+
+.pp-tutorial-map {
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  background: #e2e8f0;
+}
+
+.pp-tutorial-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pp-tutorial-path span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 6px 10px;
+  border: 1px solid #10b981;
+  background: #dcfce7;
+  color: #065f46;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pp-tutorial-path span.current {
+  border-color: #0ea5e9;
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.pp-tutorial-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.pp-tutorial-form input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 10px;
+  border: 1px solid #94a3b8;
+  padding: 10px 12px;
+  font-size: 16px;
+  text-transform: uppercase;
+}
+
+.pp-tutorial-error,
+.pp-tutorial-hint {
+  margin-top: 10px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.pp-tutorial-error {
+  border: 1px solid #fda4af;
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
+.pp-tutorial-hint {
+  border: 1px solid #bfdbfe;
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.pp-tutorial-actions,
+.pp-rules-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.pp-tutorial-action-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pp-rules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pp-rules-grid section {
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.72);
+  padding: 12px;
+}
+
+.pp-rules-grid h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.pp-rules-actions {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .pp-tutorial-backdrop {
+    align-items: stretch;
+    padding: 8px;
+  }
+
+  .pp-tutorial-modal {
+    width: 100%;
+    max-height: none;
+  }
+
+  .pp-tutorial-header {
+    padding: 14px;
+  }
+
+  .pp-tutorial-content {
+    padding: 14px;
+  }
+
+  .pp-tutorial-form,
+  .pp-tutorial-actions,
+  .pp-rules-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pp-tutorial-action-left,
+  .pp-tutorial-action-left .btn,
+  .pp-tutorial-actions > .btn,
+  .pp-rules-actions .btn {
+    width: 100%;
+  }
+
+  .pp-rules-grid {
+    grid-template-columns: 1fr;
+  }
+}
