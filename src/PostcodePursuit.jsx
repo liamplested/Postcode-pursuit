@@ -1790,6 +1790,28 @@ useEffect(() => {
   const done = localStorage.getItem(ONBOARDING_KEY) === 'true';
   if (!done) setShowTutorial(true);
 }, [consentResolved]);
+useEffect(() => {
+  const setGameViewportHeight = () => {
+    const height = window.visualViewport?.height || window.innerHeight;
+    if (height) {
+      document.documentElement.style.setProperty('--pp-game-vh', `${height}px`);
+    }
+  };
+
+  setGameViewportHeight();
+  window.addEventListener('resize', setGameViewportHeight);
+  window.addEventListener('orientationchange', setGameViewportHeight);
+  window.visualViewport?.addEventListener('resize', setGameViewportHeight);
+  window.visualViewport?.addEventListener('scroll', setGameViewportHeight);
+
+  return () => {
+    window.removeEventListener('resize', setGameViewportHeight);
+    window.removeEventListener('orientationchange', setGameViewportHeight);
+    window.visualViewport?.removeEventListener('resize', setGameViewportHeight);
+    window.visualViewport?.removeEventListener('scroll', setGameViewportHeight);
+  };
+}, []);
+
 
 // Menu choosers
 const [showDailyChooser, setShowDailyChooser] = useState(false);

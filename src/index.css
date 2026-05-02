@@ -1098,9 +1098,13 @@ html, body, #root {
   height: 100%;
 }
 
+:root {
+  --pp-game-vh: 100dvh;
+}
+
 /* Overall page background + app sizing */
 .app-root {
-  min-height: 100dvh;
+  min-height: var(--pp-game-vh, 100dvh);
   background: #04395e;
   color: #e2e8f0;
 }
@@ -1108,7 +1112,7 @@ html, body, #root {
 /* Main app wrapper */
 .app-shell {
   width: 100%;
-  min-height: 100dvh;
+  min-height: var(--pp-game-vh, 100dvh);
   padding: 0;
   max-width: none;
 }
@@ -1174,14 +1178,14 @@ html, body, #root {
 
 /* Gameplay-only viewport lock so menu/stats/achievements/settings/privacy can scroll normally */
 .pp-game-screen {
-  height: 100dvh;
+  height: var(--pp-game-vh, 100dvh);
   overflow: hidden;
 }
 
 .pp-game-screen .pp-board {
-  height: 100%;
-  min-height: 100%;
-  max-height: 100%;
+  height: var(--pp-game-vh, 100dvh);
+  min-height: var(--pp-game-vh, 100dvh);
+  max-height: var(--pp-game-vh, 100dvh);
 }
 
 @media (max-width: 768px) {
