@@ -1,6 +1,7 @@
 import React from 'react';
 import { openConsent } from '../components/consentBus';
 import { useNavigate } from "react-router-dom";
+import { getLocalSnapshot, readJSON } from '../utils/storageUtils';
 
 const THEME_OPTIONS = [
   { value: 'system', label: 'System' },
@@ -8,18 +9,49 @@ const THEME_OPTIONS = [
   { value: 'dark', label: 'Dark' },
 ];
 
+const INPUT_OPTIONS = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'mobile', label: 'Scroller' },
+  { value: 'desktop', label: 'Keyboard' },
+];
+
+const TEXT_SIZE_OPTIONS = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'large', label: 'Large' },
+];
+
+const MAP_STYLE_OPTIONS = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'contrast', label: 'High Contrast' },
+  { value: 'night', label: 'Night' },
+];
+
+const ONBOARDING_KEY = 'pp:onboardingComplete:v1';
+
 export default function Settings({
   onBack,
   uiTheme,
   onUiThemeChange,
   colorblindFriendly,
   onColorblindFriendlyChange,
+  inputMode,
+  onInputModeChange,
+  largeControls,
+  onLargeControlsChange,
+  mapStyle,
+  onMapStyleChange,
+  textSize,
+  onTextSizeChange,
 }) {
   const navigate = useNavigate();
   const hasConsented = !!localStorage.getItem('pp_consents');
-  const stored = hasConsented ? JSON.parse(localStorage.getItem('pp_consents')) : null;
+  const stored = hasConsented ? readJSON('pp_consents', null) : null;
   const [localTheme, setLocalTheme] = React.useState(() => uiTheme || 'system');
   const [localColorblind, setLocalColorblind] = React.useState(() => !!colorblindFriendly);
+  const [localInputMode, setLocalInputMode] = React.useState(() => inputMode || 'auto');
+  const [localLargeControls, setLocalLargeControls] = React.useState(() => !!largeControls);
+  const [localMapStyle, setLocalMapStyle] = React.useState(() => mapStyle || 'standard');
+  const [localTextSize, setLocalTextSize] = React.useState(() => textSize || 'normal');
 
   React.useEffect(() => {
     if (uiTheme) setLocalTheme(uiTheme);
@@ -29,8 +61,25 @@ export default function Settings({
     setLocalColorblind(!!colorblindFriendly);
   }, [colorblindFriendly]);
 
+  React.useEffect(() => {
+    if (inputMode) setLocalInputMode(inputMode);
+  }, [inputMode]);
+  React.useEffect(() => {
+    setLocalLargeControls(!!largeControls);
+  }, [largeControls]);
+  React.useEffect(() => {
+    if (mapStyle) setLocalMapStyle(mapStyle);
+  }, [mapStyle]);
+  React.useEffect(() => {
+    if (textSize) setLocalTextSize(textSize);
+  }, [textSize]);
+
   const selectedTheme = uiTheme || localTheme;
   const selectedColorblind = colorblindFriendly ?? localColorblind;
+  const selectedInputMode = inputMode || localInputMode;
+  const selectedLargeControls = largeControls ?? localLargeControls;
+  const selectedMapStyle = mapStyle || localMapStyle;
+  const selectedTextSize = textSize || localTextSize;
 
   const handleThemeChange = (value) => {
     setLocalTheme(value);
@@ -40,6 +89,49 @@ export default function Settings({
   const handleColorblindChange = (value) => {
     setLocalColorblind(value);
     onColorblindFriendlyChange?.(value);
+  };
+
+  const handleInputModeChange = (value) => {
+    setLocalInputMode(value);
+    onInputModeChange?.(value);
+  };
+
+  const handleLargeControlsChange = (value) => {
+    setLocalLargeControls(value);
+    onLargeControlsChange?.(value);
+  };
+
+  const handleMapStyleChange = (value) => {
+    setLocalMapStyle(value);
+    onMapStyleChange?.(value);
+  };
+
+  const handleTextSizeChange = (value) => {
+    setLocalTextSize(value);
+    onTextSizeChange?.(value);
+  };
+
+  const handleExportProgress = () => {
+    const snapshot = {
+      exportedAt: new Date().toISOString(),
+      app: 'Postcode Pursuit',
+      schema: 'pp-progress-export-v1',
+      progress: getLocalSnapshot(),
+    };
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `postcode-pursuit-progress-${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleResetTutorial = () => {
+    localStorage.removeItem(ONBOARDING_KEY);
   };
 
   const handleBack = () => {
@@ -91,6 +183,96 @@ export default function Settings({
             <small>Uses a blue, orange and teal palette for key game states.</small>
           </span>
         </label>
+      </section>
+
+      <section className="glass pp-settings-section p-4 rounded-xl mb-6">
+        <h2 className="text-lg font-semibold">Input</h2>
+        <p className="mt-2">
+          Choose the postcode entry controls for this device.
+        </p>
+
+        <div className="pp-settings-segmented mt-4" role="radiogroup" aria-label="Input style">
+          {INPUT_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={selectedInputMode === option.value}
+              className={selectedInputMode === option.value ? 'is-active' : ''}
+              onClick={() => handleInputModeChange(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="glass pp-settings-section p-4 rounded-xl mb-6">
+        <h2 className="text-lg font-semibold">Accessibility</h2>
+        <p className="mt-2">
+          Adjust controls and readability on this device.
+        </p>
+
+        <div className="pp-settings-segmented mt-4 pp-settings-segmented--two" role="radiogroup" aria-label="Text size">
+          {TEXT_SIZE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={selectedTextSize === option.value}
+              className={selectedTextSize === option.value ? 'is-active' : ''}
+              onClick={() => handleTextSizeChange(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <label className="pp-settings-toggle mt-5">
+          <input
+            type="checkbox"
+            checked={selectedLargeControls}
+            onChange={(event) => handleLargeControlsChange(event.target.checked)}
+          />
+          <span>
+            <strong>Large controls</strong>
+            <small>Makes buttons and touch targets roomier.</small>
+          </span>
+        </label>
+
+        <div className="mt-5">
+          <h3 className="font-semibold">Map style</h3>
+          <div className="pp-settings-segmented mt-3" role="radiogroup" aria-label="Map style">
+            {MAP_STYLE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selectedMapStyle === option.value}
+                className={selectedMapStyle === option.value ? 'is-active' : ''}
+                onClick={() => handleMapStyleChange(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="glass pp-settings-section p-4 rounded-xl mb-6">
+        <h2 className="text-lg font-semibold">Stats & Data</h2>
+        <p className="mt-2">
+          Export progress or revisit the tutorial.
+        </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className="btn btn-primary" onClick={handleExportProgress}>
+            Export progress
+          </button>
+          <button className="btn btn-neutral" onClick={handleResetTutorial}>
+            Reset tutorial
+          </button>
+        </div>
       </section>
 
       <section className="glass pp-settings-section p-4 rounded-xl mb-6">

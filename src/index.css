@@ -2077,6 +2077,11 @@ html, body, #root {
   border-color: var(--pp-border);
 }
 
+.pp-tutorial-form input {
+  background: var(--pp-surface-solid);
+  color: var(--pp-ink);
+}
+
 [data-page="stats"] .glass-panel,
 [data-page="stats"] .glass-tile,
 [data-page="stats"] .glass-table,
@@ -2373,6 +2378,10 @@ html[data-pp-theme="dark"] .badge-gray {
   border-radius: var(--pp-radius-md);
 }
 
+.pp-settings-segmented--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .pp-settings-segmented button {
   min-height: 2.75rem;
   border: 1px solid transparent;
@@ -2466,6 +2475,64 @@ html[data-pp-colorblind="true"] .badge-blue {
   border-color: #6D5BD0 !important;
   color: #31256F !important;
 }
+
+html[data-pp-text-size="large"] .pp-game-screen,
+html[data-pp-text-size="large"] .pp-settings-page {
+  font-size: 1.08rem;
+}
+
+html[data-pp-text-size="large"] .pp-settings-page p,
+html[data-pp-text-size="large"] .pp-settings-page small {
+  font-size: 1rem;
+}
+
+html[data-pp-large-controls="true"] .btn {
+  min-height: 2.75rem;
+  padding: 0.65rem 1rem;
+}
+
+html[data-pp-large-controls="true"] .smlbtn {
+  min-height: 2.35rem;
+  padding: 0.5rem 0.75rem;
+}
+
+html[data-pp-large-controls="true"] .pp-mobile-tab,
+html[data-pp-large-controls="true"] .pp-game-menu-item,
+html[data-pp-large-controls="true"] .pp-settings-segmented button,
+html[data-pp-large-controls="true"] .pp-settings-toggle {
+  min-height: 3rem;
+}
+
+html[data-pp-map-style="contrast"] {
+  --pp-surface-map: rgba(255, 247, 237, 0.96);
+  --pp-border-strong: rgba(17, 24, 39, 0.5);
+}
+
+html[data-pp-map-style="contrast"] .pp-map-canvas {
+  border-color: rgba(17, 24, 39, 0.6) !important;
+}
+
+html[data-pp-map-style="contrast"] .pp-top-overlay {
+  background: var(--pp-surface) !important;
+  border-color: var(--pp-border);
+  color: var(--pp-ink) !important;
+}
+
+html[data-pp-map-style="night"] {
+  --pp-surface-map: rgba(8, 16, 28, 0.96);
+  --pp-border-strong: rgba(226, 232, 240, 0.55);
+}
+
+html[data-pp-map-style="night"] .pp-map-canvas {
+  background: radial-gradient(circle at 50% 35%, #143252 0%, #0d2338 42%, #071827 100%) !important;
+  border-color: rgba(226, 232, 240, 0.45) !important;
+}
+
+html[data-pp-map-style="night"] .pp-top-overlay {
+  background: var(--pp-surface) !important;
+  border-color: var(--pp-border);
+  color: var(--pp-ink) !important;
+}
 /* Keep the in-game journey heading readable in explicit and system dark mode. */
 .pp-top-overlay {
   color: var(--pp-ink) !important;
@@ -2495,4 +2562,31 @@ html[data-pp-theme="dark"] button.btn-neutral.glass {
   background: #dfe7f0 !important;
   border-color: #b8c4d2 !important;
   color: #172033 !important;
+}
+
+html[data-pp-theme="light"] .pp-tutorial-modal .pp-tutorial-form input,
+html[data-pp-theme="light"] .pp-tutorial-modal .pp-tutorial-form input:focus,
+html[data-pp-theme="light"] .pp-tutorial-modal .pp-tutorial-form input:active {
+  background: #f8fafc !important;
+  background-color: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+  caret-color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+html[data-pp-theme="light"] .pp-tutorial-modal .pp-tutorial-form input::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+html[data-pp-theme="dark"] .pp-tutorial-modal .pp-tutorial-form input,
+html[data-pp-theme="dark"] .pp-tutorial-modal .pp-tutorial-form input:focus,
+html[data-pp-theme="dark"] .pp-tutorial-modal .pp-tutorial-form input:active {
+  background: #0f1f2d !important;
+  background-color: #0f1f2d !important;
+  border-color: var(--pp-border-strong) !important;
+  color: var(--pp-ink) !important;
+  caret-color: var(--pp-ink) !important;
+  -webkit-text-fill-color: var(--pp-ink) !important;
 }

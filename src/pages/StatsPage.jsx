@@ -3,8 +3,7 @@ import { ChartColumnBig, Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
 import { postcodeAreas } from '../postcodeAreas';
-import { META_KEY } from '../PostcodePursuit';
-import { readJSON, writeJSON } from '../utils/storageUtils';
+import { META_KEY, readJSON, writeJSON } from '../utils/storageUtils';
 
 const ROW_STYLE = {
   easy:   'diff-easy',

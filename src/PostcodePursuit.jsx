@@ -24,12 +24,40 @@ import ToastShell from './components/toast/ToastShell';
 import AchievementToast from './components/toast/AchievementToast';
 import ErrorToast from './components/toast/ErrorToast';
 import TipToast from './components/toast/TipToast';
+import GameBoard from './components/game/GameBoard';
+import GameMap from './components/game/GameMap';
+import GameModal from './components/game/GameModal';
+import MobileCodeScroller from './components/game/MobileCodeScroller';
 
 import './firebase'
 import useCloudSync from './hooks/useCloudSync';
 import {addGameToHistory} from './utils/historyUtils.js';
 import AuthButton from './components/AuthButton';
 import { recordLifetimeMove } from './utils/lifetimeMeta';
+import {
+  DIFFS,
+  GAME_HISTORY_KEY,
+  STREAK_KEY_V2,
+  USED_BRIDGES_KEY,
+  USED_FERRIES_KEY,
+  VISITED_KEY,
+  addUsedBridgeEdge,
+  addUsedFerryEdge,
+  addVisited,
+  dailySessionKey,
+  emptySnapshot,
+  getLifetimeVisitedCount,
+  getLocalSnapshot,
+  readJSON,
+  writeLocalSnapshot,
+} from './utils/storageUtils';
+import {
+  abandonActiveAttempt,
+  finishAttempt,
+  recordAttemptEvent,
+  startAttempt,
+} from './utils/attemptAnalytics';
+import { syncAttemptSummary } from './utils/analyticsSync';
 
 
 import { auth } from './firebase';
@@ -47,6 +75,11 @@ const MAX_SCALE = 30;
 const DAILY_STREAK_KEY = 'pp_daily_streak_v1'; // {count:number, lastWinDate:'YYYY-MM-DD'}
 const UI_THEME_KEY = 'pp:theme:v1';
 const UI_COLORBLIND_KEY = 'pp:colorblind:v1';
+const INPUT_MODE_KEY = 'pp:inputMode:v1';
+const LARGE_CONTROLS_KEY = 'pp:largeControls:v1';
+const HIGH_CONTRAST_MAP_KEY = 'pp:highContrastMap:v1';
+const MAP_STYLE_KEY = 'pp:mapStyle:v1';
+const TEXT_SIZE_KEY = 'pp:textSize:v1';
 
 function parseUTC(dateStr){ return new Date(dateStr + 'T00:00:00Z'); }
 function daysBetweenUTC(a,b){
@@ -60,16 +93,6 @@ function saveDailyStreak(count, lastWinDate){
   localStorage.setItem(DAILY_STREAK_KEY, JSON.stringify({ count, lastWinDate }));
 }
 //function todayUTC(){ return new Date().toISOString().slice(0,10); }
-
-// ===== Module-scope utils (stable identity) =====
-export const USED_FERRIES_KEY = 'pp_used_ferries_v1';
-export const USED_BRIDGES_KEY = 'pp_used_bridges_v1';
-export const VISITED_KEY      = 'pp_visited_areas_v1';
-export const GAME_HISTORY_KEY = 'pp_history_v2';
-export const ACHIEVEMENTS_KEY = 'pp_achievements_v1';
-export const META_KEY         = 'pp_meta_v1';
-
-
 
 let _confettiPromise;
 
@@ -86,178 +109,6 @@ function prefersReducedMotion() {
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
   );
 }
-
-// --- Streak helpers (v2) ---  (place above the first effect that uses them)
-const DIFFS = ['easy','normal','hard','master'];
-const STREAK_KEY_V2 = (d) => `pp_daily_streak_v2_${d}`;
-
-function readStreakV2(diff) {
-  try { return JSON.parse(localStorage.getItem(STREAK_KEY_V2(diff)) || 'null'); }
-  catch { return null; }
-}
-function saveStreakV2(diff, count, lastWinDate) {
-  localStorage.setItem(STREAK_KEY_V2(diff), JSON.stringify({ count, lastWinDate }));
-}
-
-const dailySessionKey = (d) => `pp_daily_session_v2_${d}`;
-
-function readStreaksAll() {
-  const out = {};
-  for (const d of DIFFS) {
-    const rec = readStreakV2(d);
-    if (rec && Number.isFinite(+rec.count)) out[d] = { count: +rec.count, lastWinDate: rec.lastWinDate || null };
-  }
-  // legacy v1 fallback for easy only
-  if (!out.easy) {
-    try {
-      const legacy = JSON.parse(localStorage.getItem('pp_daily_streak_v1') || 'null');
-      if (legacy && Number.isFinite(+legacy.count)) {
-        out.easy = { count: +legacy.count, lastWinDate: legacy.lastWinDate || null };
-      }
-    } catch {}
-  }
-  return out;
-}
-
-function readDailySessionsAll() {
-  const out = {};
-  for (const d of DIFFS) {
-    try {
-      out[d] = JSON.parse(localStorage.getItem(dailySessionKey(d)) || 'null');
-    } catch {
-      out[d] = null;
-    }
-  }
-  return out;
-}
-
-function writeDailySessionsAll(sessions) {
-  for (const d of DIFFS) {
-    const snap = sessions?.[d] ?? null;
-    if (snap) {
-      localStorage.setItem(dailySessionKey(d), JSON.stringify(snap));
-    } else {
-      localStorage.removeItem(dailySessionKey(d));
-    }
-  }
-}
-
-
-function emptySnapshot() {
-  return {
-    version: 2,
-    achievements: {},
-    history: { games: [] },
-    streaks: {
-      easy:   { count: 0, lastWinDate: null },
-      normal: { count: 0, lastWinDate: null },
-      hard:   { count: 0, lastWinDate: null },
-      master: { count: 0, lastWinDate: null },
-    },
-    dailySessions: {
-      easy: null,
-      normal: null,
-      hard: null,
-      master: null,
-    },
-    meta: {
-      visitedAreas: {},
-      usedFerries: {},
-      usedBridges: {},
-      visitedCount: 0,
-      usedFerriesCount: 0,
-      usedBridgesCount: 0,
-    },
-  };
-}
-
-function writeStreaksAll(streaks) {
-  const fallback = emptySnapshot().streaks;
-  for (const d of DIFFS) {
-    const rec = streaks?.[d] ?? fallback[d];
-    const count = Number(rec?.count) || 0;
-    const lastWinDate = rec?.lastWinDate || null;
-
-    if (count > 0 && lastWinDate) {
-      saveStreakV2(d, count, lastWinDate);
-    } else {
-      localStorage.removeItem(STREAK_KEY_V2(d));
-    }
-  }
-}
-
-function readCoverageMeta() {
-  const visited = readJSON(VISITED_KEY, {});
-  const ferries = readJSON(USED_FERRIES_KEY, []);
-  const bridges = readJSON(USED_BRIDGES_KEY, []);
-
-  const visitedAreas =
-    Array.isArray(visited)
-      ? Object.fromEntries(visited.map(x => [x, true]))
-      : (visited && typeof visited === 'object' ? visited : {});
-
-  const usedFerries = Array.isArray(ferries)
-    ? Object.fromEntries(ferries.map(x => [x, true]))
-    : (ferries && typeof ferries === 'object' ? ferries : {});
-
-  const usedBridges = Array.isArray(bridges)
-    ? Object.fromEntries(bridges.map(x => [x, true]))
-    : (bridges && typeof bridges === 'object' ? bridges : {});
-
-  return {
-    visitedAreas,
-    usedFerries,
-    usedBridges,
-    visitedCount: Object.keys(visitedAreas).length,
-    usedFerriesCount: Object.keys(usedFerries).length,
-    usedBridgesCount: Object.keys(usedBridges).length,
-  };
-}
-
-
-function getLocalSnapshot() {
-  const base = emptySnapshot();
-
-  const storedMeta = readJSON(META_KEY, base.meta) || base.meta;
-
-  const coverageMeta = readCoverageMeta();
-
-  return {
-    version: base.version,
-    achievements: readJSON(ACHIEVEMENTS_KEY, base.achievements),
-    history: readJSON(GAME_HISTORY_KEY, base.history),
-    streaks: readStreaksAll() || base.streaks,
-    dailySessions: readDailySessionsAll() || base.dailySessions,
-    meta: {
-      ...storedMeta,
-      ...coverageMeta,
-    },
-  };
-}
-
-
-function writeLocalSnapshot(s) {
-  const base = emptySnapshot();
-  const snap = {
-    ...base,
-    ...s,
-    achievements: s?.achievements ?? base.achievements,
-    history: s?.history ?? base.history,
-    streaks: s?.streaks ?? base.streaks,
-    dailySessions: s?.dailySessions ?? base.dailySessions,
-    meta: { ...base.meta, ...(s?.meta || {}) },
-  };
-
-  writeJSON(ACHIEVEMENTS_KEY, snap.achievements);
-  writeJSON(GAME_HISTORY_KEY, snap.history);
-  writeStreaksAll(snap.streaks);
-  writeDailySessionsAll(snap.dailySessions);
-  writeJSON(META_KEY, snap.meta);
-  writeJSON(VISITED_KEY, snap.meta.visitedAreas || {});
-writeJSON(USED_FERRIES_KEY, Object.keys(snap.meta.usedFerries || {}));
-writeJSON(USED_BRIDGES_KEY, Object.keys(snap.meta.usedBridges || {}));
-}
-
 
 async function fireVictoryConfetti() {
   if (prefersReducedMotion()) return;
@@ -285,138 +136,6 @@ async function fireVictoryConfetti() {
   }
 }
 
-
-export function readJSON(key, fallback){
-  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
-  catch { return fallback; }
-}
-export function writeJSON(key, val){
-  localStorage.setItem(key, JSON.stringify(val));
-}
-
-// ---- edges coverage ----
-export function canonEdge(a, b) {
-  if (!a || !b) return null;
-  return [a, b].sort((x, y) => x.localeCompare(y)).join('-');
-}
-export function readEdgeSet(key) {
-  try { return new Set(JSON.parse(localStorage.getItem(key) || '[]')); }
-  catch { return new Set(); }
-}
-export function writeEdgeSet(key, set) {
-  localStorage.setItem(key, JSON.stringify([...set]));
-}
-export function addUsedFerryEdge(a, b) {
-  const id = canonEdge(a, b); if (!id) return false;
-  const s = readEdgeSet(USED_FERRIES_KEY);
-  if (s.has(id)) return false;
-  s.add(id); writeEdgeSet(USED_FERRIES_KEY, s);
-  return true;
-}
-export function addUsedBridgeEdge(a, b) {
-  const id = canonEdge(a, b); if (!id) return false;
-  const s = readEdgeSet(USED_BRIDGES_KEY);
-  if (s.has(id)) return false;
-  s.add(id); writeEdgeSet(USED_BRIDGES_KEY, s);
-  return true;
-}
-export function getCoverageMeta(ferries = ferryLinks, bridges = bridgeLinks) {
-  const usedF = readEdgeSet(USED_FERRIES_KEY);
-  const usedB = readEdgeSet(USED_BRIDGES_KEY);
-  const allF = new Set((ferries ?? []).map(({ a, b }) => canonEdge(a, b)).filter(Boolean));
-  const allB = new Set((bridges ?? []).map(({ a, b }) => canonEdge(a, b)).filter(Boolean));
-  return {
-    usedFerriesCount: usedF.size,
-    usedBridgesCount: usedB.size,
-    totalFerries: allF.size,
-    totalBridges: allB.size,
-    hasMersey: usedF.has(canonEdge('L', 'CH')),
-  };
-}
-
-const EMPTY_BUCKET = () => ({
-  games: 0, under: 0, equal: 0, over: 0,
-  sumDelta: 0,            // sum of (moves - par)
-  bestDelta: null,        // most negative delta (best against par), null until first game
-});
-
-export function normalizeParStats(ps) {
-  const byDiff = {};
-  for (const d of DIFFS) byDiff[d] = { ...EMPTY_BUCKET(), ...(ps?.byDiff?.[d] || {}) };
-  const totals = { ...EMPTY_BUCKET(), ...(ps?.totals || {}) };
-  return { byDiff, totals };
-}
-
-// Merge a + b (sum counts & sums; take best (min) delta)
-export function mergeParStats(a, b) {
-  const A = normalizeParStats(a), B = normalizeParStats(b);
-  const out = normalizeParStats({});
-  for (const d of DIFFS) {
-    const x = A.byDiff[d], y = B.byDiff[d], o = out.byDiff[d];
-    o.games     = x.games + y.games;
-    o.under     = x.under + y.under;
-    o.equal     = x.equal + y.equal;
-    o.over      = x.over + y.over;
-    o.sumDelta  = x.sumDelta + y.sumDelta;
-    o.bestDelta = [x.bestDelta, y.bestDelta].filter(v => v !== null && v !== undefined)
-                  .reduce((m, v) => (m === null ? v : Math.min(m, v)), null);
-  }
-  const t = out.totals, ta = A.totals, tb = B.totals;
-  t.games     = ta.games + tb.games;
-  t.under     = ta.under + tb.under;
-  t.equal     = ta.equal + tb.equal;
-  t.over      = ta.over + tb.over;
-  t.sumDelta  = ta.sumDelta + tb.sumDelta;
-  t.bestDelta = [ta.bestDelta, tb.bestDelta].filter(v => v !== null && v !== undefined)
-                .reduce((m, v) => (m === null ? v : Math.min(m, v)), null);
-  return out;
-}
-
-// ---- visited areas ----
-export function readVisited() {
-  try { return new Set(JSON.parse(localStorage.getItem(VISITED_KEY) || '[]')); }
-  catch { return new Set(); }
-}
-export function writeVisited(set) {
-  localStorage.setItem(VISITED_KEY, JSON.stringify([...set]));
-}
-export function addVisited(codes = [], areas = postcodeAreas) {
-  const s = readVisited();
-  let changed = false;
-  for (const c of codes) {
-    if (c && areas[c] && !s.has(c)) { s.add(c); changed = true; }
-  }
-  if (changed) writeVisited(s);
-  return changed;
-}
-export function getVisitedCount() { return readVisited().size; }
-
-// ---- path helpers for achievements ----
-export function pathHasSequence(path, seq) {
-  if (!Array.isArray(path) || path.length < seq.length) return false;
-  for (let i = 0; i <= path.length - seq.length; i++) {
-    let ok = true;
-    for (let j = 0; j < seq.length; j++) if (path[i + j] !== seq[j]) { ok = false; break; }
-    if (ok) return true;
-  }
-  return false;
-}
-
-function readMeta() {
-  try { return JSON.parse(localStorage.getItem(META_KEY) || '{}'); }
-  catch { return {}; }
-}
-
-export function getLifetimeVisitedCount() {
-  const meta = readMeta();
-  // Prefer explicit counter if present
-  if (Number.isFinite(meta?.visitedCount)) return meta.visitedCount;
-  if (Number.isFinite(meta?.counters?.visitedCount)) return meta.counters.visitedCount;
-  // Fallback: distinct list in meta (if you kept it)
-  if (Array.isArray(meta?.visitedAreas)) return new Set(meta.visitedAreas).size;
-  // Final fallback to local per-device set
-  return getVisitedCount();
-}
 
 // Touch device - Mobiles
 function useIsTouchDevice() {
@@ -454,215 +173,10 @@ function useIsTouchDevice() {
   return isTouch;
 }
 
-function MobileCodeScroller({
-  current,
-  onPick,
-  getNeighbors,
-  currentPath,
-  allCodes,
-  showNeighborsToggle = false,
-}) {
-  const [mode, setMode] = React.useState(showNeighborsToggle ? 'neighbors' : 'search');
-  const [query, setQuery] = React.useState('');
-
-  // Normalize + sort once
-  const normCodes = React.useMemo(
-    () => Array.from(new Set(allCodes.map(c => String(c).toUpperCase()))).sort(),
-    [allCodes]
-  );
-
-  // Build neighbours, excluding already visited
-  const neighborOptions = React.useMemo(() => {
-    if (!current) return [];
-    return getNeighbors(current).filter(n => !currentPath.includes(n));
-  }, [current, getNeighbors, currentPath]);
-
-  // Prefix-buffer helpers
-  const pushLetter = (ch) => {
-    const L = String(ch || '').toUpperCase();
-    if (!/^[A-Z]$/.test(L)) return;
-    setQuery(q => (q + L).slice(0, 2)); // cap at 2 letters
-  };
-  const backspace = () => setQuery(q => q.slice(0, -1));
-  const clearQuery = () => setQuery('');
-
-  // Filtered results (exact → prefix → contains) for search mode
-  const searchOptions = React.useMemo(() => {
-    const q = query.trim().toUpperCase();
-    if (!q) return [];
-    const exact    = normCodes.filter(c => c === q);
-    const starts   = normCodes.filter(c => c.startsWith(q) && c !== q);
-    const contains = normCodes.filter(c => !c.startsWith(q) && c.includes(q));
-    return [...exact, ...starts, ...contains];
-  }, [normCodes, query]);
-
-  const options = mode === 'neighbors' ? neighborOptions : searchOptions;
-
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-
-  const railLabel =
-    mode === 'neighbors'
-      ? 'Available neighbours'
-      : query.length > 0
-        ? 'Matching postcodes'
-        : 'Suggested postcodes';
-
-  const railContent =
-    mode === 'neighbors'
-      ? (neighborOptions.length ? neighborOptions : null)
-      : (query.length > 0 ? options : null);
-
-  return (
-    <div className="glass glass--white p-5 rounded-0xl shadow-xl text-left">
-      
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 pb-1">
-        <div className="text-xs opacity-80">
-          {mode === 'neighbors'
-            ? 'Neighbours'
-            : query
-              ? <>Typing: <b>{query}</b></>
-              : 'Type a code (1–2 letters)…'}
-        </div>
-
-        {showNeighborsToggle && (
-          <div className="flex gap-1">
-            <button
-              type="button"
-              className={`badge ${mode === 'neighbors' ? 'badge-blue' : 'badge-gray'}`}
-              onClick={() => setMode('neighbors')}
-              aria-pressed={mode === 'neighbors'}
-            >
-              Neighbours
-            </button>
-            <button
-              type="button"
-              className={`badge ${mode !== 'neighbors' ? 'badge-blue' : 'badge-gray'}`}
-              onClick={() => setMode('search')}
-              aria-pressed={mode !== 'neighbors'}
-            >
-              Search
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* On-screen keypad — now using your btn classes */}
-      {mode !== 'neighbors' && (
-        <div className="mx-3 mb-2 p-2 rounded-lg bg-slate-900/10">
-          {alphabet.map(L => (
-            <button
-              key={L}
-              type="button"
-              onClick={() => pushLetter(L)}
-              className="btn btn-white text-sm"
-              aria-label={`Type ${L}`}
-            >
-              {L}
-            </button>
-          ))}<br />
-          <button
-            type="button"
-            onClick={backspace}
-            className="btn btn-white col-span-2 text-sm"
-          >
-            Backspace
-          </button>
-          <button
-            type="button"
-            onClick={clearQuery}
-            className="btn btn-white col-span-2 text-sm"
-          >
-            Clear
-          </button>
-        </div>
-      )}
-
-      {/* Fixed-height option rail so the controls panel doesn't jump */}
-      <div
-        className="pp-mobile-option-rail mx-3 mb-3"
-        role="listbox"
-        aria-label={railLabel}
-      >
-        {railContent ? (
-          railContent.map(code => (
-            <button
-              key={code}
-              type="button"
-              role="option"
-              aria-selected={false}
-              className={`btn btn-green hover:brightness-95 pp-mobile-option-chip ${
-                mode !== 'neighbors' && code === query ? 'ring-1 ring-indigo-500 font-semibold' : ''
-              }`}
-              onClick={() => {
-                onPick?.(code);
-                if (mode !== 'neighbors') clearQuery();
-              }}
-              aria-label={`Select ${code}`}
-            >
-              {code}
-            </button>
-          ))
-        ) : (
-          <span className="pp-mobile-option-empty">
-            {mode === 'neighbors'
-              ? 'No unvisited neighbours'
-              : query.length > 0
-                ? 'No matches'
-                : 'Matching postcode options will appear here'}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
 
 
 
 
-function Modal({ open, onClose, title, children }) {
-  if (!open) return null;
-  return createPortal(
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        zIndex: 2147483647,
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-        paddingTop: '10vh',
-        padding: '10vh 16px 16px'
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={title ? 'modal-title' : undefined}
-    >
-      <div
-        className="glass glass--white p-5 rounded-2xl shadow-xl text-left"
-        style={{
-          maxWidth: 520,
-          width: '92vw',
-          maxHeight: '80vh',
-          overflowY: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain',
-          touchAction: 'pan-y'
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {title && <h2 id="modal-title" className="text-xl font-semibold mb-3">{title}</h2>}
-        {children}
-        <div className="mt-4">
-          <button className="btn btn-primary w-full" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
 
 
 
@@ -772,6 +286,22 @@ const [uiTheme, setUiTheme] = useState(() => {
 const [colorblindFriendly, setColorblindFriendly] = useState(
   () => localStorage.getItem(UI_COLORBLIND_KEY) === 'true'
 );
+const [inputMode, setInputMode] = useState(() => {
+  const stored = localStorage.getItem(INPUT_MODE_KEY);
+  return ['auto', 'mobile', 'desktop'].includes(stored) ? stored : 'auto';
+});
+const [largeControls, setLargeControls] = useState(
+  () => localStorage.getItem(LARGE_CONTROLS_KEY) === 'true'
+);
+const [mapStyle, setMapStyle] = useState(() => {
+  const stored = localStorage.getItem(MAP_STYLE_KEY);
+  if (['standard', 'contrast', 'night'].includes(stored)) return stored;
+  return localStorage.getItem(HIGH_CONTRAST_MAP_KEY) === 'true' ? 'contrast' : 'standard';
+});
+const [textSize, setTextSize] = useState(() => {
+  const stored = localStorage.getItem(TEXT_SIZE_KEY);
+  return ['normal', 'large'].includes(stored) ? stored : 'normal';
+});
 
 const canClickAreas = difficulty === 'easy';
 const roundResolved = gameWon || dailyGaveUp;
@@ -796,12 +326,40 @@ useEffect(() => {
   } else {
     delete document.documentElement.dataset.ppColorblind;
   }
+  if (largeControls) {
+    document.documentElement.dataset.ppLargeControls = 'true';
+  } else {
+    delete document.documentElement.dataset.ppLargeControls;
+  }
+  if (['contrast', 'night'].includes(mapStyle)) {
+    document.documentElement.dataset.ppMapStyle = mapStyle;
+  } else {
+    delete document.documentElement.dataset.ppMapStyle;
+  }
+  delete document.documentElement.dataset.ppHighContrastMap;
+  if (textSize === 'large') {
+    document.documentElement.dataset.ppTextSize = 'large';
+  } else {
+    delete document.documentElement.dataset.ppTextSize;
+  }
 
   localStorage.setItem(UI_THEME_KEY, uiTheme);
   localStorage.setItem(UI_COLORBLIND_KEY, colorblindFriendly ? 'true' : 'false');
-}, [uiTheme, colorblindFriendly]);
+  localStorage.setItem(INPUT_MODE_KEY, inputMode);
+  localStorage.setItem(LARGE_CONTROLS_KEY, largeControls ? 'true' : 'false');
+  localStorage.setItem(MAP_STYLE_KEY, mapStyle);
+  localStorage.setItem(HIGH_CONTRAST_MAP_KEY, mapStyle === 'contrast' ? 'true' : 'false');
+  localStorage.setItem(TEXT_SIZE_KEY, textSize);
+}, [uiTheme, colorblindFriendly, inputMode, largeControls, mapStyle, textSize]);
 
 const isTouch = useIsTouchDevice();
+const useMobileInput = inputMode === 'mobile' || (inputMode === 'auto' && isTouch);
+const analyticsInputStyle =
+  inputMode === 'auto'
+    ? (useMobileInput ? 'auto_scroller' : 'auto_keyboard')
+    : inputMode === 'mobile'
+      ? 'scroller'
+      : 'keyboard';
 
 // Geometric helpers (centroids etc)
 const roundIdRef = useRef(null);
@@ -950,10 +508,9 @@ const bumpStreakFor = React.useCallback((diff) => {
   }
 
   saveStreakRecord(diff, next, today);      // <-- local write
-  onPersist?.(true);                            // <-- cloud sync trigger
 
   return next;
-}, [readStreakRecord, saveStreakRecord, onPersist]);
+}, [readStreakRecord, saveStreakRecord]);
 
 const readStreak = React.useCallback((diff) => {
   const rec = readStreakRecord(diff);
@@ -1038,6 +595,14 @@ function toggleHints() {
       alert('No hints left for today.');
       return;
     }
+    recordAttemptEvent('hint_opened', {
+      from: currentPath[currentPath.length - 1] || null,
+      hintNumber: hintsUsed + 1,
+    });
+    recordAttemptEvent('hint_used', {
+      from: currentPath[currentPath.length - 1] || null,
+      hintNumber: hintsUsed + 1,
+    });
     setHintsUsed(h => h + 1);
   }
 
@@ -1060,6 +625,12 @@ const undoLastMove = useCallback(() => {
   if (currentPath.length <= 1 || gameWon) return; // can't undo the start, or after win
   const newPath = currentPath.slice(0, -1);
   setCurrentPath(newPath);
+  recordAttemptEvent('move_undone', {
+    from: currentPath[currentPath.length - 1],
+    to: newPath[newPath.length - 1],
+    pathLengthAfter: newPath.length,
+    movesAfter: Math.max(0, newPath.length - 1),
+  });
   
   setFlashAreas(prev => prev.filter(a => a !== currentPath[currentPath.length - 1]));
 
@@ -1900,35 +1471,6 @@ const getNeighbors = React.useCallback((code) => {
     const b = el.getBBox();
     centroidsRef.current[id] = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
   };
-
-
-  function CurrentMarker({ id }) {
-    const c = centroidsRef.current[id];
-    if (!c) return null;
-    return (
-      <g pointerEvents="none">
-        <circle cx={c.x} cy={c.y} r={1} className="fill-blue-700 opacity-90" />
-        <circle cx={c.x} cy={c.y} r={1}
-          className="[transform-box:fill-box] [transform-origin:center] animate-ping fill-transparent stroke-blue-700 stroke-2 opacity-60"
-        />
-      </g>
-    );
-  }
-
-  function StepBadge({ id, index }) {
-    const c = centroidsRef.current[id];
-    if (!c) return null;
-    return (
-      <g pointerEvents="none">
-        <circle cx={c.x} cy={c.y} r={9} className="fill-white stroke-slate-700" />
-        <text x={c.x} y={c.y + 4} textAnchor="middle"
-          className="fill-slate-900 text-[10px] font-semibold">
-          {index + 1}
-        </text>
-      </g>
-    );
-  }
-  
 /* function bfsAllDistances(start) {
   const dist = new Map([[start, 0]]);
   const q = [start];
@@ -2048,6 +1590,18 @@ const giveUpNow = useCallback(() => {
     round_id: roundIdRef.current || undefined,
   });
 
+  const attemptSummary = finishAttempt('gave_up', {
+    moves: Math.max(0, currentPath.length - 1),
+    par: dailyMode && Number.isFinite(dailyPar) ? dailyPar : optimalMoves,
+    optimalMoves,
+    durationMs: ms,
+    hintsUsed,
+    pathUsed: currentPath.slice(),
+    inputStyle: analyticsInputStyle,
+    mapStyle,
+  });
+  syncAttemptSummary(attemptSummary);
+
   setGiveUpOpen(false);
   setVictoryOpen(false);
   setShowHints(false);
@@ -2090,7 +1644,8 @@ const giveUpNow = useCallback(() => {
   roundIdRef.current = null;
 }, [
   guesses, optimalPath, currentPath, startArea, targetArea,
-  dailyMode, dailyDifficulty, dailyDate, dailyPar, hintsUsed, difficulty, onPersist
+  dailyMode, dailyDifficulty, dailyDate, dailyPar, hintsUsed, difficulty, onPersist,
+  analyticsInputStyle, mapStyle
 ]);
 
 const topOverlayRef = useRef(null);
@@ -2160,8 +1715,34 @@ const focusStartAndTarget = React.useCallback((startCode, targetCode, pad = 0.2)
 
 
 
-const COLORS = colorblindFriendly
+const COLORS = mapStyle === 'night'
   ? {
+      baseFill:    '#162533',
+      baseStroke:  '#d7e6f3',
+      startFill:   '#14b8a6',
+      startStroke: '#99f6e4',
+      currentFill: '#60a5fa',
+      currentStroke:'#dbeafe',
+      visitedFill: '#22c55e',
+      visitedStroke:'#bbf7d0',
+      targetFill:  '#fbbf24',
+      targetStroke:'#fde68a',
+    }
+  : mapStyle === 'contrast'
+    ? {
+      baseFill:    '#fff7ed',
+      baseStroke:  '#111827',
+      startFill:   '#005f73',
+      startStroke: '#003844',
+      currentFill: '#1d4ed8',
+      currentStroke:'#FFFFFF',
+      visitedFill: '#047857',
+      visitedStroke:'#064e3b',
+      targetFill:  '#d97706',
+      targetStroke:'#7c2d12',
+    }
+    : colorblindFriendly
+      ? {
       baseFill:    '#ecded6ff',
       baseStroke:  '#2e3744ff',
       startFill:   '#0072B2',
@@ -2172,8 +1753,8 @@ const COLORS = colorblindFriendly
       visitedStroke:'#005F46',
       targetFill:  '#E69F00',
       targetStroke:'#9A6700',
-    }
-  : {
+      }
+      : {
       baseFill:    '#ecded6ff',
       baseStroke:  '#2e3744ff',
       startFill:   '#1a6e65ff',
@@ -2398,7 +1979,7 @@ const event = {
   endArea: targetArea,
 };
 
-addGameToHistory(event, { onPersist: () => onPersist(true) });
+addGameToHistory(event);
 
 if (dailyMode && dailyDifficulty && !betaDailyMode) {
   const rec = bumpStreakFor(dailyDifficulty);
@@ -2439,7 +2020,7 @@ if (unlocked?.length && window.gtag) {
 
 
   // ---- Analytics ----
-  if (window.gtag) {
+if (window.gtag) {
 window.gtag?.('event', 'game_finished', {
   round_id: roundIdRef.current,
   won: 1,
@@ -2458,12 +2039,26 @@ window.gtag?.('event', 'game_finished', {
 });
   }
 
+  const attemptSummary = finishAttempt('won', {
+    moves,
+    par: dailyMode && Number.isFinite(dailyPar) ? dailyPar : optimalMoves,
+    optimalMoves,
+    durationMs: ms,
+    hintsUsed,
+    pathUsed: path.slice(),
+    inputStyle: analyticsInputStyle,
+    mapStyle,
+  });
+  syncAttemptSummary(attemptSummary);
+
+  onPersist(true);
   setVictoryOpen(true);
 }, [
   currentPath, optimalPath,
   difficulty, startArea, targetArea,
   dailyMode, dailyDifficulty,
-  bumpStreakFor, tallyEdgeUsage, onPersist, enqueueAchievementBatch,hintsUsed, betaDailyMode
+  bumpStreakFor, tallyEdgeUsage, onPersist, enqueueAchievementBatch,hintsUsed, betaDailyMode,
+  dailyPar, analyticsInputStyle, mapStyle
 ]);
 
 useEffect(() => {
@@ -2522,106 +2117,6 @@ const shouldLock = overlayOpen;
 
   // ---------- Pan/zoom ----------
   const [scaleForLabels, setScaleForLabels] = useState(1);
-
-// Keeps on-screen sizes constant as you zoom
-function makeSpx(scale, mult = 1) {
-  const s = Math.max(Number(scale || 1), 0.0001);
-  return (n) => (mult * n) / s;   // screen-constant size, scaled up by `mult`
-}
-
-/* // Simple offset rules to keep bubbles out of cramped shapes
-const WESTish = ['W','NW','SW','HA','UB','TW','KT','SM'];
-const EASTish = ['E','N','SE','IG','EN','RM','BR','CR','DA'];
-
-function calloutOffset(code, spx) {
-  if (code === 'WC' || code === 'EC') return { ox: 0,         oy: -spx(120) };
-  if (WESTish.includes(code))         return { ox: -spx(140), oy: -spx(40)  };
-  if (EASTish.includes(code))         return { ox:  spx(140), oy: -spx(40)  };
-  return { ox: spx(120), oy: -spx(60) }; // generic
-} */
-
-function Callout({ code, label, color, getCenter, scale }) {
-  const c = getCenter(code);
-  if (!c) return null;
-
-  // 👇 tweak this multiplier until you’re happy (e.g. 1.6 → 2.2)
-  const CALLOUT_MULT = 7;
-   const CAP = {
-    stroke: 0.1,
-    dot: 14,
-    halo1: 40,
-    halo2: 80,
-    bubbleW: 320,
-    bubbleH: 96,
-    radius: 18,
-    font: 24,
-    notch: 18,
-    offset: 10,                   // max distance from centroid to bubble center
-  };
-  const spx = makeSpx(scale, CALLOUT_MULT);
-
-  // keep bubbles out of cramped shapes
-  const WESTish = ['W','NW','SW','HA','UB','TW','KT','SM'];
-  const EASTish = ['E','N','SE','IG','EN','RM','BR','CR','DA'];
-  const offsetFor = (code) => {
-    if (code === 'WC' || code === 'EC') return { ox: 0,          oy: -spx(120) };
-    if (WESTish.includes(code))         return { ox: -spx(140),  oy: -spx(40)  };
-    if (EASTish.includes(code))         return { ox:  spx(140),  oy: -spx(40)  };
-    return { ox: spx(120), oy: -spx(60) };
-  };
-
-  const { ox, oy } = offsetFor(code);
-  const bx = c.x + ox, by = c.y + oy;
-
-  // 🔊 bigger bases everywhere
-  const sw    = spx(0.1, CAP.stroke);
-  const rDot  = spx(9, CAP.dot);
-  const r1    = spx(28, CAP.halo1);
-  const r2    = spx(46, CAP.halo2);
-  const bw    = spx(220, CAP.bubbleW);
-  const bh    = spx(100, CAP.bubbleH);
-  const br    = spx(14, CAP.radius);
-  const font  = spx(30, CAP.font);
-  const notch = spx(1, CAP.notch);
-
-  return (
-    <g pointerEvents="none">
-      {/* centroid halos */}
-      <circle cx={c.x} cy={c.y} r={r2} fill="none" stroke={color} strokeWidth={sw}
-              opacity="0.40" vectorEffect="non-scaling-stroke" />
-      <circle cx={c.x} cy={c.y} r={r1} fill={color} opacity="0.18" />
-
-      {/* centroid dot */}
-      <circle cx={c.x} cy={c.y} r={rDot} fill={color} stroke="#fff" strokeWidth={sw}
-              vectorEffect="non-scaling-stroke" />
-
-      {/* leader line */}
-      <line x1={c.x} y1={c.y} x2={bx} y2={by} stroke={color} strokeWidth={sw}
-            vectorEffect="non-scaling-stroke" />
-
-      {/* label bubble + notch */}
-      <g transform={`translate(${bx},${by})`}>
-        <path
-          d={`M ${-bw/2} ${-bh/2} h ${bw} a ${br} ${br} 0 0 1 ${br} ${br}
-              v ${bh - 2*br} a ${br} ${br} 0 0 1 -${br} ${br}
-              h -${bw} a ${br} ${br} 0 0 1 -${br} -${br}
-              v -${bh - 2*br} a ${br} ${br} 0 0 1 ${br} -${br} Z
-              M 0 ${bh/2} l ${-notch} ${notch} l ${2*notch} 0 Z`}
-          fill="white"
-          stroke={color}
-          strokeWidth={sw}
-          vectorEffect="non-scaling-stroke"
-          filter="url(#pp-bubble-shadow)"
-        />
-        <text x="0" y={font/3} fontSize={font} fontWeight="500"
-              textAnchor="middle" fill="#111827">
-          {label}
-        </text>
-      </g>
-    </g>
-  );
-}
-
 
   useEffect(() => {
     if (!svgRef.current || !contentRef.current || didAutoFitRef.current) return;
@@ -2705,11 +2200,25 @@ function generatePuzzleWithBounds(minSteps, maxSteps = null, maxRetries = 800) {
 
 const prevStateRef = useRef(gameState);
 
+useEffect(() => {
+  const attemptSummary = abandonActiveAttempt('stale_session', { onlyIfStale: true });
+  syncAttemptSummary(attemptSummary);
+}, []);
 
 useEffect(() => {
   const prev = prevStateRef.current;
   if (prev !== 'playing' && gameState === 'playing') {
     roundIdRef.current = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+startAttempt({
+  roundId: roundIdRef.current,
+  difficulty,
+  mode: dailyMode ? 'daily' : 'free',
+  dailyDate,
+  startArea,
+  targetArea,
+  inputStyle: analyticsInputStyle,
+  mapStyle,
+});
 window.gtag?.('event', 'game_started', {
   round_id: roundIdRef.current,
   difficulty,
@@ -2717,15 +2226,27 @@ window.gtag?.('event', 'game_started', {
   daily_mode: dailyMode ? 1 : 0,
   start_postcode: startArea,
   target_postcode: targetArea,
-});
+  });
   }
   prevStateRef.current = gameState;
-}, [gameState, difficulty, startArea, targetArea, dailyMode]);
+}, [gameState, difficulty, startArea, targetArea, dailyMode, dailyDate, analyticsInputStyle, mapStyle]);
 
 
 const abandonIfActive = useCallback((reason = 'navigation') => {
-  if (gameState === 'playing' && !gameWon && window.gtag) {
+  if (gameState === 'playing' && !gameWon) {
     const ms = gameStartRef.current ? Math.max(0, performance.now() - gameStartRef.current) : undefined;
+    const attemptSummary = abandonActiveAttempt(reason, {
+      moves: Math.max(0, currentPath.length - 1),
+      durationMs: ms,
+      hintsUsed,
+      par: dailyMode ? dailyPar : Math.max(0, (optimalPath?.length || 1) - 1),
+      optimalMoves: Math.max(0, (optimalPath?.length || 1) - 1),
+      pathUsed: currentPath.slice(),
+      inputStyle: analyticsInputStyle,
+      mapStyle,
+    });
+    syncAttemptSummary(attemptSummary);
+    if (window.gtag) {
 window.gtag?.('event', 'game_abandoned', {
   round_id: roundIdRef.current,
   difficulty,
@@ -2738,9 +2259,13 @@ window.gtag?.('event', 'game_abandoned', {
   hints_used: hintsUsed,
   reason,
 });
+    }
     roundIdRef.current = null; // prevent duplicates
   }
-}, [gameState, gameWon, difficulty, startArea, targetArea, currentPath.length, dailyMode, hintsUsed]);
+}, [
+  gameState, gameWon, difficulty, startArea, targetArea, currentPath,
+  dailyMode, dailyPar, hintsUsed, optimalPath, analyticsInputStyle, mapStyle
+]);
 
 useEffect(() => {
   const onUnload = () => abandonIfActive('beforeunload');
@@ -2820,6 +2345,17 @@ const startNewGame = () => {
 
   setOptimalPath(path);              // we already have it
   setGameState('playing');
+  roundIdRef.current = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+  startAttempt({
+    roundId: roundIdRef.current,
+    difficulty,
+    mode: dailyMode ? 'daily' : 'free',
+    dailyDate,
+    startArea: start,
+    targetArea: target,
+    inputStyle: analyticsInputStyle,
+    mapStyle,
+  });
   gameStartRef.current = null;
   setElapsedMs(0);
   setVictoryOpen(false);
@@ -2842,6 +2378,7 @@ const makeGuess = useCallback((area) => {
   setShowHints(false);
 
   const currentLocation = currentPath[currentPath.length - 1];
+  const isKnownArea = !!postcodeAreas[area];
   const isValidMove = getNeighbors(currentLocation).includes(area);
   const alreadyVisited = currentPath.includes(area);
   const revisitAllowed = (difficulty === 'easy' || difficulty === 'normal');
@@ -2852,6 +2389,13 @@ const makeGuess = useCallback((area) => {
   setGuesses(prev => [...prev, { area, valid: isValidMove, alreadyVisited, viaFerry, viaBridge }]);
 
   if (!isValidMove || (alreadyVisited && !revisitAllowed)) {
+    recordAttemptEvent('guess_incorrect', {
+      from: currentLocation,
+      guess: area,
+      knownArea: isKnownArea,
+      reason: !isKnownArea ? 'unknown_area' : alreadyVisited && !revisitAllowed ? 'revisit_blocked' : 'not_adjacent',
+      moveNumber: Math.max(0, currentPath.length - 1),
+    });
     setFlashAreas(prev => [...prev, area]);
     setTimeout(() => setFlashAreas(prev => prev.filter(a => a !== area)), 500);
 
@@ -2886,6 +2430,14 @@ const makeGuess = useCallback((area) => {
 
   const newPath = [...currentPath, area];
 setCurrentPath(newPath);
+
+recordAttemptEvent('guess_correct', {
+  from: currentLocation,
+  to: area,
+  moveType,
+  moveNumber: Math.max(1, newPath.length - 1),
+  path: newPath,
+});
 
 
 
@@ -2945,280 +2497,46 @@ React.useEffect(() => {
 
 
   // ---------- Optimal path overlay ----------
-  const renderOptimalOverlay = () => {
-    const pts = optimalPath
-      .map(code => postcodeAreas[code]?.center)
-      .filter(Boolean);
-
-    if (pts.length < 2) return null;
-
-    const pointsAttr = pts.map(p => `${p.x},${p.y}`).join(' ');
-
-    return (
-      <g pointerEvents="none">
-        <polyline
-          points={pointsAttr}
-          fill="none"
-          stroke="#000"
-          strokeOpacity="0.1"
-          strokeWidth={15}
-          vectorEffect="non-scaling-stroke"
-        />
-        <polyline
-          points={pointsAttr}
-          fill="none"
-          stroke="#8b5cf6"
-		  strokeOpacity="0.5"
-          strokeWidth={8}
-          vectorEffect="non-scaling-stroke"
-        />
-        {pts.map((p, i) => (
-          <g key={i}>
-            <circle cx={p.x} cy={p.y} r={120} fill="#8b5cf6" fillOpacity="0.9" />
-            <text
-              x={p.x}
-              y={p.y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize="160"
-              fontWeight="700"
-              fill="white"
-            >
-              {i}
-            </text>
-          </g>
-        ))}
-      </g>
-    );
-  };
 
 // ------------------- RENDER HELPERS (map, controls, menus) -----------------
 
   // ---------- Map ----------
 const renderMap = () => (
-  <div
-    className="pp-map-canvas glass glass--map mx-auto relative"
-    style={{
-      width: '99%',
-      maxWidth: '900px',
-      overflow: 'hidden',
-      borderRadius: 16,
-    }}
-  >
-    
-{/*     <div className="absolute top-2 left-2 z-10 flex gap-2">
-      <button onClick={() => zoomOut(ZOOM_STEP)} className="smlbtn" title="Zoom out"><ZoomOut className="w-2 h-2" /></button>
-      <button onClick={() => zoomIn(ZOOM_STEP)}  className="smlbtn" title="Zoom in"><ZoomIn className="w-2 h-2" /></button>
-      <button onClick={resetView} className="smlbtn" title="Reset view to Start & Target"><Scan className="w-2 h-2" /></button>
-    </div> */}
-
-    <svg
-      ref={svgRef}
-      width="100%"
-      height="100%"
-      className="block"
-      viewBox={`${WORLD.x} ${WORLD.y} ${WORLD.width} ${WORLD.height}`}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ touchAction: 'none', display: 'block' }}
-    >
-      <rect
-        x={WORLD.x} y={WORLD.y}
-        width={WORLD.width} height={WORLD.height}
-        fill="transparent" pointerEvents="all"
-      />
-		<defs>
-  <filter id="pp-bubble-shadow" x="-50%" y="-50%" width="200%" height="200%">
-    <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.3" />
-  </filter>
-</defs>
-      <defs>		  
-        {masterMode && (
-          <clipPath id={landClipId} clipPathUnits="userSpaceOnUse">
-            {Object.entries(postcodeAreas).map(([code, area]) => (
-              <path key={`clip-${code}`} d={area.path} />
-            ))}
-          </clipPath>
-        )}
-
-        <pattern id="pp-invalid-stripes" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)">
-  <rect width="10" height="10" fill="#ffffffff" />
-  <path d="M0 0 L0 10" stroke="#111" strokeWidth="4" opacity="0.01" />
-</pattern>
-      </defs>
-		
-      {/* Outer g transforms (pan/zoom). Inner g is content for getBBox */}
-      <g ref={gRef}>
-        <g
-          ref={contentRef}
-          /* clip only in Master so coastline strokes are hidden */
-          clipPath={masterMode ? `url(#${landClipId})` : undefined}
-          /* keep crisp edges when outlines are off */
-          shapeRendering={showOutlines ? undefined : "crispEdges"}
-        >
-          {/* BRIDGES & TUNNELS (hidden in Master) */}
-          {!masterMode && Array.isArray(bridgeLinks) && bridgeLinks.length > 0 && (
-            <g pointerEvents="none" aria-label="Bridges and tunnels">
-              {bridgeLinks.map(({ a, b, type }, i) => {
-                if (!postcodeAreas[a] || !postcodeAreas[b]) return null;
-                const d = (type === "bridge" ? arcPathBridge : arcPathFerry)(a, b);
-                if (!d) return null;
-
-                const { stroke, width, dash } = linkPaint(type);
-                const A = getCenter(a), B = getCenter(b);
-
-                return (
-                  <g key={`bridge-${a}-${b}-${i}`}>
-                    <path
-                      d={d}
-                      fill="none"
-                      stroke={stroke}
-                      strokeWidth={width}
-                      strokeDasharray={dash || undefined}
-                      strokeLinecap="round"
-                      opacity="0.95"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    {/* subtle end caps so the line visually reaches each area */}
-                    <circle cx={A.x} cy={A.y} r={Math.max(6, width * 0.6)} fill={stroke} vectorEffect="non-scaling-stroke" />
-                    <circle cx={B.x} cy={B.y} r={Math.max(6, width * 0.6)} fill={stroke} vectorEffect="non-scaling-stroke" />
-                  </g>
-                );
-              })}
-            </g>
-          )}
-
-          {Object.entries(postcodeAreas).map(([code, area]) => {
-            const isCurrent = !gameWon && currentArea && code === currentArea && code !== targetArea;
-            const extra  = [
-              flashAreas.includes(code) ? "animate-shake [animation-duration:.25s]" : "",
-              isCurrent ? "area-pulse" : "",
-            ].join(" ").trim();
-
-            const hidden = !isRevealed(code) ? "opacity-0 pointer-events-none" : "";
-            return (
-              <path
-                key={code}
-                ref={attachPathRef(code)}
-                d={area.path}
-                style={getAreaStyle(code)}
-                className={`hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-white ${extra} ${hidden}`}
-                // only attach handlers if Easy
-                onClick={canClickAreas ? () => handleClick(code) : undefined}
-                onKeyDown={
-                  canClickAreas
-                    ? (e) => (e.key === 'Enter' || e.key === ' ') && handleClick(code)
-                    : undefined
-                }
-                tabIndex={canClickAreas ? 0 : -1}
-                aria-label={code}
-                vectorEffect="non-scaling-stroke"
-              />
-            );
-          })}
-        </g>
-
-        {/* Ferry routes (hidden in Master) */}
-        {!masterMode && Array.isArray(ferryLinks) && ferryLinks.length > 0 && (
-          <g pointerEvents="none" aria-label="Ferry routes">
-            {ferryLinks.map(({ a, b }, i) => {
-              // skip if either endpoint isn't in your dataset
-              if (!postcodeAreas[a] || !postcodeAreas[b]) return null;
-
-              const d = arcPath(a, b);
-              if (!d) return null;
-
-              return (
-                <g key={`ferry-${a}-${b}-${i}`}>
-                  <path
-                    d={d}
-                    fill="none"
-                    stroke="#ffffffff"
-                    strokeWidth={3}
-                    strokeDasharray="4 10"
-                    strokeLinecap="round"
-                    opacity="0.7"
-                    vectorEffect="non-scaling-stroke"
-                  />
-                </g>
-              );
-            })}
-          </g>
-        )}
-        
-{/* Labels */}
-{Object.entries(postcodeAreas).map(([code, area]) => {
-  if (!isRevealed(code)) return null;
-
-  const isStart   = code === startArea;
-  const isTarget  = code === targetArea;
-  const isVisited = currentPath.includes(code);
-
-  // Existing logic: Easy shows labels; Normal shows Start + Visited
-  const baseShouldShow =
-    showLabels ||
-    (difficulty === 'normal' && (isStart || isVisited));
-
-  if (!baseShouldShow) return null;
-
-  // Zoom gating (always allow Start/Target)
-  const scaleNow = Number(scaleForLabels ?? 1);
-  const zoomOK   = isStart || isTarget || labelVisibleAtScale(code, scaleNow);
-  if (!zoomOK) return null;
-
-  const c = area.center || centroidsRef.current[code];
-  if (!c) return null;
-
-  return (
-    <text
-      key={`label-${code}`}
-      x={c.x}
-      y={c.y}
-      textAnchor="middle"
-      className="pointer-events-none select-none fill-slate-800/80"
-      style={{ fontSize: svgFontSizeForScale(scaleForLabels) }}
-      stroke="white"
-      strokeWidth={4}
-      paintOrder="stroke"
-      vectorEffect="non-scaling-stroke"
-    >
-      {code}
-    </text>
-  );
-})}
-        
-        {/* overlays (render after paths so they sit on top) */}
-{/* overlays (render after paths so they sit on top) */}
-<g id="callouts-overlay">
-  {startArea && (
-    <Callout
-      code={startArea}
-      label={`Start: ${startArea}`}
-      color="#167903ff"
-      getCenter={getCenter}
-      scale={scaleForLabels || 1}
-    />
-  )}
-  {targetArea && (
-    <Callout
-      code={targetArea}
-      label={`Target: ${targetArea}`}
-      color="#da5903ff"
-      getCenter={getCenter}
-      scale={scaleForLabels || 1}
-    />
-  )}
-</g>
-
-{currentArea && <CurrentMarker id={currentArea} />}
-{currentPath.map((id, i) => <StepBadge key={`b-${id}`} id={id} index={i} />)}
-
-
-        {/* Optional optimal path overlay */}
-        {gameWon && showOptimal && renderOptimalOverlay()}
-      </g>
-
-    </svg>
-  </div>
+  <GameMap
+    WORLD={WORLD}
+    arcPath={arcPath}
+    arcPathBridge={arcPathBridge}
+    arcPathFerry={arcPathFerry}
+    attachPathRef={attachPathRef}
+    canClickAreas={canClickAreas}
+    centroidsRef={centroidsRef}
+    contentRef={contentRef}
+    currentArea={currentArea}
+    currentPath={currentPath}
+    difficulty={difficulty}
+    ferryLinks={ferryLinks}
+    flashAreas={flashAreas}
+    gameWon={gameWon}
+    getAreaStyle={getAreaStyle}
+    getCenter={getCenter}
+    gRef={gRef}
+    handleClick={handleClick}
+    isRevealed={isRevealed}
+    labelVisibleAtScale={labelVisibleAtScale}
+    landClipId={landClipId}
+    linkPaint={linkPaint}
+    masterMode={masterMode}
+    optimalPath={optimalPath}
+    scaleForLabels={scaleForLabels}
+    showLabels={showLabels}
+    showOptimal={showOptimal}
+    showOutlines={showOutlines}
+    startArea={startArea}
+    svgFontSizeForScale={svgFontSizeForScale}
+    svgRef={svgRef}
+    targetArea={targetArea}
+    mapStyle={mapStyle}
+  />
 );
 
 
@@ -3400,7 +2718,19 @@ const renderControls = () => (
                   setGuesses([]);
                   clearAchievementToasts();
                   setGameWon(false);
-                  setOptimalPath(findShortestPath(startArea, targetArea));
+                  const restartedOptimal = findShortestPath(startArea, targetArea);
+                  setOptimalPath(restartedOptimal);
+                  roundIdRef.current = (crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+                  startAttempt({
+                    roundId: roundIdRef.current,
+                    difficulty,
+                    mode: dailyMode ? 'daily' : 'free',
+                    dailyDate,
+                    startArea,
+                    targetArea,
+                    inputStyle: analyticsInputStyle,
+                    mapStyle,
+                  });
                   setBurgerOpen(false);
                 }}
                 disabled={dailyMode}
@@ -3458,7 +2788,7 @@ const renderControls = () => (
     >
       {!roundResolved && (
         <div className="px-3 pb-3 pt-2">
-          {isTouch ? (
+          {useMobileInput ? (
             <div className="glass glass--white rounded-xl overflow-hidden">
               <div className="pp-mobile-tabs" role="tablist" aria-label="Mobile controls">
                 {['enter', 'journey', 'actions'].map(tab => (
@@ -3563,7 +2893,7 @@ const renderControls = () => (
           ) : (
             <div className="w-full">
               <div
-                style={{ position: 'relative', textAlign: 'center', width: 'fit-content', margin: '0 auto' }}
+                style={{ position: 'relative', textAlign: 'center', width: 'min(400px, calc(100vw - 24px))', maxWidth: '100%', margin: '0 auto' }}
                 className={shouldPulse ? 'pp-pulse-wrap' : undefined}
               >
                 <input
@@ -3581,10 +2911,11 @@ const renderControls = () => (
                   enterKeyHint="go"
                   aria-label="Select or enter a postcode"
                   style={{
-                    width: 400,
+                    width: '100%',
+                    boxSizing: 'border-box',
                     height: 20,
-                    fontSize: 28,
-                    padding: '16px 64px 16px 20px',
+                    fontSize: 'clamp(22px, 9vw, 28px)',
+                    padding: '16px 56px 16px 18px',
                     
                     letterSpacing: '0.04em',
                     display: 'inline-block',
@@ -3623,7 +2954,7 @@ const renderControls = () => (
         </div>
       )}
 
-      {!isTouch && (
+      {!useMobileInput && (
       <div className="glass glass--white px-3 pb-2">
         <div className="flex flex-wrap items-center gap-2">
           <div
@@ -3810,7 +3141,7 @@ const renderControls = () => (
 
       )}
 
-      {isTouch && giveUpOpen && createPortal(
+      {useMobileInput && giveUpOpen && createPortal(
         <div
           style={{
             position: 'fixed',
@@ -3847,7 +3178,7 @@ const renderControls = () => (
         </div>,
         document.body
       )}
-      <Modal
+      <GameModal
         open={showHints && !roundResolved && currentPath.length > 0}
         onClose={() => setShowHints(false)}
         title={dailyMode ? `Available connections (${Math.max(0, MAX_DAILY_HINTS - hintsUsed)} left)` : 'Available connections'}
@@ -3896,7 +3227,7 @@ const renderControls = () => (
             </div>
           );
         })()}
-      </Modal>
+      </GameModal>
 
       {(roundResolved && showOptimal && optimalPath?.length > 0) && (
         <div className="mt-3">
@@ -4062,7 +3393,7 @@ useEffect(() => {
     victoryOpen || giveUpOpen || showAbout || showHints ||
     leaveConfirmOpen || showTutorial;
 
-  if (!overlayOpen && !isTouch && gameState === 'playing' && !roundResolved) {
+  if (!overlayOpen && !useMobileInput && gameState === 'playing' && !roundResolved) {
     focusPostcodeInput();
   }
 
@@ -4093,7 +3424,7 @@ useEffect(() => {
   gameState,
   showDailyChooser, showFreePlayChooser,
   victoryOpen, giveUpOpen, showAbout, showHints, leaveConfirmOpen, showTutorial,
-  focusPostcodeInput, isTouch, roundResolved
+  focusPostcodeInput, useMobileInput, roundResolved
 ]);
 
 
@@ -4102,10 +3433,7 @@ useEffect(() => {
 // ---------- GameBoard ----------
 
 const renderGameBoard = () => (
-  <div className="pp-board">
-    {renderMap()}
-    {renderControls()}
-  </div>
+  <GameBoard map={renderMap()} controls={renderControls()} />
 );
 
 // ---------- Menu page ----------
@@ -4517,7 +3845,7 @@ const renderMenu = () => (
 
 
     {/* Existing About modal remains unchanged below */}
-<Modal
+<GameModal
   open={showAbout}
   onClose={() => setShowAbout(false)}
   title="About Postcode Pursuit"
@@ -4656,7 +3984,7 @@ const renderMenu = () => (
 
     </section>
   </div>
-</Modal>
+</GameModal>
 
 
 
@@ -4748,6 +4076,14 @@ if (route === 'settings') {
       onUiThemeChange={setUiTheme}
       colorblindFriendly={colorblindFriendly}
       onColorblindFriendlyChange={setColorblindFriendly}
+      inputMode={inputMode}
+      onInputModeChange={setInputMode}
+      largeControls={largeControls}
+      onLargeControlsChange={setLargeControls}
+      mapStyle={mapStyle}
+      onMapStyleChange={setMapStyle}
+      textSize={textSize}
+      onTextSizeChange={setTextSize}
     />
   );
 }

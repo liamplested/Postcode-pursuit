@@ -1,4 +1,4 @@
-import { readJSON, writeJSON, META_KEY } from '../PostcodePursuit';
+import { META_KEY, readJSON, writeJSON } from './storageUtils';
 import { getInstallId } from './installId';
 
 export function recordLifetimeMove({ nextCode, type }, { onPersist } = {}) {

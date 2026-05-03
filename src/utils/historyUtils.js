@@ -1,5 +1,4 @@
-import { readJSON, writeJSON } from './storageUtils'; // adjust path
-import { GAME_HISTORY_KEY } from '../PostcodePursuit';        // or inline the string
+import { GAME_HISTORY_KEY, readJSON, writeJSON } from './storageUtils';
 
 export function addGameToHistory(event, { onPersist } = {}) {
   const db = readJSON(GAME_HISTORY_KEY, { games: [] });

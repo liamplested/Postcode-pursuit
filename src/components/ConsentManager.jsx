@@ -74,7 +74,7 @@ function enableAnalytics(measurementId) {
   // 2) Load GA script
   const s = document.createElement("script");
   s.async = true;
-  s.src = `https://www.googletagmanager.com/gtag/js?id=G-9N7KBCD3G3`;
+  s.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
   document.head.appendChild(s);
 
   // 3) Install the REAL gtag that pushes to dataLayer

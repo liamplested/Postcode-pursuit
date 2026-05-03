@@ -1,8 +1,7 @@
 import { postcodeAreas } from './postcodeAreas'; 
 import { pathHasSequence } from './utils/pathUtils';
 import { lastNGamesArePerfect } from './utils/historyUtils';
-import { readJSON } from './utils/storageUtils';
-import { ACHIEVEMENTS_KEY, writeJSON, canonEdge} from './PostcodePursuit';
+import { ACHIEVEMENTS_KEY, canonEdge, readJSON, writeJSON } from './utils/storageUtils';
 
 
 const STREAK_KEY_V2 = (d) => `pp_daily_streak_v2_${d}`;   // per-difficulty
