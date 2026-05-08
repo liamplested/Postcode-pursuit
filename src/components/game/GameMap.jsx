@@ -152,6 +152,7 @@ export default function GameMap({
   ferryLinks: ferryRoutes = ferryLinks,
   flashAreas,
   gameWon,
+  roundResolved,
   getAreaStyle,
   getCenter,
   gRef,
@@ -342,7 +343,7 @@ export default function GameMap({
             <StepBadge key={`b-${id}`} id={id} index={i} centroidsRef={centroidsRef} mapStyle={mapStyle} />
           ))}
 
-          {gameWon && showOptimal && <OptimalPathOverlay optimalPath={optimalPath} />}
+          {(roundResolved ?? gameWon) && showOptimal && <OptimalPathOverlay optimalPath={optimalPath} />}
         </g>
       </svg>
     </div>

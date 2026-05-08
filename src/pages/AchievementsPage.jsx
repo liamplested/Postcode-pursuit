@@ -1,201 +1,351 @@
 // pages/AchievementsPage.jsx
 import React from 'react';
-import { Lock, Medal } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Lock, Medal } from 'lucide-react';
+import { postcodeAreas, ferryLinks, bridgeLinks } from '../postcodeAreas';
+import {
+  ACHIEVEMENTS_KEY,
+  GAME_HISTORY_KEY,
+  META_KEY,
+  STREAK_KEY_V2,
+  USED_BRIDGES_KEY,
+  USED_FERRIES_KEY,
+  VISITED_KEY,
+  canonEdge,
+  readJSON,
+} from '../utils/storageUtils';
 
-const HIDDEN_BONUS_IDS = new Set(['mersey', 'shortcut']); // hide while locked
+const HIDDEN_BONUS_IDS = new Set(['mersey', 'shortcut']);
+const DIFFS = ['easy', 'normal', 'hard', 'master'];
+const DIFF_LABELS = { easy: 'Easy', normal: 'Normal', hard: 'Hard', master: 'Master' };
+const STREAK_MILESTONES = [7, 14, 30, 365];
 
-const gridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-  gap: '12px',
-};
+const NON_REPEATABLE_IDS = new Set([
+  'first',
+  'centurion',
+  'half_century',
+  'double_perfect',
+  'turkey',
+]);
 
-const tierChipStyle = (tier) => {
-  const base = {
-    fontSize: 12,
-    padding: '2px 8px',
-    borderRadius: 999,
-    textTransform: 'uppercase',
-    borderWidth: 1,
-    borderStyle: 'solid',
-    whiteSpace: 'nowrap',
-  };
-  switch ((tier || '').toLowerCase()) {
-    case 'bronze':    return { ...base, background: '#FEF3C7', color: '#92400E', borderColor: '#FCD34D' };
-    case 'silver':    return { ...base, background: '#F1F5F9', color: '#0F172A', borderColor: '#CBD5E1' };
-    case 'gold':      return { ...base, background: '#FEF9C3', color: '#854D0E', borderColor: '#FDE68A' };
-    case 'legendary': return { ...base, background: '#F3E8FF', color: '#6B21A8', borderColor: '#D8B4FE' };
-    default:          return { ...base, background: '#FFFFFF', color: '#0F172A', borderColor: '#CBD5E1' };
-  }
-};
+const COVERAGE_IDS = new Set([
+  'visit_25',
+  'visit_50',
+  'explorer_75',
+  'visit_100',
+  'first_crossing',
+  'first_span',
+  'all_ferries',
+  'all_bridges',
+  'networker',
+  'infrastructure_chief',
+]);
 
-const categoryChipStyle = (category) => {
-  const base = {
-    fontSize: 11,
-    padding: '2px 7px',
-    borderRadius: 999,
-    textTransform: 'inherit',
-    borderWidth: 1,
-    borderStyle: 'solid',
-    whiteSpace: 'nowrap',
-  };
-  switch ((category || '').toLowerCase()) {
-    case 'challenge':
-      return { ...base, background: '#ffffffff', color: '#92400E', borderColor: '#F59E0B' };
-    case 'streak':
-      return { ...base, background: '#ffffffff', color: '#6B21A8', borderColor: '#C084FC' };
-    case 'exploration':
-    default:
-      return { ...base, background: '#ffffffff', color: '#166534', borderColor: '#22C55E' };
-  }
-};
-
-const tierBorderColor = (tier) => {
-  switch ((tier || '').toLowerCase()) {
-    case 'bronze':    return '#F59E0B';
-    case 'silver':    return '#CBD5E1';
-    case 'gold':      return '#FACC15';
-    case 'legendary': return '#C084FC';
-    default:          return 'rgba(255,255,255,0.5)';
-  }
-};
-
-const glassCardStyle = (tier) => ({
-  border: `1px solid ${tierBorderColor(tier)}`,
-  background: 'rgba(0, 0, 0, 0.45)',
-  backdropFilter: 'blur(10px)',
-  WebkitBackdropFilter: 'blur(10px)',
-  borderRadius: 5,
-  padding: '10px 12px',
-});
-
-const glassCardMuted = {
-  border: '1px solid rgba(255,255,255,0.5)',
-  background: 'rgba(143, 143, 143, 0.3)',
-  backdropFilter: 'blur(10px)',
-  WebkitBackdropFilter: 'blur(10px)',
-  borderRadius: 15,
-  padding: '10px 12px',
-};
-
-const TIER_ORDER  = ['legendary', 'gold', 'silver', 'bronze'];
-const TIER_TITLES = {
-  legendary: 'Legendary',
-  gold: 'Gold',
-  silver: 'Silver',
-  bronze: 'Bronze',
-};
+const TIER_ORDER = ['legendary', 'gold', 'silver', 'bronze'];
+const TIER_RANK = Object.fromEntries(TIER_ORDER.map((tier, i) => [tier, i]));
 
 function readAchievementsMap() {
-  try { return JSON.parse(localStorage.getItem('pp_achievements_v1') || '{}'); }
-  catch { return {}; }
+  return readJSON(ACHIEVEMENTS_KEY, {});
 }
 
-function groupByTier(list) {
-  return TIER_ORDER
-    .map(tier => ({
-      tier,
-      items: list.filter(a => (a.tier || '').toLowerCase() === tier),
-    }))
-    .filter(g => g.items.length > 0);
+function readHistory() {
+  return readJSON(GAME_HISTORY_KEY, { games: [] })?.games || [];
 }
 
-// --- Unlocked card header ---
-function AchCardUnlocked({ a, whenISO }) {
-  const when = whenISO ? new Date(whenISO) : null;
-  const category = a.category || 'xploration';
+function asObjectMap(value) {
+  if (Array.isArray(value)) return Object.fromEntries(value.map((x) => [x, true]));
+  if (value && typeof value === 'object') return value;
+  return {};
+}
+
+function readStreakCount(diff) {
+  const rec = readJSON(STREAK_KEY_V2(diff), null);
+  return Number(rec?.count || 0);
+}
+
+function readFullMeta() {
+  const stored = readJSON(META_KEY, {}) || {};
+  const visitedAreas = asObjectMap(readJSON(VISITED_KEY, stored.visitedAreas || {}));
+  const usedFerries = asObjectMap(readJSON(USED_FERRIES_KEY, stored.usedFerries || {}));
+  const usedBridges = asObjectMap(readJSON(USED_BRIDGES_KEY, stored.usedBridges || {}));
+  const allFerries = new Set((ferryLinks || []).map(({ a, b }) => canonEdge(a, b)).filter(Boolean));
+  const allBridges = new Set((bridgeLinks || []).map(({ a, b }) => canonEdge(a, b)).filter(Boolean));
+
+  return {
+    ...stored,
+    visitedAreas,
+    usedFerries,
+    usedBridges,
+    visitedCount: Object.keys(visitedAreas).length,
+    totalAreas: Object.keys(postcodeAreas || {}).length,
+    usedFerriesCount: Object.keys(usedFerries).length,
+    usedBridgesCount: Object.keys(usedBridges).length,
+    totalFerries: allFerries.size,
+    totalBridges: allBridges.size,
+  };
+}
+
+function achievementKind(a) {
+  if ((a.category || '').toLowerCase() === 'streak' || a.id.startsWith('streak')) return 'streak';
+  if (COVERAGE_IDS.has(a.id)) return 'coverage';
+  if (NON_REPEATABLE_IDS.has(a.id) || a.hidden) return 'lifetime';
+  return 'game';
+}
+
+function getStreakTarget(a) {
+  if (a.id === 'streak_365') return { target: 365, diff: null };
+  const match = /^streak(\d+)_(easy|normal|hard|master)$/.exec(a.id);
+  if (!match) return null;
+  return { target: Number(match[1]), diff: match[2] };
+}
+
+function getStreakProgress(a) {
+  const targetInfo = getStreakTarget(a);
+  if (!targetInfo) return null;
+
+  if (targetInfo.diff) {
+    const current = readStreakCount(targetInfo.diff);
+    return {
+      current,
+      total: targetInfo.target,
+      label: `${current} / ${targetInfo.target} days`,
+      detail: `${DIFF_LABELS[targetInfo.diff]} current streak`,
+    };
+  }
+
+  const current = Math.max(...DIFFS.map(readStreakCount));
+  return {
+    current,
+    total: targetInfo.target,
+    label: `${current} / ${targetInfo.target} days`,
+    detail: 'Best current streak',
+  };
+}
+
+function getCoverageProgress(a, meta, totalAreasProp) {
+  const totalAreas = Number(totalAreasProp) || meta.totalAreas || 0;
+  const visited = meta.visitedCount || 0;
+  const usedFerries = meta.usedFerriesCount || 0;
+  const totalFerries = meta.totalFerries || 0;
+  const usedBridges = meta.usedBridgesCount || 0;
+  const totalBridges = meta.totalBridges || 0;
+
+  switch (a.id) {
+    case 'visit_25':
+      return progress('Areas visited', visited, Math.ceil(totalAreas * 0.25), totalAreas);
+    case 'visit_50':
+      return progress('Areas visited', visited, Math.ceil(totalAreas * 0.5), totalAreas);
+    case 'explorer_75':
+      return progress('Areas visited', visited, Math.ceil(totalAreas * 0.75), totalAreas);
+    case 'visit_100':
+      return progress('Areas visited', visited, totalAreas, totalAreas);
+    case 'first_crossing':
+      return progress('Ferry routes used', usedFerries, 1, totalFerries);
+    case 'first_span':
+      return progress('Bridge/tunnel routes used', usedBridges, 1, totalBridges);
+    case 'all_ferries':
+      return progress('Ferry routes used', usedFerries, totalFerries, totalFerries);
+    case 'all_bridges':
+      return progress('Bridge/tunnel routes used', usedBridges, totalBridges, totalBridges);
+    case 'networker': {
+      const ferryNeed = Math.ceil(totalFerries / 2);
+      const bridgeNeed = Math.ceil(totalBridges / 2);
+      return {
+        detail: 'Ferries and bridges used',
+        current: Math.min(usedFerries, ferryNeed) + Math.min(usedBridges, bridgeNeed),
+        total: ferryNeed + bridgeNeed,
+        label: `${usedFerries}/${ferryNeed} ferries · ${usedBridges}/${bridgeNeed} bridges`,
+      };
+    }
+    case 'infrastructure_chief':
+      return {
+        detail: 'All infrastructure used',
+        current: usedFerries + usedBridges,
+        total: totalFerries + totalBridges,
+        label: `${usedFerries}/${totalFerries} ferries · ${usedBridges}/${totalBridges} bridges`,
+      };
+    default:
+      return null;
+  }
+}
+
+function progress(detail, current, target, denominator = target) {
+  return {
+    detail,
+    current,
+    total: target,
+    label: denominator && denominator !== target ? `${current} / ${denominator}` : `${current} / ${target}`,
+  };
+}
+
+function getGameRepeatCount(a, games, meta) {
+  if (achievementKind(a) !== 'game') return null;
+  let count = 0;
+
+  for (const game of games) {
+    try {
+      if ((a.category || '').toLowerCase() === 'challenge' && Number(game?.hintsUsed || 0) > 0) continue;
+      if (a.check?.(game, { totalGames: 0, totalWins: 0 }, meta)) count += 1;
+    } catch {}
+  }
+
+  return count;
+}
+
+function getRepeatCount(a, unlockedRecord, games, meta) {
+  const kind = achievementKind(a);
+  const stored = Number(unlockedRecord?.achievedCount || unlockedRecord?.count || 0);
+
+  if (kind === 'game') {
+    const fromHistory = getGameRepeatCount(a, games, meta);
+    return Math.max(stored, fromHistory || 0, unlockedRecord ? 1 : 0);
+  }
+
+  if (kind === 'streak') {
+    return Math.max(stored, unlockedRecord ? 1 : 0);
+  }
+
+  return null;
+}
+
+function pct(current, total) {
+  if (!total || total <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+}
+
+function nextStreakMilestone(count) {
+  return STREAK_MILESTONES.find((n) => count < n) || 365;
+}
+
+function sortAchievements(a, b) {
+  const tierDelta = (TIER_RANK[(a.tier || '').toLowerCase()] ?? 99) - (TIER_RANK[(b.tier || '').toLowerCase()] ?? 99);
+  return tierDelta || a.name.localeCompare(b.name);
+}
+
+function sortByUnlockedThenAchievement(a, b) {
+  const unlockedDelta = Number(!!b.unlockedRecord) - Number(!!a.unlockedRecord);
+  return unlockedDelta || sortAchievements(a.achievement, b.achievement);
+}
+
+function sortStreakAchievements(a, b) {
+  const unlockedDelta = Number(!!b.unlockedRecord) - Number(!!a.unlockedRecord);
+  if (unlockedDelta) return unlockedDelta;
+
+  const targetA = getStreakTarget(a.achievement);
+  const targetB = getStreakTarget(b.achievement);
+  const milestoneDelta = (targetA?.target ?? 9999) - (targetB?.target ?? 9999);
+  if (milestoneDelta) return milestoneDelta;
+
+  const diffA = targetA?.diff ? DIFFS.indexOf(targetA.diff) : DIFFS.length;
+  const diffB = targetB?.diff ? DIFFS.indexOf(targetB.diff) : DIFFS.length;
+  return diffA - diffB || a.achievement.name.localeCompare(b.achievement.name);
+}
+
+function cardClass(tier, unlocked) {
+  const base = 'pp-ach-card';
+  if (!unlocked) return `${base} pp-ach-card--locked`;
+  return `${base} pp-ach-card--${(tier || 'bronze').toLowerCase()}`;
+}
+
+function categoryLabel(kind) {
+  if (kind === 'game') return 'Repeatable';
+  if (kind === 'streak') return 'Streak';
+  if (kind === 'coverage') return 'Progress';
+  return 'Lifetime';
+}
+
+function ProgressBar({ progressInfo, complete = false }) {
+  if (!progressInfo || !progressInfo.total) return null;
+  const width = pct(progressInfo.current, progressInfo.total);
   return (
-    <div className="glass rounded-2xl transition hover:shadow-lg"
-         style={glassCardStyle(a.tier)} title={a.description}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          minWidth: 0,                // ← allow children to shrink
-        }}
-      >
-        <div><span className="text-2xl" aria-hidden>{a.icon}</span></div>
+    <div className="mt-3">
+      <div className="pp-ach-progress-label">
+        <span>{progressInfo.detail}</span>
+        <span className="tabular-nums">{complete ? 'Complete' : progressInfo.label}</span>
+      </div>
+      <div className="pp-ach-progress-track">
         <div
-          className="font-semibold truncate"
-          style={{ flex: '1 1 auto', minWidth: 0 }}  // ← let the name truncate
-        >
-          <b>{a.name}</b>
-        </div>
-        
+          className={complete ? 'pp-ach-progress-fill pp-ach-progress-fill--complete' : 'pp-ach-progress-fill'}
+          style={{ width: `${complete ? 100 : width}%` }}
+        />
       </div>
-
-      <div className="mt-2 flex flex-wrap gap-2">
-        <span style={tierChipStyle(a.tier)}>{a.tier}</span>
-        <span style={categoryChipStyle(category)}>{category}</span>
-      </div>
-
-      <div className="text-sm mt-2 text-white/90">{a.description}</div>
-      {/* <div className="text-sm mt-2 text-white/90"><span
-          style={{
-            marginLeft: 'auto',
-            ...tierChipStyle(a.tier),
-            flex: '0 0 auto',          // ← chip never grows
-          }}
-        >
-          {a.tier}
-        </span><br />{a.description}</div> */}
-      {when && (
-        <div className="text-xs mt-2 text-emerald-200/80">
-          Unlocked {when.toLocaleDateString()}
-        </div>
-      )}
     </div>
   );
 }
 
+function AchievementCard({ achievement, unlockedRecord, repeatCount, progressInfo }) {
+  const unlocked = !!unlockedRecord;
+  const kind = achievementKind(achievement);
+  const isComplete = unlocked && kind !== 'game';
+  const when = unlockedRecord?.unlockedAt ? new Date(unlockedRecord.unlockedAt) : null;
 
-function AchCardLocked({ a }) {
-  const category = a.category || 'exploration';
   return (
-    <div className="glass rounded-2xl" style={glassCardMuted} title={a.description}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          minWidth: 0,                           // ← allow shrink
-        }}
-      >
-        <div className="w-6 h-6 grid place-items-center rounded bg-slate-200 text-slate-600">
-          <Lock className="w-4 h-4" aria-hidden />
-        </div>
-        <div
-          className="font-semibold text-slate-50 truncate"
-          style={{ flex: '1 1 auto', minWidth: 0 }}   // ← truncate name
-        >
-          {a.name}
+    <article
+      className={cardClass(achievement.tier, unlocked)}
+      title={achievement.description}
+    >
+      <div className="pp-ach-card-inner">
+        <div className={unlocked ? 'pp-ach-icon' : 'pp-ach-icon pp-ach-icon--locked'}>
+          {unlocked ? <span aria-hidden>{achievement.icon}</span> : <Lock className="h-5 w-5" aria-hidden />}
         </div>
 
-      </div>
+        <div className="pp-ach-card-body">
+          <div className="pp-ach-title-row">
+            <h3>{achievement.name}</h3>
+            {repeatCount > 1 && (
+              <span className="pp-ach-count">
+                x{repeatCount}
+              </span>
+            )}
+            {unlocked && repeatCount <= 1 && (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-200" aria-label="Unlocked" />
+            )}
+          </div>
 
-      <div className="mt-2 flex flex-wrap gap-2">
-        <span style={tierChipStyle(a.tier)}>{a.tier}</span>
-        <span style={categoryChipStyle(category)}>{category}</span>
-      </div>
+          <div className="pp-ach-chip-row">
+            <span className="pp-ach-chip pp-ach-chip--tier">
+              {achievement.tier}
+            </span>
+            <span className="pp-ach-chip">
+              {categoryLabel(kind)}
+            </span>
+          </div>
 
-      <div className="text-sm mt-1 text-slate-100/90">{a.description}</div>
-      {/* <div className="text-sm mt-1 text-slate-100/90">        <span
-          style={{
-            marginLeft: 'auto',
-            ...tierChipStyle(a.tier),
-            flex: '0 0 auto',                        // ← chip fixed
-          }}
-        >
-          {a.tier}
-        </span><br />{a.description}</div> */}
-    </div>
+          <p className="pp-ach-desc">{achievement.description}</p>
+
+          <ProgressBar progressInfo={progressInfo} complete={isComplete} />
+
+          <div className="pp-ach-meta">
+            {unlocked ? (
+              <>
+                <span>{kind === 'game' ? 'Unlocked' : 'Completed'}</span>
+                {repeatCount > 1 && <span>Achieved {repeatCount} times</span>}
+                {when && <span>{when.toLocaleDateString()}</span>}
+              </>
+            ) : (
+              <span>Locked</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
   );
 }
 
-function readMeta() {
-  try { return JSON.parse(localStorage.getItem('pp_meta_v1') || '{}'); }
-  catch { return {}; }
+function Section({ title, note, count, children }) {
+  return (
+    <section className="pp-ach-section">
+      <div className="pp-ach-section-head">
+        <div>
+          <h2>{title}</h2>
+          <p>{note}</p>
+        </div>
+        <span className="pp-ach-section-count">
+          {count}
+        </span>
+      </div>
+      <div className="pp-ach-grid">{children}</div>
+    </section>
+  );
 }
 
 export default function AchievementsPage({
@@ -205,107 +355,151 @@ export default function AchievementsPage({
   onBack,
 }) {
   const unlockedMap = readAchievementsMap();
-    const meta = React.useMemo(() => readMeta(), []);
   const unlockedIds = new Set(Object.keys(unlockedMap));
-const visitedCount =
-    Number.isFinite(visitedCountProp) ? visitedCountProp
-    : (meta.visitedCount ?? Object.keys(meta.visitedAreas || {}).length ?? 0);
-  const isHiddenLocked = (a) => !!a.hidden || HIDDEN_BONUS_IDS.has(a.id);
+  const games = readHistory();
+  const meta = readFullMeta();
+  const visitedCount =
+    Number.isFinite(visitedCountProp) ? visitedCountProp : (meta.visitedCount || 0);
+  const resolvedTotalAreas = Number(totalAreas) || meta.totalAreas || 0;
 
-  // Split & sort
-  const unlocked = achievements
-    .filter(a => unlockedIds.has(a.id))
-    .sort((a, b) => {
-      const ta = new Date(unlockedMap[a.id]?.unlockedAt || 0).getTime();
-      const tb = new Date(unlockedMap[b.id]?.unlockedAt || 0).getTime();
-      return tb - ta; // newest first
-    });
+  const visibleAchievements = achievements.filter((a) => unlockedIds.has(a.id) || !(a.hidden || HIDDEN_BONUS_IDS.has(a.id)));
 
-  const locked = achievements
-    .filter(a => !unlockedIds.has(a.id) && !isHiddenLocked(a))
-    .sort((a, b) => (a.tier || '').localeCompare(b.tier || '') || a.name.localeCompare(b.name));
+  const enriched = visibleAchievements.map((achievement) => {
+    const unlockedRecord = unlockedMap[achievement.id] || null;
+    const kind = achievementKind(achievement);
+    const progressInfo =
+      kind === 'streak'
+        ? getStreakProgress(achievement)
+        : kind === 'coverage'
+          ? getCoverageProgress(achievement, meta, resolvedTotalAreas)
+          : null;
 
-  // Group by tier
-  const unlockedGroups = groupByTier(unlocked);
-  const lockedGroups   = groupByTier(locked);
+    return {
+      achievement,
+      kind,
+      unlockedRecord,
+      repeatCount: getRepeatCount(achievement, unlockedRecord, games, meta),
+      progressInfo,
+    };
+  });
+
+  const unlocked = enriched.filter((x) => x.unlockedRecord);
+  const repeatable = enriched.filter((x) => x.kind === 'game').sort(sortByUnlockedThenAchievement);
+  const streaks = enriched.filter((x) => x.kind === 'streak').sort(sortStreakAchievements);
+  const coverage = enriched.filter((x) => x.kind === 'coverage').sort(sortByUnlockedThenAchievement);
+  const lifetime = enriched.filter((x) => x.kind === 'lifetime').sort(sortByUnlockedThenAchievement);
+
+  const streakSummary = DIFFS.map((diff) => {
+    const current = readStreakCount(diff);
+    const next = nextStreakMilestone(current);
+    return { diff, current, next };
+  });
 
   return (
-    <div className="pages-achievements min-h-screen w-full bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
-      <div className="max-w-5xl mx-auto p-4">
-        <div className="flex items-center gap-2 py-4">
-          <button className="btn btn-primary" onClick={onBack} aria-label="Back">← Back</button>
-          <h1 className="text-2xl font-bold ml-2">
-            <span className="inline-flex items-center gap-2">
-              <Medal className="w-5 h-5" /> Achievements
-            </span>
-          </h1>
+    <div className="pages-achievements pp-ach-page">
+      <div className="pp-ach-wrap">
+        <div className="pp-ach-topbar">
+          <div>
+            <h1>
+              <Medal className="h-6 w-6" /> <span>Achievements</span>
+            </h1>
+            <p>
+              Repeat counts, current streak milestones, and lifetime progress.
+            </p>
+          </div>
+          <button className="btn btn-primary pp-ach-back" onClick={onBack} aria-label="Back">
+            <ArrowLeft className="h-4 w-4" /> Back
+          </button>
         </div>
 
-        <div className="glass rounded-2xl p-5">
-          <p className="text-slate-200 mb-4 text-sm">
-            Visited <b>{visitedCount}</b> / <b>{totalAreas}</b> postcode areas
-          </p>
-          <div className="mb-5 rounded-xl border border-white/20 bg-white/10 p-3 text-sm text-slate-100">
-            <p><b>🧭 Exploration</b> achievements can be earned in Free Play or Daily Challenge.</p>
-            <p><b>🗺️ Challenge</b> achievements require a no-hint run.</p>
-            <p><b>🔥 Streak</b> achievements can only be achieved in the Daily Challenges</p>
+        <div className="pp-ach-summary">
+          <div className="pp-ach-metric">
+            <div>{unlocked.length} / {visibleAchievements.length}</div>
+            <span>Unlocked</span>
+          </div>
+          <div className="pp-ach-metric">
+            <div>{visitedCount} / {resolvedTotalAreas}</div>
+            <span>Areas Visited</span>
+          </div>
+          <div className="pp-ach-metric">
+            <div>{meta.usedFerriesCount} / {meta.totalFerries}</div>
+            <span>Ferries Used</span>
+          </div>
+          <div className="pp-ach-metric">
+            <div>{meta.usedBridgesCount} / {meta.totalBridges}</div>
+            <span>Bridges Used</span>
+          </div>
+        </div>
+
+        <div className="pp-ach-note">
+          <p className="m-0"><b>Repeatable</b> achievements quietly track how many times they have been achieved where history can determine it.</p>
+          <p className="m-0 mt-1"><b>Streak</b> achievements show current progress toward each milestone. <b>Coverage</b> achievements show permanent lifetime progress.</p>
+        </div>
+
+        <div className="pp-ach-sections">
+          <Section
+            title="Repeatable Per Game"
+            note="First unlock gets the moment; later repeats stay as a subtle count."
+            count={`${repeatable.filter((x) => x.unlockedRecord).length} unlocked`}
+          >
+            {repeatable.map((item) => (
+              <AchievementCard key={item.achievement.id} {...item} />
+            ))}
+          </Section>
+
+          <Section
+            title="Repeatable Streak Milestones"
+            note="Achievements are permanent, but the bars track the streak you are building now."
+            count={`${streaks.filter((x) => x.unlockedRecord).length} unlocked`}
+          >
+            {streaks.map((item) => (
+              <AchievementCard key={item.achievement.id} {...item} />
+            ))}
+          </Section>
+
+          <div className="pp-ach-streak-strip">
+            {streakSummary.map(({ diff, current, next }) => (
+              <div key={diff} className="pp-ach-mini">
+                <div>{DIFF_LABELS[diff]}</div>
+                <p>
+                  <b className="tabular-nums">{current}</b> days · {Math.max(0, next - current)} to {next}
+                </p>
+                <ProgressBar
+                  progressInfo={{
+                    detail: 'Current streak',
+                    current,
+                    total: next,
+                    label: `${current} / ${next}`,
+                  }}
+                />
+              </div>
+            ))}
           </div>
 
-          {/* Unlocked */}
-          <section className="mb-6">
-            <h2 className="text-lg font-semibold mb-3 text-white">
-              Unlocked <span className="opacity-80">({unlocked.length})</span>
-            </h2>
-            {unlocked.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-white/70 p-4 text-slate-600 text-sm">
-                No achievements unlocked yet. Keep playing!
-              </div>
-            ) : (
-              unlockedGroups.map(({ tier, items }) => (
-                <div key={`unlocked-${tier}`} className="mb-6 last:mb-0">
-                  <h3 className="text-slate-200 font-semibold mb-2">
-                    {TIER_TITLES[tier]} <span className="opacity-80">({items.length})</span>
-                  </h3>
-                  <div style={gridStyle}>
-                    {items.map(a => (
-                      <AchCardUnlocked
-                        key={a.id}
-                        a={a}
-                        whenISO={unlockedMap[a.id]?.unlockedAt}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-          </section>
+          <Section
+            title="Lifetime / Meta Coverage"
+            note="Slow-burn achievements with natural counters and progress bars."
+            count={`${coverage.filter((x) => x.unlockedRecord).length} unlocked`}
+          >
+            {coverage.map((item) => (
+              <AchievementCard key={item.achievement.id} {...item} />
+            ))}
+          </Section>
 
-          {/* Locked (bonus items excluded) */}
-          <section>
-            <h2 className="text-lg font-semibold mb-3 text-white">
-              Locked <span className="opacity-80">({locked.length})</span>
-            </h2>
-            {locked.length === 0 ? (
-              <div className="rounded-xl border border-slate-200 bg-white/70 p-4 text-slate-600 text-sm">
-                Nothing to show here — nice!
-              </div>
-            ) : (
-              lockedGroups.map(({ tier, items }) => (
-                <div key={`locked-${tier}`} className="mb-6 last:mb-0">
-                  <h3 className="text-slate-200 font-semibold mb-2">
-                    {TIER_TITLES[tier]} <span className="opacity-80">({items.length})</span>
-                  </h3>
-                  <div style={gridStyle}>
-                    {items.map(a => <AchCardLocked key={a.id} a={a} />)}
-                  </div>
-                </div>
-              ))
-            )}
-            <p className="mt-3 text-xs text-slate-400">
-              Bonus (hidden) achievements don’t appear here until you unlock them.
-            </p>
-          </section>
+          <Section
+            title="Lifetime Achievements"
+            note="One-off goals and hidden discoveries stay clean and binary."
+            count={`${lifetime.filter((x) => x.unlockedRecord).length} unlocked`}
+          >
+            {lifetime.map((item) => (
+              <AchievementCard key={item.achievement.id} {...item} />
+            ))}
+          </Section>
         </div>
+
+        <p className="pp-ach-footnote">
+          Bonus hidden achievements do not appear here until unlocked.
+        </p>
       </div>
     </div>
   );

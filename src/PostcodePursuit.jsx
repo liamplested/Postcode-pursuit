@@ -395,8 +395,13 @@ const edgeType = (a, b) => {
   return 'land';
 };
 
+const getCloudProgressSnapshot = useCallback(
+  () => getLocalSnapshot({ includeAnalytics: false }),
+  []
+);
+
 const { user, queueSave, saveNow, overwriteNow } =
-  useCloudSync(getLocalSnapshot, writeLocalSnapshot);
+  useCloudSync(getCloudProgressSnapshot, writeLocalSnapshot);
 
 // One helper for everywhere you persist
 const onPersist = React.useCallback((immediate = false) => {
@@ -919,6 +924,12 @@ onPersist?.();
 ]);
 
 const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
+const STREAK_MILESTONES = [
+  { days: 7, name: 'First-Class Week' },
+  { days: 14, name: 'Fortnight Postmark' },
+  { days: 30, name: 'Monthly Round' },
+  { days: 365, name: 'The Grand Route' },
+];
 
 
   const { reset, animateTo, getState } = useSvgPan(svgRef, gRef, {
@@ -1943,6 +1954,7 @@ const finishGame = useCallback((finalPath) => {
   const path = Array.isArray(finalPath) && finalPath.length ? finalPath : currentPath;
 
   setGameWon(true);
+  setShowOptimal(true);
   addVisited([targetArea], postcodeAreas);
  const metaNew = checkAndUnlockMetaAchievements(difficulty, postcodeAreas, ferryLinks, bridgeLinks);
   if (metaNew?.length) enqueueAchievementBatch(metaNew);
@@ -2517,6 +2529,7 @@ const renderMap = () => (
     ferryLinks={ferryLinks}
     flashAreas={flashAreas}
     gameWon={gameWon}
+    roundResolved={roundResolved}
     getAreaStyle={getAreaStyle}
     getCenter={getCenter}
     gRef={gRef}
@@ -2954,12 +2967,30 @@ const renderControls = () => (
         </div>
       )}
 
+      {useMobileInput && roundResolved && (
+        <div className="glass glass--white rounded-xl px-3 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex min-w-0 flex-1 items-center gap-2 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-emerald-900">
+              <Trophy className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 text-sm">
+                {gameWon ? <>Completed in <b>{Math.max(0, currentPath.length - 1)}</b></> : <>Gave up after <b>{Math.max(0, currentPath.length - 1)}</b></>}
+                {optimalPath.length > 0 && <> · Optimal <b>{Math.max(0, optimalPath.length - 1)}</b></>}
+              </span>
+            </div>
+
+            <button onClick={() => setShowOptimal(v => !v)} className="btn btn-purple shrink-0">
+              {showOptimal ? 'Hide optimal route' : 'Show optimal route'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {!useMobileInput && (
       <div className="glass glass--white px-3 pb-2">
         <div className="flex flex-wrap items-center gap-2">
           <div
             ref={journeyRailRef}
-            className="journey-rail flex items-center gap-2 overflow-x-auto whitespace-nowrap"
+            className="journey-rail flex min-w-0 flex-1 items-center gap-2 overflow-x-auto whitespace-nowrap"
           >
             <span className="text-slate-200/90 shrink-0">Journey:</span>
             {getVisibleJourneyItems().map((item, railIdx) => {
@@ -3050,7 +3081,7 @@ const renderControls = () => (
             )}
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             {!roundResolved && !masterMode && (
               <button
                 onClick={undoLastMove}
@@ -3512,36 +3543,45 @@ const renderMenu = () => (
       </div>
     </div>
     {/* Daily streaks summary */}
-    {Object.values(streaks).some(n => (Number(n) || 0) > 0) && (
-      <div className="mt-6 mx-auto w-full max-w-xl">
-        <div className="glass glass--white rounded-xl p-4">
-          <h3 className="text-base font-semibold text-slate-900 mb-3 text-center">
-            Your Daily Streaks
-          </h3>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-slate-600">
-                <th className="text-left py-2">Difficulty</th>
-                <th className="text-right py-2">Streak</th>
-              </tr>
-            </thead>
-            <tbody>
-              {DIFF_ORDER.map((d) => (
-                <tr key={d} className="border-t border-slate-200/40">
-                  <td className="py-2 font-medium">
-                    {DIFF_LABELS[d] ?? d}
-                  </td>
-                  <td className="py-2 text-right">
-                    <span aria-hidden="true">{renderStreak(streaks[d]) || '-'}</span>
-                    <span className="sr-only">{streaks[d] || 0}-day streak</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="pp-home-streaks mt-6 mx-auto w-full max-w-xl">
+      <div className="glass glass--white rounded-xl p-4">
+        <h3>Your Daily Streaks</h3>
+        <p>
+          {hasAnyStreak(streaks)
+            ? 'Keep going to earn your next postmark.'
+            : 'Win a Daily Challenge to start a streak.'}
+        </p>
+        <div className="pp-home-streak-list">
+          {DIFF_ORDER.map((d) => {
+            const count = streakCount(streaks[d]);
+            const milestone = nextStreakMilestone(count);
+            const daysToGo = milestone ? Math.max(0, milestone.days - count) : 0;
+
+            return (
+              <div key={d} className="pp-home-streak-row">
+                <div className="pp-home-streak-main">
+                  <span className="pp-home-streak-diff">{DIFF_LABELS[d] ?? d}</span>
+                  <span className="pp-home-streak-count" aria-label={`${count}-day streak`}>
+                    {count} {count === 1 ? 'day' : 'days'}
+                  </span>
+                </div>
+
+                {count > 0 && milestone && (
+                  <div className="pp-home-streak-progress" aria-label={`${count} of ${milestone.days} days toward ${milestone.name}`}>
+                    <div className="pp-home-streak-bar">
+                      <span style={{ width: `${streakProgressPercent(count, milestone.days)}%` }} />
+                    </div>
+                    <div className="pp-home-streak-next">
+                      {daysToGo === 0 ? milestone.name : `${daysToGo} to ${milestone.name}`}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
-    )}
+    </div>
 
     <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm">
       <button className="btn btn-neutral" onClick={() => setShowAbout(true)}>
@@ -4011,22 +4051,26 @@ function getDailyStatusMeta(diff) {
   return { status, label: 'Not played', className: 'bg-slate-100 text-slate-700' };
 }
 
-function renderStreak(count) {
-  const n = Number(count) || 0;
-  if (n <= 0) return null;
-  const fire = '\u{1F525}';
-  if (n < 10) {
-    return <span aria-label={`${n}-day streak`}>{fire.repeat(n)}</span>;
-  }
-  return (
-    <span className="inline-flex items-center gap-1" aria-label={`${n}-day streak`}>
-      {fire}x{n}
-    </span>
-  );
+function streakCount(value) {
+  if (value && typeof value === 'object') return Number(value.count) || 0;
+  return Number(value) || 0;
+}
+
+function hasAnyStreak(allStreaks) {
+  return DIFF_ORDER.some((diff) => streakCount(allStreaks?.[diff]) > 0);
+}
+
+function nextStreakMilestone(count) {
+  return STREAK_MILESTONES.find((milestone) => count < milestone.days) || null;
+}
+
+function streakProgressPercent(count, target) {
+  if (!target) return 0;
+  return Math.max(2, Math.min(100, Math.round((count / target) * 100)));
 }
 
 function renderSingleFireForChooser(count) {
-  const n = Number(count) || 0;
+  const n = streakCount(count);
   return n > 0 ? (
     <span aria-label={`${n}-day streak`} title={`${n}-day streak`}>{'\u{1F525}'}</span>
   ) : null;

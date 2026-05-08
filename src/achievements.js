@@ -255,59 +255,59 @@ export const achievements = [
     } },
 
     // ---- Easy streaks ----
-{ id: 'streak7_easy',  name: 'Warming Up — Easy',  icon:'🔥', tier:'bronze',
+{ id: 'streak7_easy',  name: 'First-Class Week — Easy',  icon:'🔥', tier:'bronze',
   description: '7-day daily streak on Easy',
   check: () => readStreakCount('easy') >= 7 },
 
-{ id: 'streak14_easy', name: 'In the Groove — Easy', icon:'🔥', tier:'silver',
+{ id: 'streak14_easy', name: 'Fortnight Postmark — Easy', icon:'🔥', tier:'silver',
   description: '14-day daily streak on Easy',
   check: () => readStreakCount('easy') >= 14 },
 
-{ id: 'streak30_easy', name: 'On a Roll — Easy', icon:'🔥', tier:'gold',
+{ id: 'streak30_easy', name: 'Monthly Round — Easy', icon:'🔥', tier:'gold',
   description: '30-day daily streak on Easy',
   check: () => readStreakCount('easy') >= 30 },
 
 // ---- Normal streaks ----
-{ id: 'streak7_normal',  name: 'Warming Up — Normal',  icon:'🔥', tier:'bronze',
+{ id: 'streak7_normal',  name: 'First-Class Week — Normal',  icon:'🔥', tier:'bronze',
   description: '7-day daily streak on Normal',
   check: () => readStreakCount('normal') >= 7 },
 
-{ id: 'streak14_normal', name: 'In the Groove — Normal', icon:'🔥', tier:'silver',
+{ id: 'streak14_normal', name: 'Fortnight Postmark — Normal', icon:'🔥', tier:'silver',
   description: '14-day daily streak on Normal',
   check: () => readStreakCount('normal') >= 14 },
 
-{ id: 'streak30_normal', name: 'On a Roll — Normal', icon:'🔥', tier:'gold',
+{ id: 'streak30_normal', name: 'Monthly Round — Normal', icon:'🔥', tier:'gold',
   description: '30-day daily streak on Normal',
   check: () => readStreakCount('normal') >= 30 },
 
 // ---- Hard streaks ----
-{ id: 'streak7_hard',  name: 'Warming Up — Hard',  icon:'🔥', tier:'bronze',
+{ id: 'streak7_hard',  name: 'First-Class Week — Hard',  icon:'🔥', tier:'bronze',
   description: '7-day daily streak on Hard',
   check: () => readStreakCount('hard') >= 7 },
 
-{ id: 'streak14_hard', name: 'In the Groove — Hard', icon:'🔥', tier:'silver',
+{ id: 'streak14_hard', name: 'Fortnight Postmark — Hard', icon:'🔥', tier:'silver',
   description: '14-day daily streak on Hard',
   check: () => readStreakCount('hard') >= 14 },
 
-{ id: 'streak30_hard', name: 'On a Roll — Hard', icon:'🔥', tier:'gold',
+{ id: 'streak30_hard', name: 'Monthly Round — Hard', icon:'🔥', tier:'gold',
   description: '30-day daily streak on Hard',
   check: () => readStreakCount('hard') >= 30 },
 
 // ---- Master streaks ----
-{ id: 'streak7_master',  name: 'Warming Up — Master',  icon:'🔥', tier:'bronze',
+{ id: 'streak7_master',  name: 'First-Class Week — Master',  icon:'🔥', tier:'bronze',
   description: '7-day daily streak on Master',
   check: () => readStreakCount('master') >= 7 },
 
-{ id: 'streak14_master', name: 'In the Groove — Master', icon:'🔥', tier:'silver',
+{ id: 'streak14_master', name: 'Fortnight Postmark — Master', icon:'🔥', tier:'silver',
   description: '14-day daily streak on Master',
   check: () => readStreakCount('master') >= 14 },
 
-{ id: 'streak30_master', name: 'On a Roll — Master', icon:'🔥', tier:'gold',
+{ id: 'streak30_master', name: 'Monthly Round — Master', icon:'🔥', tier:'gold',
   description: '30-day daily streak on Master',
   check: () => readStreakCount('master') >= 30 },
 
 // 365 streak
-{ id: 'streak_365', name: 'Unbreakable', icon:'🔥', tier:'legendary',
+{ id: 'streak_365', name: 'The Grand Route', icon:'🔥', tier:'legendary',
   description: 'Daily streak of 365 (any difficulty)',
   check: (_e,_h,_meta) => ['easy','normal','hard','master'].some(d => readStreakCount(d) >= 365) },
 
@@ -401,15 +401,15 @@ export function unlockStreaksFor(diff) {
   const n = readStreakCount(diff);
   const want = [];
 
-  if (n >= 365) want.push({ id: 'streak_365', name: 'Unbreakable',  tier: 'legendary' });
+  if (n >= 365) want.push({ id: 'streak_365', name: 'The Grand Route', tier: 'legendary' });
 
   // per-difficulty thresholds
   const titleCase = s => s.charAt(0).toUpperCase() + s.slice(1);
   const label = titleCase(diff);
 
-  if (n >= 7)  want.push({ id: `streak7_${diff}`,  name: `Warming Up — ${label}`,  tier: 'bronze'  });
-  if (n >= 14) want.push({ id: `streak14_${diff}`, name: `In the Groove — ${label}`, tier: 'silver' });
-  if (n >= 30) want.push({ id: `streak30_${diff}`, name: `On a Roll — ${label}`,   tier: 'gold'    });
+  if (n >= 7)  want.push({ id: `streak7_${diff}`,  name: `First-Class Week — ${label}`, tier: 'bronze' });
+  if (n >= 14) want.push({ id: `streak14_${diff}`, name: `Fortnight Postmark — ${label}`, tier: 'silver' });
+  if (n >= 30) want.push({ id: `streak30_${diff}`, name: `Monthly Round — ${label}`, tier: 'gold' });
 
   return unlockAndPersist(want); // your existing persist that returns only *new* ones
 }

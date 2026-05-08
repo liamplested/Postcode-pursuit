@@ -1,6 +1,6 @@
 import useAuth from './useAuth';
 import { db, ts } from '../firebase';
-import { doc, getDoc, setDoc  } from 'firebase/firestore';
+import { deleteField, doc, getDoc, setDoc  } from 'firebase/firestore';
 import React from 'react';
 
 const todayUTC = () => new Date().toISOString().slice(0,10);
@@ -215,7 +215,11 @@ async function loadCloud(uid) {
 
 export async function saveCloud(uid, data, { merge = true } = {}) {
   const ref = doc(db, 'users', uid, 'pp', 'v1');
-  const payload = pruneUndefinedDeep({ ...data, updatedAt: ts() });
+  const { analytics, ...progressData } = data || {};
+  const payload = pruneUndefinedDeep({ ...progressData, updatedAt: ts() });
+  if (merge) {
+    payload.analytics = deleteField();
+  }
   await setDoc(ref, payload, { merge });
 }
 

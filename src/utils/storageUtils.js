@@ -143,12 +143,12 @@ function readCoverageMeta() {
   };
 }
 
-export function getLocalSnapshot() {
+export function getLocalSnapshot({ includeAnalytics = true } = {}) {
   const base = emptySnapshot();
   const storedMeta = readJSON(META_KEY, base.meta) || base.meta;
   const coverageMeta = readCoverageMeta();
 
-  return {
+  const snapshot = {
     version: base.version,
     achievements: readJSON(ACHIEVEMENTS_KEY, base.achievements),
     history: readJSON(GAME_HISTORY_KEY, base.history),
@@ -158,8 +158,13 @@ export function getLocalSnapshot() {
       ...storedMeta,
       ...coverageMeta,
     },
-    analytics: getAttemptAnalyticsSnapshot(),
   };
+
+  if (includeAnalytics) {
+    snapshot.analytics = getAttemptAnalyticsSnapshot();
+  }
+
+  return snapshot;
 }
 
 export function writeLocalSnapshot(s) {
