@@ -64,7 +64,13 @@ async function mergeAndSave(uid, localSnapshot) {
 }
 
 function mergeBooleanMap(a = {}, b = {}) {
-  return { ...a, ...b };
+  return { ...objectMapFromStored(a), ...objectMapFromStored(b) };
+}
+
+function objectMapFromStored(value) {
+  if (Array.isArray(value)) return Object.fromEntries(value.map((x) => [x, true]));
+  if (value && typeof value === 'object') return value;
+  return {};
 }
 
 function mergeMeta(a, b) {
@@ -227,6 +233,7 @@ export default function useCloudSync(getLocalSnapshot, writeLocalSnapshot) {
   const { user } = useAuth();
   const [syncing, setSyncing] = React.useState(false);
   const raf = React.useRef(0);
+  const saveChain = React.useRef(Promise.resolve());
 
   // ⬇️ keep the latest callbacks without re-running effects
   const getSnapRef = React.useRef(getLocalSnapshot);
@@ -269,32 +276,46 @@ const queueSave = React.useCallback(() => {
   if (!user) return;
   if (raf.current) cancelAnimationFrame(raf.current);
   raf.current = requestAnimationFrame(async () => {
-    try {
-      const local = getSnapRef.current();
-      const merged = await mergeAndSave(user.uid, local);
-      writeSnapRef.current(merged);
-    } catch (e) {
-      console.error('[cloud queueSave] failed:', e);
-    }
+    saveChain.current = saveChain.current
+      .catch(() => {})
+      .then(async () => {
+        try {
+          const local = getSnapRef.current();
+          const merged = await mergeAndSave(user.uid, local);
+          writeSnapRef.current(merged);
+        } catch (e) {
+          console.error('[cloud queueSave] failed:', e);
+        }
+      });
   });
 }, [user]);
 
   // immediate save
 const saveNow = React.useCallback(async () => {
   if (!user) return;
-  try {
-    const local = getSnapRef.current();
-    const merged = await mergeAndSave(user.uid, local);
-    writeSnapRef.current(merged);
-  } catch (e) {
-    console.error('[cloud saveNow] failed:', e);
-  }
+  saveChain.current = saveChain.current
+    .catch(() => {})
+    .then(async () => {
+      try {
+        const local = getSnapRef.current();
+        const merged = await mergeAndSave(user.uid, local);
+        writeSnapRef.current(merged);
+      } catch (e) {
+        console.error('[cloud saveNow] failed:', e);
+      }
+    });
+  return saveChain.current;
 }, [user]);
 
 const overwriteNow = React.useCallback(async (snapshot) => {
   if (!user) return;
-  await saveCloud(user.uid, snapshot, { merge: false });
-  writeSnapRef.current(snapshot);
+  saveChain.current = saveChain.current
+    .catch(() => {})
+    .then(async () => {
+      await saveCloud(user.uid, snapshot, { merge: false });
+      writeSnapRef.current(snapshot);
+    });
+  return saveChain.current;
 }, [user]);
 
   return { user, syncing, queueSave, saveNow, overwriteNow  };

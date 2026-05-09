@@ -10,7 +10,12 @@ export default function PrivacyPolicy({ onBack }) {
 
   return (
     <div className="page">
-      <h1>Privacy Policy</h1>
+      <div className="pp-page-header">
+        <button onClick={handleBack} className="btn btn-primary" aria-label="Back">
+          &larr; Back
+        </button>
+        <h1>Privacy Policy</h1>
+      </div>
       <p><b>Last updated: 23 April 2026</b></p>
 
       <p>
@@ -93,10 +98,7 @@ export default function PrivacyPolicy({ onBack }) {
 </a>
 </p>
 
-      <button onClick={handleBack} className="btn btn-primary">
-        Return to Menu
-      </button>
-            <a
+      <a
         href="https://forms.gle/Hf6fgRzBSnnZCqYJ6"
         className="mt-3 inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
       >

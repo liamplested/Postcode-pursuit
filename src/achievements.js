@@ -249,6 +249,8 @@ export const achievements = [
   { id: 'infrastructure_chief', name: 'Infrastructure Chief', icon:'🏆', tier:'legendary',
     description: 'Use every ferry AND every bridge at least once (lifetime)',
     check: (_e,_h,meta) => {
+      const have = getJSON(ACHIEVEMENTS_KEY, {}) || {};
+      if (have.all_ferries && have.all_bridges) return true;
       const tf = meta?.totalFerries ?? 0, tb = meta?.totalBridges ?? 0;
       if (tf === 0 || tb === 0) return false;
       return (meta.usedFerriesCount >= tf) && (meta.usedBridgesCount >= tb);
@@ -522,6 +524,11 @@ if (
   usedF.size === allF.size &&
   usedB.size === allB.size
 ) {
+  want.push({ id: 'infrastructure_chief' });
+}
+
+const have = getJSON(ACHIEVEMENTS_KEY, {}) || {};
+if (have.all_ferries && have.all_bridges) {
   want.push({ id: 'infrastructure_chief' });
 }
 

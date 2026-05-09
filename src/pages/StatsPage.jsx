@@ -2,8 +2,16 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { ChartColumnBig, Trash2 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
-import { postcodeAreas } from '../postcodeAreas';
-import { META_KEY, readJSON, writeJSON } from '../utils/storageUtils';
+import { bridgeLinks, ferryLinks, postcodeAreas } from '../postcodeAreas';
+import {
+  META_KEY,
+  USED_BRIDGES_KEY,
+  USED_FERRIES_KEY,
+  VISITED_KEY,
+  canonEdge,
+  readJSON,
+  writeJSON,
+} from '../utils/storageUtils';
 
 const ROW_STYLE = {
   easy:   'diff-easy',
@@ -60,24 +68,170 @@ function readMeta() {
   }
 }
 
+function objectMapFromStored(value) {
+  if (Array.isArray(value)) {
+    return Object.fromEntries(value.map((x) => [x, true]));
+  }
+
+  if (value && typeof value === 'object') return value;
+  return {};
+}
+
+function edgeLabel(edge) {
+  return `${edge.a} ↔ ${edge.b}`;
+}
+
+function buildEdgeCoverage(links, usedMap) {
+  const seen = new Set();
+
+  return (links || [])
+    .map((edge) => ({ ...edge, key: canonEdge(edge.a, edge.b) }))
+    .filter((edge) => {
+      if (!edge.key || seen.has(edge.key)) return false;
+      seen.add(edge.key);
+      return true;
+    })
+    .sort((a, b) => edgeLabel(a).localeCompare(edgeLabel(b)))
+    .map((edge) => ({ ...edge, used: Boolean(usedMap[edge.key]) }));
+}
+
+function CoveragePill({ children, used, type = undefined }) {
+  return (
+    <span className={`pp-coverage-pill ${used ? 'is-used' : 'is-unused'}`}>
+      <span>{children}</span>
+      {type && <span className="pp-coverage-edge-type">{type}</span>}
+    </span>
+  );
+}
+
+function CoverageCodeSection({ visitedCodes, unvisitedCodes }) {
+  return (
+    <div className="pp-coverage-columns">
+      <div>
+        <h3 className="text-sm font-semibold mb-2 text-slate-100">Visited</h3>
+        {visitedCodes.length === 0 ? (
+          <p className="text-xs text-slate-400">No areas visited yet.</p>
+        ) : (
+          <div className="pp-coverage-pill-list">
+            {visitedCodes.map((code) => (
+              <CoveragePill key={code} used>
+                {code}
+              </CoveragePill>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold mb-2 text-slate-100">Not yet visited</h3>
+        {unvisitedCodes.length === 0 ? (
+          <p className="text-xs text-slate-300">You've visited every area.</p>
+        ) : (
+          <div className="pp-coverage-pill-list">
+            {unvisitedCodes.map((code) => (
+              <CoveragePill key={code} used={false}>
+                {code}
+              </CoveragePill>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CoverageEdgeSection({ usedEdges, unusedEdges, usedTitle, unusedTitle }) {
+  return (
+    <div className="pp-coverage-columns">
+      <div>
+        <h3 className="text-sm font-semibold mb-2 text-slate-100">{usedTitle}</h3>
+        {usedEdges.length === 0 ? (
+          <p className="text-xs text-slate-400">None used yet.</p>
+        ) : (
+          <div className="pp-coverage-pill-list">
+            {usedEdges.map((edge) => (
+              <CoveragePill key={edge.key} used type={edge.type}>
+                {edgeLabel(edge)}
+              </CoveragePill>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold mb-2 text-slate-100">{unusedTitle}</h3>
+        {unusedEdges.length === 0 ? (
+          <p className="text-xs text-slate-300">Everything in this set has been used.</p>
+        ) : (
+          <div className="pp-coverage-pill-list">
+            {unusedEdges.map((edge) => (
+              <CoveragePill key={edge.key} used={false} type={edge.type}>
+                {edgeLabel(edge)}
+              </CoveragePill>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function useCoverage() {
   const meta = useMemo(() => readMeta(), []);
 
-  const visitedMap = meta.visitedAreas || {};
+  const visitedMap = useMemo(
+    () => ({
+      ...objectMapFromStored(readJSON(VISITED_KEY, [])),
+      ...objectMapFromStored(meta.visitedAreas || {}),
+    }),
+    [meta]
+  );
+  const usedFerriesMap = useMemo(
+    () => ({
+      ...objectMapFromStored(readJSON(USED_FERRIES_KEY, [])),
+      ...objectMapFromStored(meta.usedFerries || {}),
+    }),
+    [meta]
+  );
+  const usedBridgesMap = useMemo(
+    () => ({
+      ...objectMapFromStored(readJSON(USED_BRIDGES_KEY, [])),
+      ...objectMapFromStored(meta.usedBridges || {}),
+    }),
+    [meta]
+  );
 
   const allCodes = useMemo(
     () => Object.keys(postcodeAreas).sort(),
     []
   );
+  const ferryEdges = useMemo(
+    () => buildEdgeCoverage(ferryLinks, usedFerriesMap),
+    [usedFerriesMap]
+  );
+  const bridgeEdges = useMemo(
+    () => buildEdgeCoverage(bridgeLinks, usedBridgesMap),
+    [usedBridgesMap]
+  );
 
   const visitedCodes = allCodes.filter(code => visitedMap[code]);
   const unvisitedCodes = allCodes.filter(code => !visitedMap[code]);
+  const usedFerryEdges = ferryEdges.filter((edge) => edge.used);
+  const unusedFerryEdges = ferryEdges.filter((edge) => !edge.used);
+  const usedBridgeEdges = bridgeEdges.filter((edge) => edge.used);
+  const unusedBridgeEdges = bridgeEdges.filter((edge) => !edge.used);
 
   return {
     visitedCodes,
     unvisitedCodes,
     visitedCount: visitedCodes.length,
     totalAreas: allCodes.length,
+    ferryEdges,
+    bridgeEdges,
+    usedFerryEdges,
+    unusedFerryEdges,
+    usedBridgeEdges,
+    unusedBridgeEdges,
   };
 }
 
@@ -89,9 +243,10 @@ export default function StatsPage({
 }) {
   const [viewStats, setViewStats] = useState(stats || zeroStats());
   const [showReset, setShowReset] = useState(false);
- const [alsoResetStreaks, setAlsoResetStreaks] = useState(false);
+  const [alsoResetStreaks, setAlsoResetStreaks] = useState(false);
   const [alsoResetCoverage, setAlsoResetCoverage] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
+  const [coverageTab, setCoverageTab] = useState('areas');
 
   const coverage = useCoverage();
 
@@ -169,7 +324,44 @@ export default function StatsPage({
               </div>
               <button
                 type="button"
-                onClick={() => setShowCoverage(true)}
+                onClick={() => {
+                  setCoverageTab('areas');
+                  setShowCoverage(true);
+                }}
+                className="btn-glass tint-blue"
+              >
+                View breakdown
+              </button>
+            </div>
+
+            <div className="glass-tile flex flex-col gap-1">
+              <div className="stat-label">Ferry routes used</div>
+              <div className="stat-value">
+                {coverage.usedFerryEdges.length} / {coverage.ferryEdges.length}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCoverageTab('ferries');
+                  setShowCoverage(true);
+                }}
+                className="btn-glass tint-blue"
+              >
+                View breakdown
+              </button>
+            </div>
+
+            <div className="glass-tile flex flex-col gap-1">
+              <div className="stat-label">Bridges/tunnels used</div>
+              <div className="stat-value">
+                {coverage.usedBridgeEdges.length} / {coverage.bridgeEdges.length}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCoverageTab('bridges');
+                  setShowCoverage(true);
+                }}
                 className="btn-glass tint-blue"
               >
                 View breakdown
@@ -257,7 +449,7 @@ export default function StatsPage({
             >
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-semibold text-slate-50">
-                  Postcode coverage
+                  Coverage breakdown
                 </h2>
                 <button
                   className="btn btn-primary"
@@ -269,8 +461,31 @@ export default function StatsPage({
 
               <p className="text-sm text-slate-200 mb-3">
                 Visited <b>{coverage.visitedCount}</b> of{' '}
-                <b>{coverage.totalAreas}</b> postcode areas.
+                <b>{coverage.totalAreas}</b> postcode areas, used{' '}
+                <b>{coverage.usedFerryEdges.length}</b> of{' '}
+                <b>{coverage.ferryEdges.length}</b> ferry routes, and used{' '}
+                <b>{coverage.usedBridgeEdges.length}</b> of{' '}
+                <b>{coverage.bridgeEdges.length}</b> bridge/tunnel routes.
               </p>
+
+              <div className="pp-coverage-tabs" role="tablist" aria-label="Coverage breakdown">
+                {[
+                  ['areas', 'Postcodes'],
+                  ['ferries', 'Ferries'],
+                  ['bridges', 'Bridges'],
+                ].map(([tab, label]) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={coverageTab === tab}
+                    className={coverageTab === tab ? 'is-active' : ''}
+                    onClick={() => setCoverageTab(tab)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
 
               <div
                 style={{
@@ -282,6 +497,30 @@ export default function StatsPage({
                   paddingRight: '0.25rem',
                 }}
               >
+                {coverageTab === 'areas' && (
+                  <CoverageCodeSection
+                    visitedCodes={coverage.visitedCodes}
+                    unvisitedCodes={coverage.unvisitedCodes}
+                  />
+                )}
+                {coverageTab === 'ferries' && (
+                  <CoverageEdgeSection
+                    usedEdges={coverage.usedFerryEdges}
+                    unusedEdges={coverage.unusedFerryEdges}
+                    usedTitle="Used ferry routes"
+                    unusedTitle="Not yet used"
+                  />
+                )}
+                {coverageTab === 'bridges' && (
+                  <CoverageEdgeSection
+                    usedEdges={coverage.usedBridgeEdges}
+                    unusedEdges={coverage.unusedBridgeEdges}
+                    usedTitle="Used bridges/tunnels"
+                    unusedTitle="Not yet used"
+                  />
+                )}
+                {false && (
+                  <>
                 {/* Visited column */}
                 <div>
                   <h3 className="text-sm font-semibold mb-2 text-slate-100">
@@ -357,6 +596,8 @@ export default function StatsPage({
                     </div>
                   )}
                 </div>
+                  </>
+                )}
               </div>
             </div>
           </div>,
@@ -412,7 +653,7 @@ export default function StatsPage({
                   className="h-4 w-4"
                 />
                 <span className="text-sm">
-                  Also reset postcode coverage (visited areas)
+                  Also reset coverage
                 </span>
               </label>
 
@@ -428,7 +669,7 @@ export default function StatsPage({
                   onClick={() => {
                     // Let parent handle stats / streaks / achievements as before
                     if (onResetAll) {
-                      onResetAll({ alsoResetStreaks });
+                      onResetAll({ alsoResetStreaks, alsoResetCoverage });
                     }
 
                     // Optional: reset coverage locally
@@ -436,9 +677,16 @@ export default function StatsPage({
                       writeJSON(META_KEY, {
                         visitedAreas: {},
                         visitedCount: 0,
+                        usedFerries: {},
+                        usedBridges: {},
+                        usedFerriesCount: 0,
+                        usedBridgesCount: 0,
                         countersByDevice: {},
                         counters: { ferries: 0, bridges: 0, land: 0 },
                       });
+                      writeJSON(VISITED_KEY, []);
+                      writeJSON(USED_FERRIES_KEY, []);
+                      writeJSON(USED_BRIDGES_KEY, []);
                     }
 
                     setShowReset(false);

@@ -149,7 +149,12 @@ export default function Settings({
 
   return (
     <div className="pp-settings-page max-w-3xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">Settings</h1>
+      <div className="pp-page-header">
+        <button className="btn btn-primary" onClick={handleBack} aria-label="Back">
+          &larr; Back
+        </button>
+        <h1>Settings</h1>
+      </div>
 
       <section className="glass pp-settings-section p-4 rounded-xl mb-6">
         <h2 className="text-lg font-semibold">Appearance</h2>
@@ -287,9 +292,6 @@ export default function Settings({
           </button>
           <button className="btn btn-purple" onClick={handlePrivacy}>
             Privacy Policy
-          </button>
-          <button onClick={handleBack} className="btn btn-primary">
-            Return to Menu
           </button>
           <a
             href="https://forms.gle/Hf6fgRzBSnnZCqYJ6"

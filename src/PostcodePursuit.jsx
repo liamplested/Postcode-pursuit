@@ -11,6 +11,7 @@ import * as Daily from './dailyManager';
  import AchievementsPage from './pages/AchievementsPage.jsx';
 import Settings from './pages/Settings.jsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
+import AboutPage from './pages/AboutPage.jsx';
 
  import { 
   achievements,
@@ -263,7 +264,6 @@ const [showLabels, setShowLabels] = useState(true);
 const suppressClickUntilRef = useRef(0);
 const [flashAreas, setFlashAreas] = useState([]);
 const [showOptimal, setShowOptimal] = useState(false);
-  const [showAbout, setShowAbout] = useState(false);  
 const [dailyMode, setDailyMode] = useState(false);
 const [dailyDate, setDailyDate] = useState(null);             // 'YYYY-MM-DD' (UTC)
 
@@ -488,7 +488,7 @@ useEffect(() => {
 }, [burgerOpen, positionBurgerMenu]);
 
 // close if overlays change
-useEffect(() => { setBurgerOpen(false); }, [gameState, showAbout, showTutorial, victoryOpen]);
+useEffect(() => { setBurgerOpen(false); }, [gameState, showTutorial, victoryOpen]);
 
 // --- Daily streak (UTC) ---
 
@@ -1318,7 +1318,6 @@ const shouldPulse =
   gameState === 'playing' &&
   !gameWon &&
   !showTutorial &&
-  !showAbout &&
   !victoryOpen &&
   selectorEmpty;
 // keep your forceUppercase, then wrap it:
@@ -1870,17 +1869,40 @@ useEffect(() => {
 
 const [statsVersion, setStatsVersion] = React.useState(0);
 
-const resetAllStats = React.useCallback(({ alsoResetStreaks = true } = {}) => {
+const resetAllStats = React.useCallback(({
+  alsoResetStreaks = true,
+  alsoResetCoverage = true,
+} = {}) => {
+  const currentSnapshot = getLocalSnapshot();
   const cleared = emptySnapshot();
 
   if (!alsoResetStreaks) {
-    cleared.streaks = getLocalSnapshot().streaks;
+    cleared.streaks = currentSnapshot.streaks;
+  }
+
+  if (!alsoResetCoverage) {
+    const currentMeta = currentSnapshot.meta || {};
+    cleared.meta = {
+      ...cleared.meta,
+      visitedAreas: currentMeta.visitedAreas || {},
+      usedFerries: currentMeta.usedFerries || {},
+      usedBridges: currentMeta.usedBridges || {},
+      visitedCount: currentMeta.visitedCount || 0,
+      usedFerriesCount: currentMeta.usedFerriesCount || 0,
+      usedBridgesCount: currentMeta.usedBridgesCount || 0,
+      totalAreas: currentMeta.totalAreas || 0,
+      totalFerries: currentMeta.totalFerries || 0,
+      totalBridges: currentMeta.totalBridges || 0,
+      hasMersey: !!currentMeta.hasMersey,
+    };
   }
 
   writeLocalSnapshot(cleared);
-  localStorage.removeItem(VISITED_KEY);
-  localStorage.removeItem(USED_FERRIES_KEY);
-  localStorage.removeItem(USED_BRIDGES_KEY);
+  if (alsoResetCoverage) {
+    localStorage.removeItem(VISITED_KEY);
+    localStorage.removeItem(USED_FERRIES_KEY);
+    localStorage.removeItem(USED_BRIDGES_KEY);
+  }
   localStorage.removeItem('pp_daily_streak_v1');
 
   for (const d of DIFFS) {
@@ -2089,7 +2111,6 @@ useEffect(() => {
   showFreePlayChooser ||
   victoryOpen ||
   giveUpOpen ||
-  showAbout ||
   leaveConfirmOpen ||
   showTutorial;
 
@@ -2102,7 +2123,7 @@ const shouldLock = overlayOpen;
     document.documentElement.style.overflow = prevHtml;
     document.body.style.overflow = prevBody;
   };
-}, [gameState, showAbout, victoryOpen, showTutorial, showDailyChooser, showFreePlayChooser, giveUpOpen, leaveConfirmOpen, isTouch, roundResolved, focusPostcodeInput]);
+}, [gameState, victoryOpen, showTutorial, showDailyChooser, showFreePlayChooser, giveUpOpen, leaveConfirmOpen, isTouch, roundResolved, focusPostcodeInput]);
 
   // controls height -> CSS var
   useEffect(() => {
@@ -2320,7 +2341,6 @@ useEffect(() => {
     if (victoryOpen)      { setVictoryOpen(false);      return; }
     if (showDailyChooser) { setShowDailyChooser(false); return; }
     if (showFreePlayChooser) { setShowFreePlayChooser(false); return; }
-    if (showAbout)        { setShowAbout(false);        return; }
     if (showTutorial)     { setShowTutorial(false);     return; }
     if (burgerOpen)       { setBurgerOpen(false);       return; }
 
@@ -2334,7 +2354,7 @@ useEffect(() => {
   backToMenu,
   leaveConfirmOpen, giveUpOpen, victoryOpen,
   showDailyChooser, showFreePlayChooser,
-  showAbout, showTutorial, burgerOpen
+  showTutorial, burgerOpen
 ]);
 
 
@@ -2469,12 +2489,12 @@ if (area === targetArea) {
 
 const handleClick = useCallback((code) => {
   if (!canClickAreas) return;
-  if (gameState !== 'playing' || victoryOpen || showTutorial || showAbout) return;
+  if (gameState !== 'playing' || victoryOpen || showTutorial) return;
   if (!isRevealed(code)) return;
   if (Date.now() < suppressClickUntilRef.current) return;
   makeGuess(code);
   
-}, [gameState, isRevealed, makeGuess, canClickAreas, victoryOpen, showTutorial, showAbout]);
+}, [gameState, isRevealed, makeGuess, canClickAreas, victoryOpen, showTutorial]);
 
 
   // ---------- Label sizing helpers ----------
@@ -3421,7 +3441,7 @@ const renderControls = () => (
 useEffect(() => {
   const overlayOpen =
     showDailyChooser || showFreePlayChooser ||
-    victoryOpen || giveUpOpen || showAbout || showHints ||
+    victoryOpen || giveUpOpen || showHints ||
     leaveConfirmOpen || showTutorial;
 
   if (!overlayOpen && !useMobileInput && gameState === 'playing' && !roundResolved) {
@@ -3454,7 +3474,7 @@ useEffect(() => {
 }, [
   gameState,
   showDailyChooser, showFreePlayChooser,
-  victoryOpen, giveUpOpen, showAbout, showHints, leaveConfirmOpen, showTutorial,
+  victoryOpen, giveUpOpen, showHints, leaveConfirmOpen, showTutorial,
   focusPostcodeInput, useMobileInput, roundResolved
 ]);
 
@@ -3584,7 +3604,7 @@ const renderMenu = () => (
     </div>
 
     <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm">
-      <button className="btn btn-neutral" onClick={() => setShowAbout(true)}>
+      <button className="btn btn-neutral" onClick={() => navigate('about')}>
         <InfoIcon className="w-4 h-4" /> About / Feedback
       </button>
       <button className="btn btn-neutral" onClick={() => navigate('settings')}>
@@ -3884,147 +3904,6 @@ const renderMenu = () => (
 )}
 
 
-    {/* Existing About modal remains unchanged below */}
-<GameModal
-  open={showAbout}
-  onClose={() => setShowAbout(false)}
-  title="About Postcode Pursuit"
->
-  <div className="space-y-5 text-slate-800">
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <p className="text-sm leading-6 text-slate-700">
-        <span className="font-semibold text-slate-900">Postcode Pursuit</span> is a daily UK
-        geography puzzle. Start in one postcode area and reach the{" "}
-        <span className="font-semibold text-slate-900">Target</span> by moving through adjacent
-        postcode areas. It’s inspired by{" "}
-        <a
-          href="https://travle.earth"
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium text-indigo-600 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-700"
-        >
-          Travle
-        </a>
-        .
-      </p>
-    </section>
-
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        How it works
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Move between neighbouring UK postcode areas.</li>
-        <li>
-          <span className="font-medium text-slate-900">Dashed lines</span> show ferry links.
-        </li>
-        <li>
-          <span className="font-medium text-slate-900">Solid lines</span> show major bridges and
-          tunnels.
-        </li>
-        <li>Reach the target in as few moves as possible.</li>
-      </ul>
-    </section>
-
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Difficulty modes
-      </h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900"><u>Easy</u></div>
-          <p className="mt-1 text-sm leading-5 text-slate-600">
-            Outlines and labels always visible. Revisits and undo allowed.
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900"><u>Normal</u></div>
-          <p className="mt-1 text-sm leading-5 text-slate-600">
-            Outlines visible; labels shown for Start and visited areas. Revisits and undo allowed.
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900"><u>Hard</u></div>
-          <p className="mt-1 text-sm leading-5 text-slate-600">
-            No outlines or labels. No revisits. No undo.
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <div className="text-sm font-semibold text-slate-900"><u>Master</u></div>
-          <p className="mt-1 text-sm leading-5 text-slate-600">
-            Only start, current, visited and target areas are shown. No revisits. No undo.
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Daily Challenge
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Choose one difficulty each day.</li>
-        <li>Your progress is saved automatically, so you can resume later.</li>
-        <li>You get up to <span className="font-medium text-slate-900">3 hints per day</span> for each difficulty.</li>
-        <li>Streaks are tracked separately for each difficulty.</li>
-        <li>You can share your result once you finish.</li>
-      </ul>
-    </section>
-
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Scoring, stats and achievements
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Each daily puzzle has a <span className="font-medium text-slate-900">Par</span> based on the optimal route.</li>
-        <li>The <span className="font-medium text-slate-900">Stats</span> page shows wins, win rate, average moves, best time and average vs Par.</li>
-        <li>Unlock achievements for harder wins, perfect routes, long journeys, ferries, bridges, coverage and streaks.</li>
-        <li>Some achievements stay hidden until you discover them.</li>
-      </ul>
-    </section>
-
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Controls
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Type a neighbouring postcode area and press <span className="font-medium text-slate-900">Enter</span>.</li>
-        <li>Use the map controls to zoom or reset the view.</li>
-        <li>Open the menu for New Game, Restart, Tutorial and more.</li>
-        <li><span className="font-medium text-slate-900">Ctrl/Cmd + Z</span> undoes a move where undo is available.</li>
-      </ul>
-    </section>
-
-    <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Privacy & data
-      </h3>
-      <ul className="space-y-2 text-sm leading-6 text-slate-700">
-        <li>Your progress, stats, achievements, coverage and streaks are stored locally in your browser.</li>
-        <li>Clearing site data, switching browser or using another device can reset your progress.</li>
-      </ul>
-    </section>
-
-    <section className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 shadow-sm">
-      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-indigo-700">
-        Feedback
-      </h3>
-      <p className="text-sm leading-6 text-slate-700">
-        Got feedback, spotted a bug, or have an idea for the game?
-      </p>
-      <a
-        href="https://forms.gle/Hf6fgRzBSnnZCqYJ6"
-        className="mt-3 inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700"
-      >
-        Send feedback
-      </a><br />
-
-    </section>
-  </div>
-</GameModal>
 
 
 
@@ -4135,6 +4014,14 @@ if (route === 'settings') {
 if (route === 'privacy') {
   return (
     <PrivacyPolicy
+      onBack={() => navigate('')}
+    />
+  );
+}
+
+if (route === 'about') {
+  return (
+    <AboutPage
       onBack={() => navigate('')}
     />
   );

@@ -12,6 +12,7 @@ import {
   VISITED_KEY,
   canonEdge,
   readJSON,
+  writeJSON,
 } from '../utils/storageUtils';
 
 const HIDDEN_BONUS_IDS = new Set(['mersey', 'shortcut']);
@@ -45,6 +46,19 @@ const TIER_RANK = Object.fromEntries(TIER_ORDER.map((tier, i) => [tier, i]));
 
 function readAchievementsMap() {
   return readJSON(ACHIEVEMENTS_KEY, {});
+}
+
+function repairAchievementsMap(map, achievements) {
+  const next = { ...(map || {}) };
+  if (next.all_ferries && next.all_bridges && !next.infrastructure_chief) {
+    const def = achievements.find((a) => a.id === 'infrastructure_chief') || {};
+    next.infrastructure_chief = {
+      ...def,
+      category: def.category || 'exploration',
+      unlockedAt: new Date().toISOString(),
+    };
+  }
+  return next;
 }
 
 function readHistory() {
@@ -354,7 +368,14 @@ export default function AchievementsPage({
   totalAreas = 0,
   onBack,
 }) {
-  const unlockedMap = readAchievementsMap();
+  const rawUnlockedMap = readAchievementsMap();
+  const unlockedMap = repairAchievementsMap(rawUnlockedMap, achievements);
+  React.useEffect(() => {
+    if (rawUnlockedMap.all_ferries && rawUnlockedMap.all_bridges && !rawUnlockedMap.infrastructure_chief) {
+      writeJSON(ACHIEVEMENTS_KEY, unlockedMap);
+    }
+  }, [rawUnlockedMap, unlockedMap]);
+
   const unlockedIds = new Set(Object.keys(unlockedMap));
   const games = readHistory();
   const meta = readFullMeta();
@@ -422,12 +443,12 @@ export default function AchievementsPage({
             <span>Areas Visited</span>
           </div>
           <div className="pp-ach-metric">
-            <div>{meta.usedFerriesCount} / {meta.totalFerries}</div>
-            <span>Ferries Used</span>
+            <div>{unlockedMap.all_ferries ? 'Complete' : `${meta.usedFerriesCount} / ${meta.totalFerries}`}</div>
+            <span>{unlockedMap.all_ferries ? `${meta.usedFerriesCount} / ${meta.totalFerries} current ferry routes` : 'Ferries Used'}</span>
           </div>
           <div className="pp-ach-metric">
-            <div>{meta.usedBridgesCount} / {meta.totalBridges}</div>
-            <span>Bridges Used</span>
+            <div>{unlockedMap.all_bridges ? 'Complete' : `${meta.usedBridgesCount} / ${meta.totalBridges}`}</div>
+            <span>{unlockedMap.all_bridges ? `${meta.usedBridgesCount} / ${meta.totalBridges} current bridge/tunnel routes` : 'Bridges Used'}</span>
           </div>
         </div>
 

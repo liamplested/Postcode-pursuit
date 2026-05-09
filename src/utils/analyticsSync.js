@@ -3,7 +3,7 @@ import { doc, setDoc } from 'firebase/firestore';
 
 const CONSENT_KEY = 'pp_consents';
 
-function readAnalyticsConsent() {
+export function hasAnalyticsConsent() {
   try {
     const raw = localStorage.getItem(CONSENT_KEY);
     if (!raw) return false;
@@ -55,7 +55,7 @@ export function buildGAAttemptPayload(summary) {
 }
 
 export function sendAttemptSummaryToGA(summary) {
-  if (!summary || !readAnalyticsConsent()) return false;
+  if (!summary || !hasAnalyticsConsent()) return false;
   if (typeof window === 'undefined' || !window.gtag) return false;
   const payload = buildGAAttemptPayload(summary);
   if (!payload) return false;
@@ -64,6 +64,7 @@ export function sendAttemptSummaryToGA(summary) {
 }
 
 export async function saveAttemptSummaryToFirebase(summary) {
+  if (!hasAnalyticsConsent()) return false;
   const user = auth.currentUser;
   if (!user || !summary?.id) return false;
 

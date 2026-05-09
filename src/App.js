@@ -4,6 +4,7 @@ import ConsentManager from "./components/ConsentManager";
 import PostcodePursuit from "./PostcodePursuit";
 import Settings from "./pages/Settings";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import AboutPage from "./pages/AboutPage";
 import './index.css';
 
 
@@ -35,6 +36,7 @@ return (
       <Route path="/" element={<PostcodePursuit />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/about" element={<AboutPage />} />
     </Routes>
       </div>
     </div>
