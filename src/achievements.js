@@ -298,6 +298,25 @@ const CROSSING_ACHIEVEMENTS = [
   ...BRIDGE_CROSSING_ACHIEVEMENTS.map((a) => ({ ...a, crossingType: 'bridge', check: () => false })),
 ];
 
+export function unlockCrossingAchievementsForEdge(a, b, { ferry = false, bridge = false } = {}) {
+  const edge = canonEdge(a, b);
+  if (!edge) return [];
+
+  const want = [];
+  if (ferry) {
+    want.push(...FERRY_CROSSING_ACHIEVEMENTS.filter((achievement) => (
+      canonEdge(...achievement.edge) === edge
+    )));
+  }
+  if (bridge) {
+    want.push(...BRIDGE_CROSSING_ACHIEVEMENTS.filter((achievement) => (
+      canonEdge(...achievement.edge) === edge
+    )));
+  }
+
+  return unlockAndPersist(want);
+}
+
 // ---- Definitions ----
 export const achievements = [
 { id: 'first', name: 'First Steps', icon:'⭐', tier:'bronze',
@@ -737,16 +756,6 @@ if (
 const have = getJSON(ACHIEVEMENTS_KEY, {}) || {};
 if (have.all_ferries && have.all_bridges) {
   want.push({ id: 'infrastructure_chief' });
-}
-
-for (const achievement of FERRY_CROSSING_ACHIEVEMENTS) {
-  const [a, b] = achievement.edge;
-  if (usedF.has(canonEdge(a, b))) want.push({ id: achievement.id });
-}
-
-for (const achievement of BRIDGE_CROSSING_ACHIEVEMENTS) {
-  const [a, b] = achievement.edge;
-  if (usedB.has(canonEdge(a, b))) want.push({ id: achievement.id });
 }
 
   // map the minimal items above to real objects from your defined list (by id)

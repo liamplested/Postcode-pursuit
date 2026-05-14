@@ -17,6 +17,7 @@ export default function ToastShell({ open, onClose, children, width = 420 }) {
         placeItems: 'center',
         padding: '16px',
         pointerEvents: 'none',
+        overflow: 'hidden',
       }}
     >
       <div
@@ -24,6 +25,10 @@ export default function ToastShell({ open, onClose, children, width = 420 }) {
         style={{
           width: '100%',
           maxWidth: `${width}px`,
+          maxHeight: 'calc(100dvh - 32px)',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch',
           pointerEvents: 'auto',
         }}
       >

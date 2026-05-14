@@ -18,6 +18,7 @@ import ChallengesPage from './pages/ChallengesPage.jsx';
   achievements,
   evaluateAndUnlockAchievements, 
   checkAndUnlockMetaAchievements, 
+  unlockCrossingAchievementsForEdge,
   logAchievementsToGA,
   unlockStreaksFor
 } from './achievements.js';
@@ -2726,6 +2727,14 @@ const makeGuess = useCallback((area) => {
   // ✅ NEW: log lifetime stats for this valid move
   const moveType = viaFerry ? 'ferry' : viaBridge ? 'bridge' : 'land';
   recordLifetimeMove({ nextCode: area, type: moveType }, { onPersist });
+
+  if (viaFerry || viaBridge) {
+    const newly = unlockCrossingAchievementsForEdge(currentLocation, area, {
+      ferry: viaFerry,
+      bridge: viaBridge,
+    });
+    if (newly.length) enqueueAchievementBatch(newly);
+  }
 
   // existing meta-edge tracking / achievements
   if (viaFerry) {
