@@ -254,10 +254,10 @@ return (
   <>
     <div id="customise-panel" style={{ marginTop: 12, padding: 12, borderRadius: 12, background: "#0e3358ff", border: "1px solid #e5e7eb" }}>
       <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-        <input type="checkbox" checked readOnly /> <span><b>Necessary</b> — required to make the site work (always on)</span>
+        <input type="checkbox" checked readOnly /> <span><b>Necessary</b>: required to make the site work (always on)</span>
       </label>
       <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <input type="checkbox" checked={analytics} onChange={e => setAnalytics(e.target.checked)} /> <span><b>Analytics</b> — helps us understand how the game is used</span>
+        <input type="checkbox" checked={analytics} onChange={e => setAnalytics(e.target.checked)} /> <span><b>Analytics</b>: helps us understand how the game is used</span>
       </label>
     </div>
 

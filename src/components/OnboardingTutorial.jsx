@@ -168,7 +168,7 @@ export default function OnboardingTutorial({
     },
     {
       title: "You know the core loop",
-      body: "That is the heart of the game: move through connected postcode areas and try to reach the target efficiently. Close the tutorial when you are ready to look around or choose a game.",
+      body: "That is the basic loop: move through connected postcode areas and try to reach the target in fewer moves. Close the tutorial when you are ready to look around or choose a game.",
       cta: "Close Tutorial",
       onCta: closeTutorial,
     },

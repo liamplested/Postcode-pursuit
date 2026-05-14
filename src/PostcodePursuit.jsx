@@ -12,6 +12,7 @@ import * as Daily from './dailyManager';
 import Settings from './pages/Settings.jsx';
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx';
 import AboutPage from './pages/AboutPage.jsx';
+import ChallengesPage from './pages/ChallengesPage.jsx';
 
  import { 
   achievements,
@@ -81,6 +82,100 @@ const LARGE_CONTROLS_KEY = 'pp:largeControls:v1';
 const HIGH_CONTRAST_MAP_KEY = 'pp:highContrastMap:v1';
 const MAP_STYLE_KEY = 'pp:mapStyle:v1';
 const TEXT_SIZE_KEY = 'pp:textSize:v1';
+const CAMERA_MODE_KEY = 'pp:cameraMode:v1';
+const CHALLENGE_BESTS_KEY = 'pp:challengeBests:v1';
+
+const LONDON_CAPITAL_CODES = ['E', 'EC', 'N', 'NW', 'SE', 'SW', 'W', 'WC'];
+
+const CHALLENGES = [
+  {
+    id: 'four_capitals',
+    name: 'Visit All 4 Capitals',
+    description: 'Visit London, Cardiff, Edinburgh and Belfast in one route.',
+    startHint: 'Enter any starting postcode area. A capital counts immediately if you start there.',
+    isComplete: (path) => (
+      path.some((code) => LONDON_CAPITAL_CODES.includes(code)) &&
+      path.includes('CF') &&
+      path.includes('EH') &&
+      path.includes('BT')
+    ),
+    progress: (path) => {
+      const done = [
+        path.some((code) => LONDON_CAPITAL_CODES.includes(code)),
+        path.includes('CF'),
+        path.includes('EH'),
+        path.includes('BT'),
+      ].filter(Boolean).length;
+      return `${done} / 4 capitals`;
+    },
+  },
+  {
+    id: 'all_bridges',
+    name: 'Use Every Bridge, Tunnel and Ferry',
+    description: 'Use each active bridge, tunnel and ferry link in one route.',
+    startHint: 'Enter any starting postcode area.',
+    allowRevisits: true,
+    isComplete: (_path, usedEdges) => {
+      const usedBridges = usedEdges?.bridges || new Set();
+      const usedFerries = usedEdges?.ferries || new Set();
+      return (
+        bridgeLinks.every(({ a, b }) => usedBridges.has(canonEdgeLocal(a, b))) &&
+        ferryLinks.every(({ a, b }) => usedFerries.has(canonEdgeLocal(a, b)))
+      );
+    },
+    progress: (_path, usedEdges) => {
+      const usedBridges = usedEdges?.bridges?.size || 0;
+      const usedFerries = usedEdges?.ferries?.size || 0;
+      return `${usedBridges} / ${bridgeLinks.length} bridges/tunnels · ${usedFerries} / ${ferryLinks.length} ferries`;
+    },
+  },
+  {
+    id: 'lejog_challenge',
+    name: "Land's End to John O'Groats",
+    description: 'Start at TR or KW and reach the other end.',
+    startHint: 'Enter TR or KW.',
+    allowedStarts: ['TR', 'KW'],
+    getTarget: (start) => start === 'TR' ? 'KW' : 'TR',
+    isComplete: (path, _usedEdges, challenge) => path[path.length - 1] === challenge.target,
+    progress: (path, _usedEdges, challenge) => `Target: ${challenge.target || 'TR/KW'} · Current: ${path[path.length - 1] || '-'}`,
+  },
+  {
+    id: 'visit_every_postcode_once',
+    name: 'Visit Every Postcode Once',
+    description: 'Start at TR or FY, visit every postcode area once, and finish at the other dead-end.',
+    startHint: 'Enter TR or FY.',
+    allowedStarts: ['TR', 'FY'],
+    getTarget: (start) => start === 'TR' ? 'FY' : 'TR',
+    isComplete: (path, _usedEdges, challenge) => {
+      const allVisited = path.length === Object.keys(postcodeAreas).length;
+      return allVisited && path[path.length - 1] === challenge.target;
+    },
+    progress: (path, _usedEdges, challenge) => `${path.length} / ${Object.keys(postcodeAreas).length} areas · Target: ${challenge.target || 'TR/FY'}`,
+  },
+];
+
+function canonEdgeLocal(a, b) {
+  return [a, b].filter(Boolean).sort().join('|');
+}
+
+function readChallengeBests() {
+  try {
+    return JSON.parse(localStorage.getItem(CHALLENGE_BESTS_KEY) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
+function writeChallengeBests(bests) {
+  localStorage.setItem(CHALLENGE_BESTS_KEY, JSON.stringify(bests));
+}
+
+function isBetterChallengeScore(next, previous) {
+  if (!previous) return true;
+  if (next.moves !== previous.moves) return next.moves < previous.moves;
+  if (next.livesLost !== previous.livesLost) return next.livesLost < previous.livesLost;
+  return next.durationMs < previous.durationMs;
+}
 
 function parseUTC(dateStr){ return new Date(dateStr + 'T00:00:00Z'); }
 function daysBetweenUTC(a,b){
@@ -255,6 +350,9 @@ useEffect(() => {
 const [showHints, setShowHints] = useState(false);
 const [dailyGaveUp, setDailyGaveUp] = useState(false);
 const [betaDailyMode, setBetaDailyMode] = useState(false);
+const [challengeRun, setChallengeRun] = useState(null);
+const [challengeLives, setChallengeLives] = useState(3);
+const [challengeBestsVersion, setChallengeBestsVersion] = useState(0);
 const [journeyExpanded, setJourneyExpanded] = useState(false);
 const [mobileControlsTab, setMobileControlsTab] = useState('enter');
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -298,13 +396,17 @@ const [mapStyle, setMapStyle] = useState(() => {
   if (['standard', 'contrast', 'night'].includes(stored)) return stored;
   return localStorage.getItem(HIGH_CONTRAST_MAP_KEY) === 'true' ? 'contrast' : 'standard';
 });
+const [cameraMode, setCameraMode] = useState(() => {
+  const stored = localStorage.getItem(CAMERA_MODE_KEY);
+  return ['follow', 'static'].includes(stored) ? stored : 'follow';
+});
 const [textSize, setTextSize] = useState(() => {
   const stored = localStorage.getItem(TEXT_SIZE_KEY);
   return ['normal', 'large'].includes(stored) ? stored : 'normal';
 });
 
 const canClickAreas = difficulty === 'easy';
-const roundResolved = gameWon || dailyGaveUp;
+const roundResolved = gameWon || dailyGaveUp || !!challengeRun?.failed;
 
 // --- Soft Par helpers (Daily only) ---
 const parForOptimal = (optimalMoves) => Math.max(1, Math.ceil(optimalMoves * 1.25));
@@ -350,7 +452,8 @@ useEffect(() => {
   localStorage.setItem(MAP_STYLE_KEY, mapStyle);
   localStorage.setItem(HIGH_CONTRAST_MAP_KEY, mapStyle === 'contrast' ? 'true' : 'false');
   localStorage.setItem(TEXT_SIZE_KEY, textSize);
-}, [uiTheme, colorblindFriendly, inputMode, largeControls, mapStyle, textSize]);
+  localStorage.setItem(CAMERA_MODE_KEY, cameraMode);
+}, [uiTheme, colorblindFriendly, inputMode, largeControls, mapStyle, textSize, cameraMode]);
 
 const isTouch = useIsTouchDevice();
 const useMobileInput = inputMode === 'mobile' || (inputMode === 'auto' && isTouch);
@@ -595,6 +698,7 @@ const resetDailyFlags = React.useCallback(() => {
 
 
 function toggleHints() {
+  if (challengeRun) return;
   if (!showHints) {
     if (dailyMode && hintsUsed >= MAX_DAILY_HINTS) {
       alert('No hints left for today.');
@@ -627,6 +731,7 @@ const DIFF_DESCRIPTIONS = {
 
 
 const undoLastMove = useCallback(() => {
+  if (challengeRun) return;
   if (currentPath.length <= 1 || gameWon) return; // can't undo the start, or after win
   const newPath = currentPath.slice(0, -1);
   setCurrentPath(newPath);
@@ -646,7 +751,7 @@ const undoLastMove = useCallback(() => {
     path_len_after: newPath.length - 1,
     round_id: roundIdRef.current || undefined,
   });
-}, [currentPath, gameWon, difficulty, startArea, targetArea]);
+}, [challengeRun, currentPath, gameWon, difficulty, startArea, targetArea]);
 
 
 
@@ -695,6 +800,8 @@ async function playDailyIntroTour(start, target) {
 }
 
 function startOrResumeDaily(difficulty, { intro = true } = {}) {
+  setChallengeRun(null);
+  setChallengeLives(3);
   const betaMode = difficulty === 'beta';
   const rulesDifficulty = betaMode ? 'normal' : difficulty;
   const today = Daily.todayUTC();
@@ -871,6 +978,8 @@ useEffect(() => {
     if (gameState === 'playing' && !gameWon) {
     fireReroll(mode === difficulty ? 'same_difficulty' : 'change_difficulty');
   }
+  setChallengeRun(null);
+  setChallengeLives(3);
   resetDailyFlags(); 
 
 	setDifficulty(mode);
@@ -903,7 +1012,7 @@ const isRevealed = useCallback(
   const gameStartRef = useRef(null);
   const introTourRef = useRef(0);
   
-  const isMapInteractive = gameState !== 'menu' && !victoryOpen;
+  const isMapInteractive = route === '' && gameState !== 'menu' && !victoryOpen;
 
   const formatTime = (ms) => {
     const s = Math.floor(ms / 1000);
@@ -1196,14 +1305,15 @@ const handleInputSubmit = (inputElement) => {
   const isKnownArea = !!postcodeAreas[val];
   const isValidMove = getNeighbors(currentLocation).includes(val);
   const alreadyVisited = currentPath.includes(val);
-  const revisitAllowed = difficulty === 'easy' || difficulty === 'normal';
+  const challengeAllowsRevisits = !!challengeRun && activeChallengeDef?.allowRevisits;
+  const revisitAllowed = challengeAllowsRevisits || (!challengeRun && (difficulty === 'easy' || difficulty === 'normal'));
   const allowedMove = isValidMove && (!alreadyVisited || revisitAllowed);
 
   makeGuess(val);
   inputElement.value = '';
   setSelectorEmpty(true);
 
-  if (!isKnownArea) return;
+  if (!isKnownArea || cameraMode === 'static') return;
 
   requestAnimationFrame(() => {
     zoomToArea(val, {
@@ -1235,6 +1345,59 @@ const handleInputSubmit = (inputElement) => {
       if (typeof el.select === 'function') el.select();
     });
   }, []);
+
+  useEffect(() => {
+    if (cameraMode !== 'static' || useMobileInput || roundResolved) return;
+    if (gameState !== 'playing') return;
+
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const drag = {
+      active: false,
+      moved: false,
+      x: 0,
+      y: 0,
+    };
+
+    const onPointerDown = (event) => {
+      if (event.pointerType !== 'mouse' || event.button !== 0) return;
+      drag.active = true;
+      drag.moved = false;
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+    };
+
+    const onPointerMove = (event) => {
+      if (!drag.active) return;
+      if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 4) {
+        drag.moved = true;
+      }
+    };
+
+    const onPointerUp = (event) => {
+      if (event.pointerType !== 'mouse') return;
+      const shouldRefocus = drag.active && drag.moved;
+      drag.active = false;
+      drag.moved = false;
+
+      if (shouldRefocus) {
+        focusPostcodeInput();
+      }
+    };
+
+    svg.addEventListener('pointerdown', onPointerDown, { passive: true });
+    svg.addEventListener('pointermove', onPointerMove, { passive: true });
+    svg.addEventListener('pointerup', onPointerUp, { passive: true });
+    svg.addEventListener('pointercancel', onPointerUp, { passive: true });
+
+    return () => {
+      svg.removeEventListener('pointerdown', onPointerDown);
+      svg.removeEventListener('pointermove', onPointerMove);
+      svg.removeEventListener('pointerup', onPointerUp);
+      svg.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [cameraMode, focusPostcodeInput, gameState, roundResolved, useMobileInput]);
 
   const shareResult = async () => {
     const text = buildShareText();
@@ -1474,6 +1637,113 @@ const getNeighbors = React.useCallback((code) => {
 
   return Array.from(set);
 }, [ferryAdj, bridgeAdj]);
+
+const getChallengeUsedEdges = useCallback((path) => {
+  const ferries = new Set();
+  const bridges = new Set();
+
+  for (let i = 1; i < path.length; i += 1) {
+    const a = path[i - 1];
+    const b = path[i];
+    const id = canonEdgeLocal(a, b);
+    if (ferryAdj.get(a)?.has(b)) ferries.add(id);
+    if (bridgeAdj.get(a)?.has(b)) bridges.add(id);
+  }
+
+  return { ferries, bridges };
+}, [bridgeAdj, ferryAdj]);
+
+const activeChallengeDef = challengeRun
+  ? CHALLENGES.find((challenge) => challenge.id === challengeRun.id) || null
+  : null;
+
+const challengeProgress = activeChallengeDef
+  ? activeChallengeDef.progress(currentPath, getChallengeUsedEdges(currentPath), challengeRun)
+  : null;
+
+const completeChallengeRun = useCallback((finalPath) => {
+  if (!challengeRun) return;
+  const challenge = CHALLENGES.find((item) => item.id === challengeRun.id);
+  if (!challenge) return;
+
+  const end = performance.now();
+  const durationMs = gameStartRef.current ? Math.max(0, end - gameStartRef.current) : 0;
+  const result = {
+    challengeId: challenge.id,
+    challengeName: challenge.name,
+    moves: Math.max(0, finalPath.length - 1),
+    livesLost: Math.max(0, 3 - challengeLives),
+    livesRemaining: challengeLives,
+    durationMs,
+    completedAt: new Date().toISOString(),
+    pathUsed: finalPath.slice(),
+  };
+
+  const bests = readChallengeBests();
+  const previous = bests[challenge.id] || null;
+  const isBest = isBetterChallengeScore(result, previous);
+  if (isBest) {
+    bests[challenge.id] = result;
+    writeChallengeBests(bests);
+    setChallengeBestsVersion((version) => version + 1);
+  }
+
+  setElapsedMs(durationMs);
+  setGameWon(true);
+  setGameState('gameWon');
+  setVictoryOpen(true);
+  setShowOptimal(false);
+  setChallengeRun((run) => run ? { ...run, completed: true, result, isBest } : run);
+}, [challengeLives, challengeRun]);
+
+function startChallenge(challengeId, rawStart) {
+  const def = CHALLENGES.find((challenge) => challenge.id === challengeId);
+  const start = String(rawStart || '').trim().toUpperCase();
+  if (!def) return { ok: false, message: 'Unknown challenge.' };
+  if (!postcodeAreas[start]) return { ok: false, message: 'Enter a valid postcode area.' };
+  if (def.allowedStarts && !def.allowedStarts.includes(start)) {
+    return { ok: false, message: `Start must be ${def.allowedStarts.join(' or ')}.` };
+  }
+
+  const target = def.getTarget?.(start) || '';
+  clearAchievementToasts();
+  abandonIfActive('challenge_start');
+  resetDailyFlags();
+  setChallengeRun({
+    id: def.id,
+    target,
+    startedAt: new Date().toISOString(),
+    completed: false,
+    failed: false,
+    result: null,
+    isBest: false,
+  });
+  setChallengeLives(3);
+  setDifficulty('normal');
+  setShowOutlines(true);
+  setShowLabels(false);
+  setMasterMode(false);
+  setStartArea(start);
+  setTargetArea(target);
+  setCurrentPath([start]);
+  setGuesses([]);
+  setGameWon(false);
+  setDailyGaveUp(false);
+  setShowHints(false);
+  setShowOptimal(false);
+  setOptimalPath([]);
+  setDailyPar(null);
+  setGameState('playing');
+  gameStartRef.current = performance.now();
+  setElapsedMs(0);
+  setVictoryOpen(false);
+  requestAnimationFrame(() => {
+    if (target) focusStartAndTarget(start, target, 0.2);
+    else centerOn(start);
+  });
+
+  return { ok: true };
+}
 
   // ---------- ICONS & PULSES ----------
   const attachPathRef = (id) => (el) => {
@@ -2325,6 +2595,8 @@ const backToMenu = React.useCallback(() => {
   } else {
     abandonIfActive('menu');
     clearAchievementToasts();
+    setChallengeRun(null);
+    setChallengeLives(3);
     setGameState('menu');
     setBurgerOpen(false);
   }
@@ -2360,6 +2632,8 @@ useEffect(() => {
 
 const startNewGame = () => {
   nudgeDismissedRef.current = false;
+  setChallengeRun(null);
+  setChallengeLives(3);
   setShowHints(false);
   clearAchievementToasts();
   abandonIfActive('reroll');
@@ -2398,7 +2672,7 @@ const startNewGame = () => {
 
 // const minStepsByMode = { easy: 3, normal: 4, hard: 5, master: 6 };
 const makeGuess = useCallback((area) => {
-  if (gameWon || dailyGaveUp) return;
+  if (gameWon || dailyGaveUp || challengeRun?.failed) return;
   if (gameState === 'playing' && !gameStartRef.current) {
     introTourRef.current += 1;
     gameStartRef.current = performance.now();
@@ -2413,7 +2687,9 @@ const makeGuess = useCallback((area) => {
   const isKnownArea = !!postcodeAreas[area];
   const isValidMove = getNeighbors(currentLocation).includes(area);
   const alreadyVisited = currentPath.includes(area);
-  const revisitAllowed = (difficulty === 'easy' || difficulty === 'normal');
+  const isChallengeRun = !!challengeRun;
+  const challengeAllowsRevisits = isChallengeRun && activeChallengeDef?.allowRevisits;
+  const revisitAllowed = challengeAllowsRevisits || (!isChallengeRun && (difficulty === 'easy' || difficulty === 'normal'));
 
   const viaFerry  = ferryAdj.get(currentLocation)?.has(area) || false;
   const viaBridge = !!bridgeAdj.get(currentLocation)?.has(area);
@@ -2431,8 +2707,19 @@ const makeGuess = useCallback((area) => {
     setFlashAreas(prev => [...prev, area]);
     setTimeout(() => setFlashAreas(prev => prev.filter(a => a !== area)), 500);
 
-    if (!isValidMove)        showError(`${area} isn’t adjacent to ${currentLocation}`);
-    else if (alreadyVisited) showError(`You've already visited ${area} in this game. Revisiting is not allowed in ${difficulty} difficulty`);
+    if (isChallengeRun && !isValidMove) {
+      const nextLives = Math.max(0, challengeLives - 1);
+      setChallengeLives(nextLives);
+      if (nextLives <= 0) {
+        setChallengeRun((run) => run ? { ...run, failed: true } : run);
+        setGameState('gameOver');
+        showError(`${area} is not adjacent to ${currentLocation}. No lives left.`);
+        return;
+      }
+      showError(`${area} is not adjacent to ${currentLocation}. ${nextLives} ${nextLives === 1 ? 'life' : 'lives'} left.`);
+    }
+    else if (!isValidMove)        showError(`${area} is not adjacent to ${currentLocation}`);
+    else if (alreadyVisited) showError(`You've already visited ${area} in this game. Revisiting is not allowed in ${isChallengeRun ? 'this challenge' : `${difficulty} difficulty`}`);
     return;
   }
 
@@ -2473,13 +2760,20 @@ recordAttemptEvent('guess_correct', {
 
 
 
-if (area === targetArea) {
+if (challengeRun) {
+  const challenge = CHALLENGES.find((item) => item.id === challengeRun.id);
+  const usedEdges = getChallengeUsedEdges(newPath);
+  if (challenge?.isComplete(newPath, usedEdges, challengeRun)) {
+    completeChallengeRun(newPath);
+  }
+} else if (area === targetArea) {
   finishGame(newPath);
 }
 }, [
   getNeighbors, gameWon, currentPath, targetArea, finishGame,
   ferryAdj, bridgeAdj, difficulty, showError,
-  onPersist, dailyGaveUp, gameState, enqueueAchievementBatch,clearAchievementToasts
+  onPersist, dailyGaveUp, gameState, enqueueAchievementBatch,clearAchievementToasts,
+  activeChallengeDef?.allowRevisits, challengeLives, challengeRun, completeChallengeRun, getChallengeUsedEdges
 ]);
 
 // const isFerryEdge  = (a,b) => ferryAdj.get(a)?.has(b)  || false;
@@ -2633,7 +2927,7 @@ const renderControls = () => (
 
 <div className="text-center leading-tight text-[clamp(11px,2.6vw,13px)]">
   <div className="flex flex-col items-center gap-1">
-    <div className="whitespace-nowrap">Travel from</div>
+    <div className="whitespace-nowrap">{challengeRun ? 'Challenge from' : 'Travel from'}</div>
 
     <div className="flex items-center justify-center gap-2 flex-wrap">
       <button
@@ -2669,6 +2963,11 @@ const renderControls = () => (
         Par {dailyPar}
       </span>
     )}
+    {challengeRun && activeChallengeDef && (
+      <span className="badge badge-gray inline-flex items-center !text-[11px] !leading-tight !py-0.5 !px-2 align-middle">
+        {activeChallengeDef.name}: {challengeProgress} · Lives {challengeLives}
+      </span>
+    )}
   </div>
 </div>
 
@@ -2702,9 +3001,11 @@ const renderControls = () => (
             onClick={(e) => e.stopPropagation()}
           >
             <div className="pp-game-menu-head">
-              <div className="pp-game-menu-eyebrow">{dailyMode ? 'Daily Challenge' : 'Game menu'}</div>
+              <div className="pp-game-menu-eyebrow">{challengeRun ? 'Challenge' : dailyMode ? 'Daily Challenge' : 'Game menu'}</div>
               <div className="pp-game-menu-title">
-                {dailyMode
+                {challengeRun && activeChallengeDef
+                  ? `${activeChallengeDef.name} · ${challengeRun.failed ? 'Failed' : roundResolved ? 'Complete' : 'In progress'}`
+                  : dailyMode
                   ? `${DIFF_LABELS[dailyDifficulty] || dailyDifficulty || 'Daily'} ${roundResolved ? '· Complete' : '· In progress'}`
                   : `${DIFF_LABELS[difficulty] || difficulty || 'Free Play'} Free Play`}
               </div>
@@ -2714,7 +3015,7 @@ const renderControls = () => (
             </div>
 
             <div className="pp-game-menu-section">
-              <div className="pp-game-menu-label">{dailyMode ? 'Daily controls' : 'Game'}</div>
+              <div className="pp-game-menu-label">{challengeRun ? 'Challenge controls' : dailyMode ? 'Daily controls' : 'Game'}</div>
               <button
                 type="button"
                 role="menuitem"
@@ -2728,24 +3029,24 @@ const renderControls = () => (
               <button
                 type="button"
                 role="menuitem"
-                className={`pp-game-menu-item ${dailyMode ? 'is-disabled' : 'is-emphasis'}`}
-                onClick={dailyMode ? undefined : () => { fireReroll?.('new_game_button'); startNewGame(); setBurgerOpen(false); }}
-                disabled={dailyMode}
-                aria-disabled={dailyMode}
-                title={dailyMode ? 'Unavailable during Daily Challenge' : 'Start a new random game'}
+                className={`pp-game-menu-item ${dailyMode || challengeRun ? 'is-disabled' : 'is-emphasis'}`}
+                onClick={dailyMode || challengeRun ? undefined : () => { fireReroll?.('new_game_button'); startNewGame(); setBurgerOpen(false); }}
+                disabled={dailyMode || !!challengeRun}
+                aria-disabled={dailyMode || !!challengeRun}
+                title={dailyMode || challengeRun ? 'Unavailable during this mode' : 'Start a new random game'}
               >
                 <Flag className="w-4 h-4" aria-hidden="true" />
                 <span>
                   New Game
-                  {dailyMode && <small>Unavailable during Daily</small>}
+                  {(dailyMode || challengeRun) && <small>Unavailable here</small>}
                 </span>
               </button>
 
               <button
                 type="button"
                 role="menuitem"
-                className={`pp-game-menu-item ${dailyMode ? 'is-disabled' : 'is-warn'}`}
-                onClick={dailyMode ? undefined : () => {
+                className={`pp-game-menu-item ${dailyMode || challengeRun ? 'is-disabled' : 'is-warn'}`}
+                onClick={dailyMode || challengeRun ? undefined : () => {
                   abandonIfActive('restart');
                   setCurrentPath([startArea]);
                   setGuesses([]);
@@ -2766,14 +3067,14 @@ const renderControls = () => (
                   });
                   setBurgerOpen(false);
                 }}
-                disabled={dailyMode}
-                aria-disabled={dailyMode}
-                title={dailyMode ? 'Unavailable during Daily Challenge' : 'Restart this round'}
+                disabled={dailyMode || !!challengeRun}
+                aria-disabled={dailyMode || !!challengeRun}
+                title={dailyMode || challengeRun ? 'Unavailable during this mode' : 'Restart this round'}
               >
                 <Route className="w-4 h-4" aria-hidden="true" />
                 <span>
                   Restart
-                  {dailyMode && <small>Unavailable during Daily</small>}
+                  {(dailyMode || challengeRun) && <small>Unavailable here</small>}
                 </span>
               </button>
             </div>
@@ -2846,12 +3147,14 @@ const renderControls = () => (
                     const isKnownArea = !!postcodeAreas[code];
                     const isValidMove = getNeighbors(currentLocation).includes(code);
                     const alreadyVisited = currentPath.includes(code);
-                    const revisitAllowed = difficulty === 'easy' || difficulty === 'normal';
+                    const revisitAllowed = !challengeRun && (difficulty === 'easy' || difficulty === 'normal');
                     const allowedMove = isValidMove && (!alreadyVisited || revisitAllowed);
 
                     makeGuess(code);
 
                     if (!isKnownArea) return;
+
+                    if (cameraMode === 'static') return;
 
                     requestAnimationFrame(() => {
                       zoomToArea(code, { duration: allowedMove ? 0 : 250 });
@@ -2912,12 +3215,12 @@ const renderControls = () => (
 
               {mobileControlsTab === 'actions' && (
                 <div className="p-3 grid grid-cols-3 gap-2">
-                  {!masterMode && (
+                  {!masterMode && !challengeRun && (
                     <button onClick={undoLastMove} disabled={currentPath.length <= 1} aria-disabled={currentPath.length <= 1} className={`btn btn-neutral m-0 ${currentPath.length <= 1 ? 'opacity-50 cursor-not-allowed' : ''}`}>Undo</button>
                   )}
                   {masterMode && <span />}
                   <button className="btn btn-warn m-0" onClick={() => setGiveUpOpen(true)}>Give up</button>
-                  <button className="btn btn-success m-0" onClick={toggleHints} disabled={dailyMode && hintsUsed >= MAX_DAILY_HINTS && !showHints}>
+                  <button className="btn btn-success m-0" onClick={toggleHints} disabled={!!challengeRun || (dailyMode && hintsUsed >= MAX_DAILY_HINTS && !showHints)}>
                     {dailyMode ? `Hints (${Math.max(0, MAX_DAILY_HINTS - hintsUsed)})` : 'Hints'}
                   </button>
                 </div>
@@ -3102,7 +3405,7 @@ const renderControls = () => (
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            {!roundResolved && !masterMode && (
+            {!roundResolved && !masterMode && !challengeRun && (
               <button
                 onClick={undoLastMove}
                 disabled={currentPath.length <= 1}
@@ -3162,7 +3465,7 @@ const renderControls = () => (
               <button
                 className="btn btn-success"
                 onClick={toggleHints}
-                disabled={dailyMode && hintsUsed >= MAX_DAILY_HINTS && !showHints}
+                disabled={!!challengeRun || (dailyMode && hintsUsed >= MAX_DAILY_HINTS && !showHints)}
                 title={dailyMode ? `Hints left: ${Math.max(0, MAX_DAILY_HINTS - hintsUsed)}` : 'Show possible neighbours'}
               >
                 {dailyMode
@@ -4005,6 +4308,8 @@ if (route === 'settings') {
       onLargeControlsChange={setLargeControls}
       mapStyle={mapStyle}
       onMapStyleChange={setMapStyle}
+      cameraMode={cameraMode}
+      onCameraModeChange={setCameraMode}
       textSize={textSize}
       onTextSizeChange={setTextSize}
     />
@@ -4023,6 +4328,22 @@ if (route === 'about') {
   return (
     <AboutPage
       onBack={() => navigate('')}
+    />
+  );
+}
+
+if (route === 'challenges') {
+  return (
+    <ChallengesPage
+      challenges={CHALLENGES}
+      bests={readChallengeBests()}
+      bestsVersion={challengeBestsVersion}
+      onBack={() => navigate('about')}
+      onStart={(challengeId, start) => {
+        const result = startChallenge(challengeId, start);
+        if (result?.ok) navigate('');
+        return result;
+      }}
     />
   );
 }
@@ -4080,7 +4401,7 @@ return (
     >
       <h2 id="leave-title" className="text-xl font-semibold mb-2">Leave this game?</h2>
       <p className="mb-4">
-        You’ll <b>lose your current Free Play progress</b> for this round.<br/>
+        You will <b>lose your current {challengeRun ? 'Challenge' : 'Free Play'} progress</b> for this round.<br/>
         Current route: <b>{Math.max(0, currentPath.length - 1)}</b> moves
         {optimalPath.length > 0 && <> · Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b></>}
       </p>
@@ -4091,6 +4412,8 @@ return (
             setLeaveConfirmOpen(false);
             abandonIfActive('menu');    // analytics-safe
             clearAchievementToasts();
+            setChallengeRun(null);
+            setChallengeLives(3);
             setGameState('menu');
             setBurgerOpen(false);
           }}
@@ -4127,10 +4450,21 @@ return (
         }}>
           <h2 className="text-xl font-semibold mb-2">Victory! 🎉</h2>
           <p className="mb-4">
-            From <b>{startArea}</b> to <b>{targetArea}</b><br />
-            Moves: <b>{Math.max(0, currentPath.length - 1)}</b><br />
-            Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b><br />
-            {parLine}<br />
+            {challengeRun && activeChallengeDef ? (
+              <>
+                <b>{activeChallengeDef.name}</b><br />
+                Connections: <b>{Math.max(0, currentPath.length - 1)}</b><br />
+                Lives lost: <b>{Math.max(0, 3 - challengeLives)}</b><br />
+                {challengeRun.isBest && <>New local best<br /></>}
+              </>
+            ) : (
+              <>
+                From <b>{startArea}</b> to <b>{targetArea}</b><br />
+                Moves: <b>{Math.max(0, currentPath.length - 1)}</b><br />
+                Optimal: <b>{Math.max(0, optimalPath.length - 1)}</b><br />
+                {parLine}<br />
+              </>
+            )}
             
              {dailyMode && (streaks?.[dailyDifficulty] ?? 0) > 0 && (
    <>Streak: <b>{streaks[dailyDifficulty]}</b> · </>
@@ -4143,7 +4477,13 @@ return (
 
             <button
   onClick={() => {
-    if (dailyMode) {
+    if (challengeRun) {
+      setVictoryOpen(false);
+      setChallengeRun(null);
+      setChallengeLives(3);
+      setGameState('menu');
+      navigate('challenges');
+    } else if (dailyMode) {
       setVictoryOpen(false);
       setGameState('menu'); // or show the completed daily again
     } else {
@@ -4152,7 +4492,7 @@ return (
   }}
   className="btn btn-warn glass"
 >
-  {dailyMode ? 'Back to Menu' : 'Play again'}
+  {challengeRun ? 'Back to Challenges' : dailyMode ? 'Back to Menu' : 'Play again'}
 </button>
 
 

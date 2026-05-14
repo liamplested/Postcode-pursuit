@@ -100,6 +100,13 @@ export default function AboutPage({ onBack }) {
       </section>
 
       <section className="glass pp-settings-section p-4 rounded-xl mb-6">
+        <h2>Thanks</h2>
+        <p>
+          Thanks to Shabi, Szilard, Taneisha and Chris W for early feedback that helped shape different parts of the game.
+        </p>
+      </section>
+
+      <section className="glass pp-settings-section p-4 rounded-xl mb-6">
         <h2>Feedback</h2>
         <p>Got feedback, spotted a bug, or have an idea for the game?</p>
         <a
@@ -108,6 +115,9 @@ export default function AboutPage({ onBack }) {
         >
           Send feedback
         </a>
+        <div className="mt-4 text-xs opacity-50">
+          <a href="#/challenges">Experimental challenges</a>
+        </div>
       </section>
     </div>
   );

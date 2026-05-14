@@ -26,6 +26,11 @@ const MAP_STYLE_OPTIONS = [
   { value: 'night', label: 'Night' },
 ];
 
+const CAMERA_OPTIONS = [
+  { value: 'follow', label: 'Snap' },
+  { value: 'static', label: 'Static' },
+];
+
 const ONBOARDING_KEY = 'pp:onboardingComplete:v1';
 
 export default function Settings({
@@ -40,6 +45,8 @@ export default function Settings({
   onLargeControlsChange,
   mapStyle,
   onMapStyleChange,
+  cameraMode,
+  onCameraModeChange,
   textSize,
   onTextSizeChange,
 }) {
@@ -51,6 +58,7 @@ export default function Settings({
   const [localInputMode, setLocalInputMode] = React.useState(() => inputMode || 'auto');
   const [localLargeControls, setLocalLargeControls] = React.useState(() => !!largeControls);
   const [localMapStyle, setLocalMapStyle] = React.useState(() => mapStyle || 'standard');
+  const [localCameraMode, setLocalCameraMode] = React.useState(() => cameraMode || 'follow');
   const [localTextSize, setLocalTextSize] = React.useState(() => textSize || 'normal');
 
   React.useEffect(() => {
@@ -71,6 +79,9 @@ export default function Settings({
     if (mapStyle) setLocalMapStyle(mapStyle);
   }, [mapStyle]);
   React.useEffect(() => {
+    if (cameraMode) setLocalCameraMode(cameraMode);
+  }, [cameraMode]);
+  React.useEffect(() => {
     if (textSize) setLocalTextSize(textSize);
   }, [textSize]);
 
@@ -79,6 +90,7 @@ export default function Settings({
   const selectedInputMode = inputMode || localInputMode;
   const selectedLargeControls = largeControls ?? localLargeControls;
   const selectedMapStyle = mapStyle || localMapStyle;
+  const selectedCameraMode = cameraMode || localCameraMode;
   const selectedTextSize = textSize || localTextSize;
 
   const handleThemeChange = (value) => {
@@ -104,6 +116,11 @@ export default function Settings({
   const handleMapStyleChange = (value) => {
     setLocalMapStyle(value);
     onMapStyleChange?.(value);
+  };
+
+  const handleCameraModeChange = (value) => {
+    setLocalCameraMode(value);
+    onCameraModeChange?.(value);
   };
 
   const handleTextSizeChange = (value) => {
@@ -256,6 +273,24 @@ export default function Settings({
                 aria-checked={selectedMapStyle === option.value}
                 className={selectedMapStyle === option.value ? 'is-active' : ''}
                 onClick={() => handleMapStyleChange(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <h3 className="font-semibold">Camera movement</h3>
+          <div className="pp-settings-segmented mt-3 pp-settings-segmented--two" role="radiogroup" aria-label="Camera movement">
+            {CAMERA_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selectedCameraMode === option.value}
+                className={selectedCameraMode === option.value ? 'is-active' : ''}
+                onClick={() => handleCameraModeChange(option.value)}
               >
                 {option.label}
               </button>

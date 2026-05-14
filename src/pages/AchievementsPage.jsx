@@ -453,14 +453,14 @@ export default function AchievementsPage({
         </div>
 
         <div className="pp-ach-note">
-          <p className="m-0"><b>Repeatable</b> achievements quietly track how many times they have been achieved where history can determine it.</p>
-          <p className="m-0 mt-1"><b>Streak</b> achievements show current progress toward each milestone. <b>Coverage</b> achievements show permanent lifetime progress.</p>
+          <p className="m-0"><b>Repeatable</b> achievements track how many times you have earned them when history is available.</p>
+          <p className="m-0 mt-1"><b>Streak</b> achievements show current progress toward each milestone. <b>Coverage</b> achievements show lifetime progress.</p>
         </div>
 
         <div className="pp-ach-sections">
           <Section
             title="Repeatable Per Game"
-            note="First unlock gets the moment; later repeats stay as a subtle count."
+            note="The first unlock records the date; later repeats add to the count."
             count={`${repeatable.filter((x) => x.unlockedRecord).length} unlocked`}
           >
             {repeatable.map((item) => (
@@ -499,7 +499,7 @@ export default function AchievementsPage({
 
           <Section
             title="Lifetime / Meta Coverage"
-            note="Slow-burn achievements with natural counters and progress bars."
+            note="Long-term achievements with counters and progress bars."
             count={`${coverage.filter((x) => x.unlockedRecord).length} unlocked`}
           >
             {coverage.map((item) => (
@@ -509,7 +509,7 @@ export default function AchievementsPage({
 
           <Section
             title="Lifetime Achievements"
-            note="One-off goals and hidden discoveries stay clean and binary."
+            note="One-off goals and hidden discoveries are either locked or complete."
             count={`${lifetime.filter((x) => x.unlockedRecord).length} unlocked`}
           >
             {lifetime.map((item) => (

@@ -93,7 +93,7 @@ export default function AchievementsModal({
         <h3 className="text-sm font-semibold mb-2 opacity-80">Locked ({locked.length})</h3>
         {locked.length === 0 ? (
           <div className="text-sm opacity-80 bg-white/10 rounded-xl p-3">
-            You’ve unlocked everything—for now. More achievements coming soon!
+            You’ve unlocked everything for now. More achievements coming soon!
           </div>
         ) : (
           <ul className="grid gap-2">

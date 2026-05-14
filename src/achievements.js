@@ -89,6 +89,215 @@ function isEligibleForRun(achievement, event = {}) {
   return true;
 }
 
+const FERRY_CROSSING_ACHIEVEMENTS = [
+  {
+    id: 'ferry_belfast_cairnryan',
+    name: 'Belfast Boat',
+    icon: '⛴️',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['BT', 'DG'],
+    description: 'Use the Belfast to Cairnryan ferry route',
+  },
+  {
+    id: 'ferry_belfast_douglas',
+    name: 'Manx Crossing',
+    icon: '⛴️',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['BT', 'IM'],
+    description: 'Use the Belfast to Douglas ferry route',
+  },
+  {
+    id: 'ferry_douglas_liverpool',
+    name: 'Liverbird Landing',
+    icon: '⛴️',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['IM', 'L'],
+    description: 'Use the Douglas to Liverpool ferry route',
+  },
+  {
+    id: 'ferry_douglas_heysham',
+    name: 'Heysham Harbour',
+    icon: '⛴️',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['IM', 'LA'],
+    description: 'Use the Douglas to Heysham ferry route',
+  },
+  {
+    id: 'ferry_aberdeen_shetland',
+    name: 'North Sea Night Boat',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['AB', 'ZE'],
+    description: 'Use the Aberdeen to Shetland ferry route',
+  },
+  {
+    id: 'ferry_aberdeen_orkney',
+    name: 'Orkney Passage',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['AB', 'KW'],
+    description: 'Use the Aberdeen to Orkney ferry route',
+  },
+  {
+    id: 'ferry_orkney_shetland',
+    name: 'Island Chain',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['KW', 'ZE'],
+    description: 'Use the Orkney to Shetland ferry route',
+  },
+  {
+    id: 'ferry_outer_hebrides_north',
+    name: 'Hebridean Hop',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['IV', 'HS'],
+    description: 'Use the Highlands to Outer Hebrides ferry route',
+  },
+  {
+    id: 'ferry_outer_hebrides_oban',
+    name: 'Barra Bound',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['PA', 'HS'],
+    description: 'Use the Oban to Outer Hebrides ferry route',
+  },
+  {
+    id: 'ferry_outer_hebrides_mallaig',
+    name: 'Mallaig Mailboat',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['PH', 'HS'],
+    description: 'Use the Mallaig to Outer Hebrides ferry route',
+  },
+  {
+    id: 'ferry_arran_kintyre',
+    name: 'Arran Run',
+    icon: '⛴️',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['KA', 'PA'],
+    description: 'Use the Arran to Kintyre ferry route',
+  },
+  {
+    id: 'mersey',
+    name: 'Ferry Cross the Mersey',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['CH', 'L'],
+    description: 'Use the ferry across the Mersey in either direction',
+  },
+  {
+    id: 'ferry_poole_guernsey',
+    name: 'Guernsey from Poole',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['BH', 'GY'],
+    description: 'Use the Poole to Guernsey ferry route',
+  },
+  {
+    id: 'ferry_poole_jersey',
+    name: 'Jersey from Poole',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['BH', 'JE'],
+    description: 'Use the Poole to Jersey ferry route',
+  },
+  {
+    id: 'ferry_portsmouth_guernsey',
+    name: 'Portsmouth to Guernsey',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['PO', 'GY'],
+    description: 'Use the Portsmouth to Guernsey ferry route',
+  },
+  {
+    id: 'ferry_portsmouth_jersey',
+    name: 'Portsmouth to Jersey',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['PO', 'JE'],
+    description: 'Use the Portsmouth to Jersey ferry route',
+  },
+];
+
+const BRIDGE_CROSSING_ACHIEVEMENTS = [
+  {
+    id: 'crossing_dartford',
+    name: 'Dartford Crossing',
+    icon: '🌉',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['DA', 'RM'],
+    description: 'Use the Dartford Crossing',
+  },
+  {
+    id: 'crossing_severn',
+    name: 'Severn Span',
+    icon: '🌉',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['BS', 'NP'],
+    description: 'Use a Severn crossing',
+  },
+  {
+    id: 'crossing_mersey_tunnel',
+    name: 'Under the Mersey',
+    icon: '🕳️',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['L', 'CH'],
+    description: 'Use a Mersey tunnel',
+  },
+  {
+    id: 'crossing_humber',
+    name: 'Humber Bridge',
+    icon: '🌉',
+    tier: 'silver',
+    hidden: true,
+    edge: ['HU', 'DN'],
+    description: 'Use the Humber Bridge',
+  },
+  {
+    id: 'crossing_forth',
+    name: 'Forth Crossing',
+    icon: '🌉',
+    tier: 'silver',
+    hidden: true,
+    edge: ['EH', 'KY'],
+    description: 'Use a Forth crossing',
+  },
+  {
+    id: 'crossing_blackwall',
+    name: 'Blackwall Passage',
+    icon: '🕳️',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['E', 'SE'],
+    description: 'Use the Blackwall Tunnel',
+  },
+];
+
+const CROSSING_ACHIEVEMENTS = [
+  ...FERRY_CROSSING_ACHIEVEMENTS.map((a) => ({ ...a, crossingType: 'ferry', check: () => false })),
+  ...BRIDGE_CROSSING_ACHIEVEMENTS.map((a) => ({ ...a, crossingType: 'bridge', check: () => false })),
+];
+
 // ---- Definitions ----
 export const achievements = [
 { id: 'first', name: 'First Steps', icon:'⭐', tier:'bronze',
@@ -135,9 +344,7 @@ export const achievements = [
     description: 'Visit every postcode area',
     check: (_e,_h,meta) => (meta?.totalAreas > 0) && (meta.visitedCount >= meta.totalAreas) },
 
-  { id: 'mersey', name: 'Ferry Cross the Mersey', icon:'⛴️', tier:'silver', hidden:true,
-    description: 'Use the ferry across the Mersey in either direction',
-    check: (_e,_h,meta) => !!meta?.hasMersey },
+  ...CROSSING_ACHIEVEMENTS,
 
   { id: 'all_ferries', name: 'Harbour Master', icon:'⚓', tier:'gold',
     description: 'Use every ferry route at least once (across all games)',
@@ -257,54 +464,54 @@ export const achievements = [
     } },
 
     // ---- Easy streaks ----
-{ id: 'streak7_easy',  name: 'First-Class Week — Easy',  icon:'🔥', tier:'bronze',
+{ id: 'streak7_easy',  name: 'First-Class Week: Easy',  icon:'🔥', tier:'bronze',
   description: '7-day daily streak on Easy',
   check: () => readStreakCount('easy') >= 7 },
 
-{ id: 'streak14_easy', name: 'Fortnight Postmark — Easy', icon:'🔥', tier:'silver',
+{ id: 'streak14_easy', name: 'Fortnight Postmark: Easy', icon:'🔥', tier:'silver',
   description: '14-day daily streak on Easy',
   check: () => readStreakCount('easy') >= 14 },
 
-{ id: 'streak30_easy', name: 'Monthly Round — Easy', icon:'🔥', tier:'gold',
+{ id: 'streak30_easy', name: 'Monthly Round: Easy', icon:'🔥', tier:'gold',
   description: '30-day daily streak on Easy',
   check: () => readStreakCount('easy') >= 30 },
 
 // ---- Normal streaks ----
-{ id: 'streak7_normal',  name: 'First-Class Week — Normal',  icon:'🔥', tier:'bronze',
+{ id: 'streak7_normal',  name: 'First-Class Week: Normal',  icon:'🔥', tier:'bronze',
   description: '7-day daily streak on Normal',
   check: () => readStreakCount('normal') >= 7 },
 
-{ id: 'streak14_normal', name: 'Fortnight Postmark — Normal', icon:'🔥', tier:'silver',
+{ id: 'streak14_normal', name: 'Fortnight Postmark: Normal', icon:'🔥', tier:'silver',
   description: '14-day daily streak on Normal',
   check: () => readStreakCount('normal') >= 14 },
 
-{ id: 'streak30_normal', name: 'Monthly Round — Normal', icon:'🔥', tier:'gold',
+{ id: 'streak30_normal', name: 'Monthly Round: Normal', icon:'🔥', tier:'gold',
   description: '30-day daily streak on Normal',
   check: () => readStreakCount('normal') >= 30 },
 
 // ---- Hard streaks ----
-{ id: 'streak7_hard',  name: 'First-Class Week — Hard',  icon:'🔥', tier:'bronze',
+{ id: 'streak7_hard',  name: 'First-Class Week: Hard',  icon:'🔥', tier:'bronze',
   description: '7-day daily streak on Hard',
   check: () => readStreakCount('hard') >= 7 },
 
-{ id: 'streak14_hard', name: 'Fortnight Postmark — Hard', icon:'🔥', tier:'silver',
+{ id: 'streak14_hard', name: 'Fortnight Postmark: Hard', icon:'🔥', tier:'silver',
   description: '14-day daily streak on Hard',
   check: () => readStreakCount('hard') >= 14 },
 
-{ id: 'streak30_hard', name: 'Monthly Round — Hard', icon:'🔥', tier:'gold',
+{ id: 'streak30_hard', name: 'Monthly Round: Hard', icon:'🔥', tier:'gold',
   description: '30-day daily streak on Hard',
   check: () => readStreakCount('hard') >= 30 },
 
 // ---- Master streaks ----
-{ id: 'streak7_master',  name: 'First-Class Week — Master',  icon:'🔥', tier:'bronze',
+{ id: 'streak7_master',  name: 'First-Class Week: Master',  icon:'🔥', tier:'bronze',
   description: '7-day daily streak on Master',
   check: () => readStreakCount('master') >= 7 },
 
-{ id: 'streak14_master', name: 'Fortnight Postmark — Master', icon:'🔥', tier:'silver',
+{ id: 'streak14_master', name: 'Fortnight Postmark: Master', icon:'🔥', tier:'silver',
   description: '14-day daily streak on Master',
   check: () => readStreakCount('master') >= 14 },
 
-{ id: 'streak30_master', name: 'Monthly Round — Master', icon:'🔥', tier:'gold',
+{ id: 'streak30_master', name: 'Monthly Round: Master', icon:'🔥', tier:'gold',
   description: '30-day daily streak on Master',
   check: () => readStreakCount('master') >= 30 },
 
@@ -409,9 +616,9 @@ export function unlockStreaksFor(diff) {
   const titleCase = s => s.charAt(0).toUpperCase() + s.slice(1);
   const label = titleCase(diff);
 
-  if (n >= 7)  want.push({ id: `streak7_${diff}`,  name: `First-Class Week — ${label}`, tier: 'bronze' });
-  if (n >= 14) want.push({ id: `streak14_${diff}`, name: `Fortnight Postmark — ${label}`, tier: 'silver' });
-  if (n >= 30) want.push({ id: `streak30_${diff}`, name: `Monthly Round — ${label}`, tier: 'gold' });
+  if (n >= 7)  want.push({ id: `streak7_${diff}`,  name: `First-Class Week: ${label}`, tier: 'bronze' });
+  if (n >= 14) want.push({ id: `streak14_${diff}`, name: `Fortnight Postmark: ${label}`, tier: 'silver' });
+  if (n >= 30) want.push({ id: `streak30_${diff}`, name: `Monthly Round: ${label}`, tier: 'gold' });
 
   return unlockAndPersist(want); // your existing persist that returns only *new* ones
 }
@@ -532,7 +739,15 @@ if (have.all_ferries && have.all_bridges) {
   want.push({ id: 'infrastructure_chief' });
 }
 
-if (usedF.has(canonEdge('L', 'CH'))) want.push({ id: 'mersey' });
+for (const achievement of FERRY_CROSSING_ACHIEVEMENTS) {
+  const [a, b] = achievement.edge;
+  if (usedF.has(canonEdge(a, b))) want.push({ id: achievement.id });
+}
+
+for (const achievement of BRIDGE_CROSSING_ACHIEVEMENTS) {
+  const [a, b] = achievement.edge;
+  if (usedB.has(canonEdge(a, b))) want.push({ id: achievement.id });
+}
 
   // map the minimal items above to real objects from your defined list (by id)
   const byId = new Map(achievements.map(a => [a.id, a]));

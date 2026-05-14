@@ -34,7 +34,7 @@ export default function AchievementToast({ icon, title, description, onClose }) 
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: 16 }}>Achievement unlocked</div>
           <div style={{ color: 'rgba(255,255,255,0.82)', fontSize: 14, marginTop: 4 }}>
-            <strong>{title}</strong> — {description}
+            <strong>{title}</strong>: {description}
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
