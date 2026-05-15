@@ -1842,12 +1842,14 @@ export const ferryLinks = [
 
   // East
   // { a: "CO", b: "IP", type: "ferry" }, // Harwich ↔ Felixstowe (foot ferry) (already connected via land)
+  { a: "E", b: "SE", type: "ferry" }, // Woolwich Ferry
 
   // Channel Islands (optional — include only if GY/JE are on your map)
   { a: "BH", b: "GY", type: "ferry" }, // Poole ↔ Guernsey
   { a: "BH", b: "JE", type: "ferry" }, // Poole ↔ Jersey
   { a: "PO", b: "GY", type: "ferry" }, // Portsmouth ↔ Guernsey
   { a: "PO", b: "JE", type: "ferry" }, // Portsmouth ↔ Jersey
+  { a: "GY", b: "JE", type: "ferry" }, // Guernsey ↔ Jersey
 ];
 
 export const bridgeLinks = [

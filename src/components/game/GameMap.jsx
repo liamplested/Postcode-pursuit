@@ -1,6 +1,10 @@
 import React from 'react';
 import { bridgeLinks, ferryLinks, postcodeAreas } from '../../postcodeAreas';
 
+function isBackgroundFerryRoute(a, b) {
+  return (a === 'E' && b === 'SE') || (a === 'SE' && b === 'E');
+}
+
 function makeSpx(scale, mult = 1) {
   const s = Math.max(Number(scale || 1), 0.0001);
   return (n) => (mult * n) / s;
@@ -248,6 +252,32 @@ export default function GameMap({
               </g>
             )}
 
+            {!masterMode && Array.isArray(ferryRoutes) && ferryRoutes.length > 0 && (
+              <g pointerEvents="none" aria-label="Background ferry routes">
+                {ferryRoutes.map(({ a, b }, i) => {
+                  if (!isBackgroundFerryRoute(a, b)) return null;
+                  if (!postcodeAreas[a] || !postcodeAreas[b]) return null;
+                  const d = arcPath(a, b);
+                  if (!d) return null;
+
+                  return (
+                    <g key={`ferry-bg-${a}-${b}-${i}`}>
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke="#ffffffff"
+                        strokeWidth={3}
+                        strokeDasharray="4 10"
+                        strokeLinecap="round"
+                        opacity="0.7"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </g>
+                  );
+                })}
+              </g>
+            )}
+
             {Object.entries(postcodeAreas).map(([code, area]) => {
               const isCurrent = !gameWon && currentArea && code === currentArea && code !== targetArea;
               const extra = [
@@ -276,6 +306,7 @@ export default function GameMap({
           {!masterMode && Array.isArray(ferryRoutes) && ferryRoutes.length > 0 && (
             <g pointerEvents="none" aria-label="Ferry routes">
               {ferryRoutes.map(({ a, b }, i) => {
+                if (isBackgroundFerryRoute(a, b)) return null;
                 if (!postcodeAreas[a] || !postcodeAreas[b]) return null;
                 const d = arcPath(a, b);
                 if (!d) return null;

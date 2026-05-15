@@ -199,6 +199,15 @@ const FERRY_CROSSING_ACHIEVEMENTS = [
     description: 'Use the ferry across the Mersey in either direction',
   },
   {
+    id: 'ferry_cross_the_thames',
+    name: 'Ferry Cross the Thames',
+    icon: '⛴️',
+    tier: 'bronze',
+    hidden: true,
+    edge: ['E', 'SE'],
+    description: 'Use the Woolwich Ferry across the Thames',
+  },
+  {
     id: 'ferry_poole_guernsey',
     name: 'Guernsey from Poole',
     icon: '⛴️',
@@ -233,6 +242,15 @@ const FERRY_CROSSING_ACHIEVEMENTS = [
     hidden: true,
     edge: ['PO', 'JE'],
     description: 'Use the Portsmouth to Jersey ferry route',
+  },
+  {
+    id: 'ferry_guernsey_jersey',
+    name: 'Island Shuttle',
+    icon: '⛴️',
+    tier: 'silver',
+    hidden: true,
+    edge: ['GY', 'JE'],
+    description: 'Use the Guernsey to Jersey ferry route',
   },
 ];
 
