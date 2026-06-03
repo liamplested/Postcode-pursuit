@@ -115,8 +115,11 @@ export default function AboutPage({ onBack }) {
         >
           Send feedback
         </a>
-        <div className="mt-4 text-xs opacity-50">
+        <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-xs opacity-50">
           <a href="#/challenges">Experimental challenges</a>
+          <a href="https://alienstrain.netlify.app/" target="_blank" rel="noreferrer">
+            Alien Strain
+          </a>
         </div>
       </section>
     </div>
