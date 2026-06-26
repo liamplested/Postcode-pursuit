@@ -63,10 +63,6 @@ import {
 import { syncAttemptSummary } from './utils/analyticsSync';
 
 
-import { auth } from './firebase';
-
-console.log('UID:', auth.currentUser?.uid);
-
 // ---- Module-level constants -------------------------------------------------
 // Define the World
 const WORLD = { x: 0, y: 0, width: 15000, height: 17500 }; // <- your existing values
@@ -1536,14 +1532,6 @@ const tallyEdgeUsage = useCallback((path) => {
 }, [ferryAdj, bridgeAdj]);
 
 
-useEffect(() => {
-  console.log('toast check', { consentResolved, gameState, len: currentPath.length, dismissed: nudgeDismissedRef.current });
-}, [consentResolved, gameState, currentPath.length]);
-
-useEffect(() => {
-  console.log('showNudge ->', showNudge);
-}, [showNudge]);
-
 // listen for consent completion from ConsentManager
 useEffect(() => {
   const onResolved = () => setConsentResolved(true);
@@ -1559,7 +1547,11 @@ useEffect(() => {
 }, [consentResolved]);
 useEffect(() => {
   const setGameViewportHeight = () => {
-    const height = window.visualViewport?.height || window.innerHeight;
+    const viewportHeight = window.visualViewport?.height;
+    const height = viewportHeight
+      ? Math.min(viewportHeight, window.innerHeight || viewportHeight)
+      : window.innerHeight;
+
     if (height) {
       document.documentElement.style.setProperty('--pp-game-vh', `${height}px`);
     }
@@ -2412,13 +2404,6 @@ const shouldLock = overlayOpen;
     document.documentElement.classList.toggle('no-backdrop', !ok);
   }, []);
 
-  useEffect(() => {
-    console.log('Loaded postcode areas:', Object.keys(postcodeAreas).length);
-    console.log('Sample path:', postcodeAreas['AB']?.path?.slice(0, 100));
-  }, []);
-
-
-
   // ---------- Pan/zoom ----------
   const [scaleForLabels, setScaleForLabels] = useState(1);
 
@@ -3127,7 +3112,7 @@ const renderControls = () => (
     <div
       ref={bottomOverlayRef}
       className="pp-bottom-overlay mx-auto"
-      style={{ width: '100%', maxWidth: '630px', overflowX: 'auto', overflowY: 'auto', maxHeight: '1000px', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
+      style={{ width: '100%', maxWidth: '630px', overflowX: 'auto', overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'env(safe-area-inset-bottom, 12px)' }}
     >
       {!roundResolved && (
         <div className="px-3 pb-3 pt-2">
@@ -4362,7 +4347,7 @@ if (route === 'challenges') {
 return (
   <>
 
-    <div className="min-h-screen w-full bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
+    <div className={`${gameState === 'menu' ? 'min-h-screen' : 'pp-game-root'} w-full bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50`}>
       {gameState === 'menu' ? renderMenu() : (
         <div className="pp-game-screen">
           {renderGameBoard()}

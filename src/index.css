@@ -1117,6 +1117,12 @@ html, body, #root {
   max-width: none;
 }
 
+.pp-game-root {
+  height: var(--pp-game-vh, 100dvh);
+  min-height: var(--pp-game-vh, 100dvh);
+  overflow: hidden;
+}
+
 .pp-board {
   position: relative;
   width: 100%;
@@ -1157,6 +1163,7 @@ html, body, #root {
 .pp-bottom-overlay {
   bottom: max(8px, env(safe-area-inset-bottom, 8px));
   max-height: min(38dvh, 340px);
+  overscroll-behavior: contain;
 }
 
 .pp-controls-spacer {
