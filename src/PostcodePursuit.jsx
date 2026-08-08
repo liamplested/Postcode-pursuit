@@ -528,15 +528,20 @@ const saveDailySessionSnapshot = React.useCallback(() => {
     difficulty: dailyDifficulty,
     startArea, targetArea, currentPath, guesses, hintsUsed,
     optimalPath, elapsedMs: Math.floor(elapsedSoFar),
-    gameWon, showOptimal, victoryOpen,
+    gameWon,
+    gaveUp: dailyGaveUp,
+    roundOver: gameWon || dailyGaveUp,
+    showOptimal: showOptimal || dailyGaveUp,
+    victoryOpen: dailyGaveUp ? false : victoryOpen,
     par: dailyPar,
+    status: dailyGaveUp ? 'gave_up' : gameWon ? 'won' : 'playing',
     savedAt: new Date().toISOString(),
   };
   localStorage.setItem(dailySessionKey(dailyDifficulty), JSON.stringify(snapshot));
 }, [
   dailyMode, dailyDate, dailyDifficulty,
   startArea, targetArea, currentPath, guesses, hintsUsed,
-  optimalPath, elapsedMs, gameWon, showOptimal, victoryOpen, dailyPar
+  optimalPath, elapsedMs, gameWon, dailyGaveUp, showOptimal, victoryOpen, dailyPar
 ]);
 
 const [burgerOpen, setBurgerOpen] = useState(false);
@@ -2348,6 +2353,28 @@ window.gtag?.('event', 'game_finished', {
   });
   syncAttemptSummary(attemptSummary);
 
+  if (dailyMode && dailyDifficulty && dailyDate) {
+    Daily.saveSnapshot(dailyDifficulty, {
+      date: dailyDate,
+      difficulty: dailyDifficulty,
+      startArea,
+      targetArea,
+      currentPath: path.slice(),
+      guesses,
+      hintsUsed,
+      optimalPath,
+      elapsedMs: Math.floor(ms),
+      gameWon: true,
+      gaveUp: false,
+      roundOver: true,
+      showOptimal: true,
+      victoryOpen: true,
+      par: dailyPar,
+      status: 'won',
+      savedAt: new Date().toISOString(),
+    });
+  }
+
   onPersist(true);
   setVictoryOpen(true);
 }, [
@@ -2355,7 +2382,7 @@ window.gtag?.('event', 'game_finished', {
   difficulty, startArea, targetArea,
   dailyMode, dailyDifficulty,
   bumpStreakFor, tallyEdgeUsage, onPersist, enqueueAchievementBatch,hintsUsed, betaDailyMode,
-  dailyPar, analyticsInputStyle, mapStyle
+  dailyDate, guesses, dailyPar, analyticsInputStyle, mapStyle
 ]);
 
 useEffect(() => {
