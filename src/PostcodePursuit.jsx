@@ -107,6 +107,25 @@ const CHALLENGES = [
     },
   },
   {
+    id: 'national_three_peaks',
+    name: 'National Three Peaks',
+    description: 'Visit the postcode areas for Ben Nevis, Scafell Pike and Yr Wyddfa / Snowdon.',
+    startHint: 'Enter any starting postcode area. Peaks count when you visit PH, CA and LL.',
+    isComplete: (path) => (
+      path.includes('PH') &&
+      path.includes('CA') &&
+      path.includes('LL')
+    ),
+    progress: (path) => {
+      const peaks = [
+        path.includes('PH'),
+        path.includes('CA'),
+        path.includes('LL'),
+      ].filter(Boolean).length;
+      return `${peaks} / 3 peaks`;
+    },
+  },
+  {
     id: 'all_bridges',
     name: 'Use Every Bridge, Tunnel and Ferry',
     description: 'Use each active bridge, tunnel and ferry link in one route.',
@@ -504,9 +523,9 @@ const { user, queueSave, saveNow, overwriteNow } =
   useCloudSync(getCloudProgressSnapshot, writeLocalSnapshot);
 
 // One helper for everywhere you persist
-const onPersist = React.useCallback((immediate = false) => {
+const onPersist = React.useCallback((immediate = false, snapshot = null) => {
   if (!user) return;
-  return immediate ? saveNow() : queueSave();
+  return immediate ? saveNow(snapshot) : queueSave();
 }, [user, queueSave, saveNow]);
 
 // -------- Daily Challenge setup --------
@@ -518,28 +537,32 @@ const [hintsUsed, setHintsUsed] = useState(0);
 
 function todayUTC() { return new Date().toISOString().slice(0,10); } // YYYY-MM-DD
 
-const saveDailySessionSnapshot = React.useCallback(() => {
-  if (!dailyMode || !dailyDate || !dailyDifficulty) return;
+const buildDailySessionSnapshot = React.useCallback((overrides = {}) => {
+  if (!dailyDate || !dailyDifficulty) return null;
   const elapsedSoFar =
     (elapsedMs || 0) + (gameStartRef.current ? Math.max(0, performance.now() - gameStartRef.current) : 0);
+  const resolvedGaveUp = overrides.gaveUp ?? dailyGaveUp;
+  const resolvedGameWon = overrides.gameWon ?? gameWon;
+  const resolvedShowOptimal = overrides.showOptimal ?? showOptimal;
+  const resolvedVictoryOpen = overrides.victoryOpen ?? victoryOpen;
 
-  const snapshot = {
+  return {
     date: dailyDate,
     difficulty: dailyDifficulty,
     startArea, targetArea, currentPath, guesses, hintsUsed,
     optimalPath, elapsedMs: Math.floor(elapsedSoFar),
-    gameWon,
-    gaveUp: dailyGaveUp,
-    roundOver: gameWon || dailyGaveUp,
-    showOptimal: showOptimal || dailyGaveUp,
-    victoryOpen: dailyGaveUp ? false : victoryOpen,
+    gameWon: resolvedGameWon,
+    gaveUp: resolvedGaveUp,
+    roundOver: resolvedGameWon || resolvedGaveUp,
+    showOptimal: resolvedShowOptimal || resolvedGaveUp,
+    victoryOpen: resolvedGaveUp ? false : resolvedVictoryOpen,
     par: dailyPar,
-    status: dailyGaveUp ? 'gave_up' : gameWon ? 'won' : 'playing',
+    status: resolvedGaveUp ? 'gave_up' : resolvedGameWon ? 'won' : 'playing',
     savedAt: new Date().toISOString(),
+    ...overrides,
   };
-  localStorage.setItem(dailySessionKey(dailyDifficulty), JSON.stringify(snapshot));
 }, [
-  dailyMode, dailyDate, dailyDifficulty,
+  dailyDate, dailyDifficulty,
   startArea, targetArea, currentPath, guesses, hintsUsed,
   optimalPath, elapsedMs, gameWon, dailyGaveUp, showOptimal, victoryOpen, dailyPar
 ]);
@@ -935,41 +958,22 @@ React.useEffect(() => {
 useEffect(() => {
   if (!dailyMode || !dailyDate || !dailyDifficulty) return;
 
-  const elapsedSoFar =
-    (elapsedMs || 0) +
-    (gameStartRef.current ? Math.max(0, performance.now() - gameStartRef.current) : 0);
-
   const previousDailySnapshot = Daily.loadSnapshot(dailyDifficulty);
   const previousGaveUp =
     previousDailySnapshot?.date === dailyDate &&
     (previousDailySnapshot?.status === 'gave_up' || previousDailySnapshot?.gaveUp === true);
   const resolvedGaveUp = dailyGaveUp || previousGaveUp;
 
-  Daily.saveSnapshot(dailyDifficulty, {
-    date: dailyDate,
-    difficulty: dailyDifficulty,
-    startArea,
-    targetArea,
-    currentPath,
-    guesses,
-    hintsUsed,
-    optimalPath,
-    elapsedMs: Math.floor(elapsedSoFar),
-    gameWon,
-    gaveUp: resolvedGaveUp,
-    roundOver: gameWon || resolvedGaveUp,
-    showOptimal: showOptimal || resolvedGaveUp,
-    victoryOpen: resolvedGaveUp ? false : victoryOpen,
-    par: dailyPar,
-    status: resolvedGaveUp ? 'gave_up' : gameWon ? 'won' : 'playing',
-    savedAt: new Date().toISOString(),
-  });
+  const snapshot = buildDailySessionSnapshot({ gaveUp: resolvedGaveUp });
+  if (!snapshot) return;
+
+  Daily.saveSnapshot(dailyDifficulty, snapshot);
   onPersist?.();
 }, [
   dailyMode, dailyDate, dailyDifficulty,
   startArea, targetArea, currentPath, guesses,
   hintsUsed, optimalPath, elapsedMs, gameWon, dailyGaveUp,
-  showOptimal, victoryOpen, dailyPar, onPersist
+  showOptimal, victoryOpen, dailyPar, buildDailySessionSnapshot, onPersist
 ]);
 
 
@@ -1022,17 +1026,6 @@ const isRevealed = useCallback(
     const r = s % 60;
     return m ? `${m}m ${r}s` : `${r}s`;
   };
-
-useEffect(() => {
-  if (!dailyMode) return;
-  saveDailySessionSnapshot();
-onPersist?.();
-}, [
-  dailyMode, dailyDate, dailyDifficulty,
-  startArea, targetArea, currentPath, guesses,
-  hintsUsed, optimalPath, elapsedMs, gameWon,
-  showOptimal, victoryOpen, saveDailySessionSnapshot, onPersist
-]);
 
 const DIFF_ORDER = ['easy', 'normal', 'hard', 'master'];
 const STREAK_MILESTONES = [
@@ -2353,36 +2346,32 @@ window.gtag?.('event', 'game_finished', {
   });
   syncAttemptSummary(attemptSummary);
 
+  let progressSnapshot = null;
   if (dailyMode && dailyDifficulty && dailyDate) {
-    Daily.saveSnapshot(dailyDifficulty, {
-      date: dailyDate,
-      difficulty: dailyDifficulty,
-      startArea,
-      targetArea,
+    const finalDailySnapshot = buildDailySessionSnapshot({
       currentPath: path.slice(),
-      guesses,
-      hintsUsed,
-      optimalPath,
       elapsedMs: Math.floor(ms),
       gameWon: true,
       gaveUp: false,
       roundOver: true,
       showOptimal: true,
       victoryOpen: true,
-      par: dailyPar,
       status: 'won',
-      savedAt: new Date().toISOString(),
     });
+    if (finalDailySnapshot) {
+      Daily.saveSnapshot(dailyDifficulty, finalDailySnapshot);
+      progressSnapshot = getLocalSnapshot({ includeAnalytics: false });
+    }
   }
 
-  onPersist(true);
+  onPersist(true, progressSnapshot);
   setVictoryOpen(true);
 }, [
   currentPath, optimalPath,
   difficulty, startArea, targetArea,
   dailyMode, dailyDifficulty,
   bumpStreakFor, tallyEdgeUsage, onPersist, enqueueAchievementBatch,hintsUsed, betaDailyMode,
-  dailyDate, guesses, dailyPar, analyticsInputStyle, mapStyle
+  dailyDate, dailyPar, analyticsInputStyle, mapStyle, buildDailySessionSnapshot
 ]);
 
 useEffect(() => {
@@ -3827,31 +3816,49 @@ function handleDailyChoice(diff) {
 }
 
 const renderMenu = () => (
-  <div className="max-w-2xl mx-auto p-8 glass glass--slate text-center mt-8 relative">
+  <div className="pp-home-shell glass glass--slate text-center relative">
     
     
-<img src="logo192.png" alt="Postcode Pursuit logo" height="100" className="w-32 h-auto mx-auto mb-4" />
+<img src="logo192.png" alt="Postcode Pursuit logo" height="100" className="pp-home-logo mx-auto mb-4" />
     <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Postcode Pursuit</h1>
         <div className="absolute top-2 right-2 flex items-center gap-2">
 <AuthButton size="btn-sm" />
       </div>
 
 
-    <div className="mt-6 px-2">
-      <div className="pp-menu-primary-wrap">
-        <button
-          type="button"
-          className="lrgbtn btn-glass tint-green btn-cta min-h-[5.25rem] text-xl sm:text-2xl"
-          style={{ width: '100%', height: '5.25rem', margin: 0 }}
-          onClick={() => setShowDailyChooser(true)}
-        >
-          <Trophy className="w-7 h-7 shrink-0" aria-hidden="true" />
-          <span>Daily Challenge</span>
-        </button>
+    <div className="mt-6">
+      <div className="pp-daily-panel glass glass--white text-left">
+        <div className="flex items-center gap-2 px-1 pb-3">
+          <Trophy className="w-5 h-5 shrink-0" aria-hidden="true" />
+          <h2 className="text-lg font-bold leading-tight">Daily Challenge</h2>
+        </div>
+
+        <div className="pp-daily-grid">
+          {DIFF_ORDER.map((diff) => {
+            const status = getDailyStatusMeta(diff);
+            const label = diff === 'normal' ? 'Medium' : DIFF_LABELS[diff] ?? diff;
+            return (
+              <button
+                key={diff}
+                type="button"
+                className={`btn pp-daily-button ${DAILY_CHOICE_BUTTON_CLASS[diff] || 'btn-primary'}`}
+                onClick={() => startOrResumeDaily(diff)}
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="font-bold text-base truncate">{label}</span>
+                  {renderSingleFireForChooser(streaks?.[diff])}
+                </span>
+                <span className={`text-[0.68rem] font-bold uppercase tracking-wide rounded-full px-2 py-1 whitespace-nowrap ${status.className}`}>
+                  {status.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
 
-    <div className="mt-3 px-2">
+    <div className="mt-3">
       <div className="pp-menu-secondary-tray">
         <div className="pp-menu-secondary-row">
           <button
@@ -3866,22 +3873,37 @@ const renderMenu = () => (
 
           <button
             type="button"
-            className="lrgbtn btn-glass glass--white btn-cta min-h-[3.25rem] text-base"
+            className="lrgbtn btn-glass tint-green btn-cta min-h-[3.25rem] text-base"
             style={{ width: '100%', margin: 0 }}
-            onClick={() => setShowTutorial(true)}
+            onClick={() => navigate('challenges')}
           >
-            <BookOpen className="w-5 h-5 shrink-0" aria-hidden="true" />
-            <span>How to Play</span>
+            <Route className="w-5 h-5 shrink-0" aria-hidden="true" />
+            <span>Challenges</span>
           </button>
         </div>
 
         <div className="pp-menu-secondary-row">
+          <button
+            type="button"
+            className="lrgbtn btn-neutral min-h-[2.75rem] text-sm"
+            style={{ width: '100%', margin: 0 }}
+            onClick={() => setShowTutorial(true)}
+          >
+            <BookOpen className="w-4 h-4" /> How to Play
+          </button>
+
           <button className="lrgbtn btn-neutral min-h-[2.75rem] text-sm" style={{ width: '100%', margin: 0 }} onClick={() => navigate('stats')}>
             <ChartColumnBig className="w-4 h-4" /> Stats
           </button>
+        </div>
 
+        <div className="pp-menu-secondary-row">
           <button className="lrgbtn btn-neutral min-h-[2.75rem] text-sm" style={{ width: '100%', margin: 0 }} onClick={() => navigate('achievements')}>
             <Medal className="w-4 h-4" /> Achievements
+          </button>
+
+          <button className="lrgbtn btn-neutral min-h-[2.75rem] text-sm" style={{ width: '100%', margin: 0 }} onClick={() => navigate('about')}>
+            <InfoIcon className="w-4 h-4" /> About / Feedback
           </button>
         </div>
       </div>
@@ -3928,9 +3950,6 @@ const renderMenu = () => (
     </div>
 
     <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm">
-      <button className="btn btn-neutral" onClick={() => navigate('about')}>
-        <InfoIcon className="w-4 h-4" /> About / Feedback
-      </button>
       <button className="btn btn-neutral" onClick={() => navigate('settings')}>
         <Settings2 className="w-4 h-4" /> Settings
       </button>
@@ -4248,10 +4267,10 @@ function normalizeStatus(raw) {
 
 function getDailyStatusMeta(diff) {
   const status = normalizeStatus(Daily.dailyStatus?.(diff));
-  if (status === 'gaveUp') return { status, label: 'Gave up', className: 'bg-rose-100 text-rose-800' };
+  if (status === 'gaveUp') return { status, label: 'Failed', className: 'bg-rose-100 text-rose-800' };
   if (status === 'continue') return { status, label: 'Continue', className: 'bg-sky-100 text-sky-800' };
-  if (status === 'finished') return { status, label: 'Result', className: 'bg-emerald-100 text-emerald-800' };
-  return { status, label: 'Not played', className: 'bg-slate-100 text-slate-700' };
+  if (status === 'finished') return { status, label: 'Completed', className: 'bg-emerald-100 text-emerald-800' };
+  return { status, label: 'New', className: 'bg-slate-100 text-slate-700' };
 }
 
 function streakCount(value) {

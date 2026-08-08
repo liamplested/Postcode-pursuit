@@ -291,13 +291,13 @@ const queueSave = React.useCallback(() => {
 }, [user]);
 
   // immediate save
-const saveNow = React.useCallback(async () => {
+const saveNow = React.useCallback(async (snapshotOverride = null) => {
   if (!user) return;
   saveChain.current = saveChain.current
     .catch(() => {})
     .then(async () => {
       try {
-        const local = getSnapRef.current();
+        const local = snapshotOverride || getSnapRef.current();
         const merged = await mergeAndSave(user.uid, local);
         writeSnapRef.current(merged);
       } catch (e) {
